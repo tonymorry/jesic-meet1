@@ -1,0 +1,7 @@
+{
+  "name": "JESic Meet",
+  "description": "Webapp mobile-first di scheduling intelligente per Junior Enterprise Sicilia con algoritmo di matching per membri essenziali e Google Calendar.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
