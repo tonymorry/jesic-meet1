@@ -269,8 +269,12 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200 block truncate max-w-[120px]">
                 {currentUser.name} {currentUser.surname}
               </span>
-              <span className="text-[9px] text-neutral-400 uppercase tracking-wider">
-                {currentUser.role === 'admin' ? 'Admin DB' : 'Utente'}
+              <span className="text-[9px] text-neutral-400 uppercase tracking-wider font-bold">
+                {currentUser.role === 'admin'
+                  ? '⚡ Super Admin'
+                  : currentUser.role === 'admin_clienti'
+                  ? '🏢 Admin Clienti'
+                  : 'Utente'}
               </span>
             </div>
             <span className="sm:hidden text-xs font-semibold text-neutral-800 dark:text-neutral-200 max-w-[80px] truncate">

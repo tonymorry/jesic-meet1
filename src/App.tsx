@@ -272,6 +272,74 @@ export default function App() {
     }
   }, [activeGroupId]);
 
+  // Sincronizzazione Dati da MongoDB Atlas tramite Express API
+  useEffect(() => {
+    // 1. Carica e sincronizza Utenti e Ruolo dal Database
+    fetch('/api/users')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && Array.isArray(data.users) && data.users.length > 0) {
+          setUsers(data.users);
+          setCurrentUser((prevUser) => {
+            if (!prevUser) return null;
+            const dbMatch = data.users.find(
+              (u: User) => u.id === prevUser.id || u.email.toLowerCase() === prevUser.email.toLowerCase()
+            );
+            if (dbMatch) {
+              return {
+                ...prevUser,
+                ...dbMatch,
+                role: dbMatch.role || 'user',
+                systemRole: dbMatch.role || 'user',
+              };
+            }
+            return prevUser;
+          });
+        }
+      })
+      .catch((e) => console.log('[Sync /api/users]', e));
+
+    // 2. Carica Gruppi dal Database
+    fetch('/api/groups')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && Array.isArray(data.groups) && data.groups.length > 0) {
+          setGroups(data.groups);
+        }
+      })
+      .catch((e) => console.log('[Sync /api/groups]', e));
+
+    // 3. Carica Eventi (Sondaggi e Ufficiali) dal Database
+    fetch('/api/events')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && Array.isArray(data.events) && data.events.length > 0) {
+          setEvents(data.events);
+        }
+      })
+      .catch((e) => console.log('[Sync /api/events]', e));
+
+    // 4. Carica Risposte Disponibilità (When2meet) dal Database
+    fetch('/api/responses')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && Array.isArray(data.responses) && data.responses.length > 0) {
+          setResponses(data.responses);
+        }
+      })
+      .catch((e) => console.log('[Sync /api/responses]', e));
+
+    // 5. Carica Richieste Clienti B2B dal Database
+    fetch('/api/client-requests')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && Array.isArray(data.requests) && data.requests.length > 0) {
+          setClientRequests(data.requests);
+        }
+      })
+      .catch((e) => console.log('[Sync /api/client-requests]', e));
+  }, []);
+
   // Se l'utente non fa parte di nessun gruppo, inseriscilo nel primo gruppo di esempio per comodità
   useEffect(() => {
     if (currentUser && groups.length > 0) {
@@ -343,9 +411,20 @@ export default function App() {
     setIsDarkMode((prev) => !prev);
   };
 
-  // Permessi Ruolo dal DATABASE
+  // Permessi Ruolo dal DATABASE: 3 Ruoli ('user', 'admin_clienti', 'admin')
   const isAdmin = currentUser?.role === 'admin';
-  const isClientAdmin = isAdmin || currentUser?.systemRole === 'client_admin';
+  const isClientAdmin =
+    isAdmin ||
+    currentUser?.role === 'admin_clienti' ||
+    currentUser?.systemRole === 'admin_clienti' ||
+    (currentUser?.systemRole as unknown as string) === 'client_admin';
+
+  // Protezione Rotta Richieste: visibile e accessibile SOLO per 'admin' e 'admin_clienti'. Bloccata per 'user'.
+  useEffect(() => {
+    if (currentTab === 'requests' && !isClientAdmin) {
+      setCurrentTab(isInsideGroup ? 'dashboard' : 'groups');
+    }
+  }, [currentTab, isClientAdmin, isInsideGroup]);
 
   // Supporto invito automatico tramite URL parametro ?join=CODE
   useEffect(() => {
@@ -490,38 +569,86 @@ export default function App() {
     } catch {}
   };
 
-  // GESTIONE REGISTRAZIONE / LOGIN
-  const handleRegisterUser = (newUserData: Omit<User, 'id'>) => {
-    const newId = `user-${Date.now()}`;
+  // GESTIONE REGISTRAZIONE / LOGIN SINCRONIZZATA CON MONGODB
+  const handleRegisterUser = async (newUserData: Omit<User, 'id'>) => {
     const isFirstUser = users.length === 0;
     const assignedRole: AppRole = newUserData.role || (isFirstUser ? 'admin' : 'user');
-    const newUser: User = {
+
+    try {
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...newUserData,
+          role: assignedRole,
+          systemRole: assignedRole,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.user) {
+          const createdUser: User = {
+            ...data.user,
+            role: data.user.role || assignedRole,
+            systemRole: data.user.role || assignedRole,
+          };
+          setUsers((prev) => [...prev.filter((u) => u.id !== createdUser.id), createdUser]);
+          setCurrentUser(createdUser);
+          setCurrentTab('groups');
+          setSplashFinished(false);
+          return;
+        }
+      }
+    } catch (e) {
+      console.log('[API register user sync error]', e);
+    }
+
+    const fallbackUser: User = {
       ...newUserData,
-      id: newId,
+      id: `user-${Date.now()}`,
       role: assignedRole,
-      systemRole: assignedRole === 'admin' ? 'client_admin' : 'associate',
+      systemRole: assignedRole,
     };
-    const updatedUsers = [...users, newUser];
-    setUsers(updatedUsers);
-    setCurrentUser(newUser);
+    setUsers((prev) => [...prev, fallbackUser]);
+    setCurrentUser(fallbackUser);
     setCurrentTab('groups');
     setSplashFinished(false);
-
-    fetch('/api/users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newUser),
-    }).catch((e) => console.log('[API register user sync]', e));
   };
 
-  const handleLoginUser = (user: User) => {
-    const guaranteedRole: AppRole = user.role || 'user';
-    const withRole: User = {
+  const handleLoginUser = async (user: User) => {
+    // Sincronizza immediatamente il ruolo reale dal database MongoDB
+    try {
+      const res = await fetch('/api/users');
+      if (res.ok) {
+        const data = await res.json();
+        const matched = data.users?.find(
+          (u: User) => u.email.toLowerCase() === user.email.toLowerCase() || u.id === user.id
+        );
+        if (matched) {
+          const freshUser: User = {
+            ...user,
+            ...matched,
+            role: (matched.role as AppRole) || 'user',
+            systemRole: (matched.role as AppRole) || 'user',
+          };
+          setCurrentUser(freshUser);
+          setCurrentTab('groups');
+          setSplashFinished(false);
+          return;
+        }
+      }
+    } catch (e) {
+      console.log('[API login user sync error]', e);
+    }
+
+    const fallbackRole: AppRole = user.role || 'user';
+    const fallbackUser: User = {
       ...user,
-      role: guaranteedRole,
-      systemRole: user.systemRole || (guaranteedRole === 'admin' ? 'client_admin' : 'associate'),
+      role: fallbackRole,
+      systemRole: fallbackRole,
     };
-    setCurrentUser(withRole);
+    setCurrentUser(fallbackUser);
     setCurrentTab('groups');
     setSplashFinished(false);
   };
@@ -532,7 +659,7 @@ export default function App() {
     setCurrentTab('groups');
   };
 
-  // Aggiornamento Ruolo Utente nel DATABASE (Protetto per soli Admin)
+  // Aggiornamento Ruolo Utente nel DATABASE (Protetto per soli Super Admin)
   const handleUpdateUserRole = (targetUserId: string, newRole: AppRole) => {
     if (currentUser?.role !== 'admin') return;
 
@@ -541,7 +668,7 @@ export default function App() {
         ? {
             ...u,
             role: newRole,
-            systemRole: newRole === 'admin' ? ('admin' as const) : ('associate' as const),
+            systemRole: newRole,
           }
         : u
     );
@@ -551,7 +678,7 @@ export default function App() {
       setCurrentUser({
         ...currentUser,
         role: newRole,
-        systemRole: newRole === 'admin' ? 'admin' : 'associate',
+        systemRole: newRole,
       });
     }
 
@@ -559,7 +686,16 @@ export default function App() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ role: newRole, adminId: currentUser.id }),
-    }).catch((e) => console.log('[API user role update]', e));
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.user) {
+          setUsers((prev) =>
+            prev.map((u) => (u.id === targetUserId ? { ...u, ...data.user, role: data.user.role } : u))
+          );
+        }
+      })
+      .catch((e) => console.log('[API user role update]', e));
   };
 
   // Aggiornamento Profilo Utente (foto avatar, Google Calendar)
@@ -720,6 +856,12 @@ export default function App() {
         submittedAt: nowIso,
       };
       setResponses((prev) => [...prev, orgResponse]);
+
+      fetch('/api/responses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(orgResponse),
+      }).catch((e) => console.log('[API save response sync]', e));
     }
 
     setIsCreatePollModalOpen(false);
@@ -737,6 +879,12 @@ export default function App() {
     setEvents((prev) => prev.map((e) => (e.id === updatedEvent.id ? updatedEvent : e)));
     setIsCreatePollModalOpen(false);
     setEventToEdit(undefined);
+
+    fetch(`/api/events/${updatedEvent.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedEvent),
+    }).catch((e) => console.log('[API update poll sync]', e));
   };
 
   // CREAZIONE EVENTO UFFICIALE (ADMIN)
@@ -771,6 +919,12 @@ export default function App() {
     setEvents((prev) => prev.map((e) => (e.id === updatedEvent.id ? updatedEvent : e)));
     setIsCreateOfficialModalOpen(false);
     setEventToEdit(undefined);
+
+    fetch(`/api/events/${updatedEvent.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedEvent),
+    }).catch((e) => console.log('[API update official event sync]', e));
   };
 
   // SALVATAGGIO DISPONIBILITÀ (When2meet)
@@ -812,6 +966,18 @@ export default function App() {
       };
       setResponses((prev) => [...prev, newResponse]);
     }
+
+    fetch('/api/responses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        eventId,
+        userId: currentUser.id,
+        availability,
+        isMandatory: true,
+        status: 'submitted',
+      }),
+    }).catch((e) => console.log('[API save availability response sync]', e));
 
     setEvents((prev) =>
       prev.map((e) => {
@@ -898,6 +1064,16 @@ export default function App() {
       autoSyncMeetingEventToCalendar(updatedEvt, finalSlot, currentUser, attendeeUsers).catch((err) =>
         console.log('[Auto Google Calendar Sync confirmed poll]', err)
       );
+
+      fetch(`/api/events/${eventId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'confirmed',
+          finalizedSlot: finalSlot,
+          meetLink: targetEvt.type === 'online' ? (targetEvt.meetLink || generatedMeet) : undefined,
+        }),
+      }).catch((err) => console.log('[API confirm meeting slot sync]', err));
     }
   };
 
@@ -1095,14 +1271,14 @@ export default function App() {
             onOpenCreateMenu={handlePlusButtonClick}
             pendingInvitesCount={pendingInvitesCount}
             pendingOfficialEventsCount={pendingOfficialEventsCount}
-            isClientAdmin={isAdmin}
+            isClientAdmin={isClientAdmin}
             pendingClientRequestsCount={pendingClientRequestsCount}
             isInsideGroup={isInsideGroup}
             onBackToGroups={handleBackToGroups}
           />
 
-          {/* Banner scorrevole rapido per aprire o testare la rotta esterna /prenota-call (Solo Admin) */}
-          {isAdmin && (
+          {/* Banner scorrevole rapido per aprire o testare la rotta esterna /prenota-call (Admin e Admin Clienti) */}
+          {isClientAdmin && (
             <div className="bg-neutral-900 text-neutral-300 px-4 sm:px-6 py-2 text-[11px] border-b border-neutral-800 flex items-center justify-between">
               <span className="truncate">
                 🔗 Link pubblico clienti: <code className="text-[#f23e2e] font-mono font-bold">/prenota-call</code>
@@ -1122,7 +1298,7 @@ export default function App() {
             
             {/* ====================================================================
                 CASO 1: LIVELLO PIATTAFORMA (NON IN UN GRUPPO)
-                Barra navigazione a 3 sezioni: Gruppi (Sinistra) - Sondaggi (Centro) - Profilo (Destra)
+                Barra navigazione: Gruppi - Sondaggi - [Richieste se admin/admin_clienti] - Profilo
                ==================================================================== */}
             {!isInsideGroup ? (
               <>
@@ -1151,7 +1327,21 @@ export default function App() {
                   />
                 )}
 
-                {/* 3. DESTRA: "Profilo" */}
+                {/* 3. RICHIESTE CLIENTI (Visibile e accessibile SOLO ad 'admin' e 'admin_clienti') */}
+                {currentTab === 'requests' && isClientAdmin && (
+                  <ClientRequestsDashboard
+                    currentUser={currentUser}
+                    requests={clientRequests}
+                    allEvents={events}
+                    allUsers={users}
+                    onConvertToPoll={handleConvertToPoll}
+                    onConfirmFinalEvent={handleConfirmFinalClientEvent}
+                    onOpenPublicBooking={navigateToPublicBooking}
+                    onOpenEventDetail={(evtId) => setSelectedEventId(evtId)}
+                  />
+                )}
+
+                {/* 4. DESTRA: "Profilo" */}
                 {currentTab === 'profile' && (
                   <ProfileView
                     currentUser={currentUser}
@@ -1206,7 +1396,7 @@ export default function App() {
                   />
                 )}
 
-                {currentTab === 'requests' && isAdmin && (
+                {currentTab === 'requests' && isClientAdmin && (
                   <ClientRequestsDashboard
                     currentUser={currentUser}
                     requests={clientRequests}
@@ -1248,7 +1438,7 @@ export default function App() {
             onOpenCreateMenu={handlePlusButtonClick}
             pendingInvitesCount={pendingInvitesCount}
             pendingOfficialEventsCount={pendingOfficialEventsCount}
-            isClientAdmin={isAdmin}
+            isClientAdmin={isClientAdmin}
             pendingClientRequestsCount={pendingClientRequestsCount}
             isInsideGroup={isInsideGroup}
           />

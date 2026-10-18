@@ -156,7 +156,11 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const [cropImageSource, setCropImageSource] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const currentSystemRole = currentUser.systemRole || 'admin';
+  const effectiveRole: AppRole =
+    currentUser.role ||
+    ((currentUser.systemRole as unknown as string) === 'client_admin' ? 'admin_clienti' : (currentUser.systemRole as AppRole)) ||
+    'user';
+  const currentSystemRole = currentUser.systemRole || 'user';
 
   const showNotification = (msg: string) => {
     setFeedbackMsg(msg);
@@ -269,32 +273,27 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           {/* Dati Anagrafici e Ruoli (con immagine profilo accanto al nome) */}
           <div className="space-y-1.5 flex-1 min-w-0 text-center sm:text-left">
             <div className="flex items-center justify-center sm:justify-start gap-1.5 flex-wrap">
-              {currentUser.role && (
-                <span className="text-[10px] font-black uppercase tracking-wider bg-red-100 dark:bg-red-950/60 text-[#f23e2e] px-2.5 py-0.5 rounded-full inline-block border border-red-200/60 dark:border-red-900/40">
-                  {currentUser.role}
-                </span>
-              )}
               <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 ${
-                currentSystemRole === 'client_admin'
-                  ? 'bg-gradient-to-r from-red-600 to-amber-600 text-white shadow-xs'
-                  : currentSystemRole === 'admin'
-                  ? 'bg-[#f23e2e] text-white'
+                effectiveRole === 'admin'
+                  ? 'bg-red-100 dark:bg-red-950/60 text-[#f23e2e] border border-red-200 dark:border-red-900/40 shadow-xs'
+                  : effectiveRole === 'admin_clienti'
+                  ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900/40 shadow-xs'
                   : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200'
               }`}>
-                {currentSystemRole === 'client_admin' ? (
+                {effectiveRole === 'admin' ? (
                   <>
-                    <ShieldCheck className="w-3 h-3" />
-                    <span>Admin Clienti ⭐</span>
+                    <ShieldCheck className="w-3 h-3 text-[#f23e2e]" />
+                    <span>⚡ Super Admin</span>
                   </>
-                ) : currentSystemRole === 'admin' ? (
+                ) : effectiveRole === 'admin_clienti' ? (
                   <>
-                    <ShieldCheck className="w-3 h-3" />
-                    <span>Ruolo Admin</span>
+                    <ShieldCheck className="w-3 h-3 text-amber-600" />
+                    <span>🏢 Admin Clienti</span>
                   </>
                 ) : (
                   <>
                     <Award className="w-3 h-3" />
-                    <span>Ruolo Associato</span>
+                    <span>👤 Utente Normale</span>
                   </>
                 )}
               </span>
@@ -500,7 +499,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-xs font-black text-neutral-900 dark:text-white">
-                    Gestione Ruoli Utenti Database
+                    Gestione Ruoli e Permessi
                   </h3>
                   <span className="text-[9px] font-black uppercase tracking-wider bg-red-100 dark:bg-red-950/60 text-[#f23e2e] px-2 py-0.5 rounded-full">
                     Admin DB
@@ -542,31 +541,48 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                     <div className="flex items-center gap-2 shrink-0">
                       <span
                         className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                          userIsAdmin
+                          user.role === 'admin'
                             ? 'bg-red-100 dark:bg-red-950/60 text-[#f23e2e] border border-red-200 dark:border-red-900/40'
+                            : user.role === 'admin_clienti'
+                            ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900/40'
                             : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300'
                         }`}
                       >
-                        {userIsAdmin ? 'Admin' : 'User'}
+                        {user.role === 'admin'
+                          ? 'Super Admin'
+                          : user.role === 'admin_clienti'
+                          ? 'Admin Clienti'
+                          : 'Utente'}
                       </span>
 
-                      {!isMe && onUpdateUserRole && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const newRole: AppRole = userIsAdmin ? 'user' : 'admin';
+                      {!isMe && onUpdateUserRole ? (
+                        <select
+                          aria-label={`Modifica ruolo di ${user.name}`}
+                          value={user.role || 'user'}
+                          onChange={(e) => {
+                            const newRole = e.target.value as AppRole;
                             onUpdateUserRole(user.id, newRole);
-                            setFeedbackMsg(`Ruolo di ${user.name} aggiornato a ${newRole.toUpperCase()} nel DB!`);
-                            setTimeout(() => setFeedbackMsg(null), 3000);
+                            const roleLabel =
+                              newRole === 'admin'
+                                ? 'Super Admin'
+                                : newRole === 'admin_clienti'
+                                ? 'Admin Clienti'
+                                : 'Utente Standard';
+                            setFeedbackMsg(`Ruolo di ${user.name} impostato su "${roleLabel}" nel Database!`);
+                            setTimeout(() => setFeedbackMsg(null), 3500);
                           }}
-                          className={`text-[11px] font-bold px-2.5 py-1 rounded-xl transition-all cursor-pointer ${
-                            userIsAdmin
-                              ? 'bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-300'
-                              : 'bg-[#f23e2e] hover:bg-red-600 text-white shadow-2xs'
-                          }`}
+                          className="text-[11px] font-bold px-2 py-1 rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200 cursor-pointer shadow-2xs hover:border-[#f23e2e] focus:outline-none focus:ring-2 focus:ring-[#f23e2e]/40 transition-all"
                         >
-                          {userIsAdmin ? 'Rendi User' : 'Rendi Admin'}
-                        </button>
+                          <option value="user">👤 Utente</option>
+                          <option value="admin_clienti">🏢 Admin Clienti</option>
+                          <option value="admin">⚡ Super Admin</option>
+                        </select>
+                      ) : (
+                        isMe && (
+                          <span className="text-[10px] text-neutral-400 font-semibold italic">
+                            (Il tuo account)
+                          </span>
+                        )
                       )}
                     </div>
                   </div>

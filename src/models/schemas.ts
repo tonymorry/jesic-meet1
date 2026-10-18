@@ -2,75 +2,95 @@
  * JESic Meet - Modelli Database Mongoose (MongoDB)
  * Junior Enterprise Sicilia
  * 
- * Aggiornamento Flusso B2B & Client Admin:
- * - User con systemRole ('admin' | 'associate' | 'client_admin')
- * - Event con eventType ('poll' | 'official'), partecipanti ufficiali (status: pending/accepted/declined),
- *   date definitive e integrazione Google Calendar OAuth2
- * - ClientRequest con status ('pending' | 'converted_to_poll' | 'confirmed' | 'archived'),
- *   referente azienda, email, descrizione, e slot orari preferiti (min 2, max 3)
+ * 3 Ruoli Reali di Sistema:
+ * - 'user' (Utente Normale)
+ * - 'admin_clienti' (Admin Clienti B2B)
+ * - 'admin' (Super Admin)
  */
 
-import mongoose, { Schema, Document, Model } from 'mongoose';
+import mongoose, { Schema, Model } from 'mongoose';
 
 /* ==========================================================================
-   1. USER SCHEMA & MODEL
+   1. RUOLI & TIPI BASE
    ========================================================================== */
-export type UserSystemRole = 'admin' | 'associate' | 'client_admin';
+export type UserRole = 'user' | 'admin_clienti' | 'admin';
+export type AppRole = UserRole;
+export type UserSystemRole = UserRole;
 
-export type AppRole = 'admin' | 'user';
-
-export interface IUser extends Document {
-  nome: string;
-  cognome: string;
+/* ==========================================================================
+   2. USER SCHEMA & MODEL
+   ========================================================================== */
+export interface IUser {
+  _id?: string;
+  id?: string;
+  name: string;
+  surname: string;
+  nome?: string;
+  cognome?: string;
   email: string;
-  role: AppRole; // 'admin' | 'user' - gestito direttamente dal Database
-  systemRole: UserSystemRole; // 'admin' | 'associate' | 'client_admin'
-  ruolo?: string; // Es. Presidente, Vicepresidente, Project Manager, Consulente Junior
-  avatarUrl?: string;
+  password?: string;
+  role: UserRole;
+  systemRole?: UserRole;
+  ruolo?: string;
+  jesicRole?: string;
+  avatarUrl?: string | null;
   googleAccessToken?: string;
   googleRefreshToken?: string;
   googleTokenExpiry?: Date;
-  googleCalendarConnected: boolean;
-  createdAt: Date;
-  updatedAt: Date;
+  googleCalendarConnected?: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 const UserSchema: Schema<IUser> = new Schema(
   {
-    nome: {
+    _id: {
+      type: String,
+      default: () => `user-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    },
+    name: {
       type: String,
       required: [true, 'Il nome è obbligatorio'],
       trim: true,
-      maxlength: [50, 'Nome troppo lungo'],
+      maxlength: [60, 'Nome troppo lungo'],
     },
-    cognome: {
+    surname: {
       type: String,
       required: [true, 'Il cognome è obbligatorio'],
       trim: true,
-      maxlength: [50, 'Cognome troppo lungo'],
+      maxlength: [60, 'Cognome troppo lungo'],
     },
+    nome: { type: String, trim: true },
+    cognome: { type: String, trim: true },
     email: {
       type: String,
-      required: [true, "L'email istituzionale JESic è obbligatoria"],
+      required: [true, 'Email obbligatoria'],
       unique: true,
       trim: true,
       lowercase: true,
-      match: [/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/, 'Formato email non valido'],
       index: true,
+    },
+    password: {
+      type: String,
+      default: '',
     },
     role: {
       type: String,
-      enum: ['admin', 'user'],
+      enum: ['user', 'admin_clienti', 'admin'],
       default: 'user',
       index: true,
     },
     systemRole: {
       type: String,
-      enum: ['admin', 'associate', 'client_admin'],
-      default: 'associate',
+      enum: ['user', 'admin_clienti', 'admin'],
+      default: 'user',
       index: true,
     },
     ruolo: {
+      type: String,
+      default: 'Consulente Junior',
+    },
+    jesicRole: {
       type: String,
       default: 'Consulente Junior',
     },
@@ -96,82 +116,106 @@ const UserSchema: Schema<IUser> = new Schema(
   },
   {
     timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true },
+    toJSON: {
+      virtuals: true,
+      transform: (_doc, ret: any) => {
+        ret.id = ret._id ? ret._id.toString() : ret.id;
+        delete ret.__v;
+        return ret;
+      },
+    },
+    toObject: {
+      virtuals: true,
+      transform: (_doc, ret: any) => {
+        ret.id = ret._id ? ret._id.toString() : ret.id;
+        return ret;
+      },
+    },
   }
 );
 
-UserSchema.virtual('nomeCompleto').get(function (this: IUser) {
-  return `${this.nome} ${this.cognome}`;
+UserSchema.virtual('id').get(function (this: any) {
+  return this._id ? this._id.toString() : undefined;
 });
 
-export const User: Model<IUser> = mongoose.models.User || mongoose.model<IUser>('User', UserSchema);
+UserSchema.virtual('nomeCompleto').get(function (this: any) {
+  return `${this.name || this.nome || ''} ${this.surname || this.cognome || ''}`.trim();
+});
+
+UserSchema.pre('save', function (this: any) {
+  if (this.name && !this.nome) this.nome = this.name;
+  if (this.surname && !this.cognome) this.cognome = this.surname;
+  if (this.nome && !this.name) this.name = this.nome;
+  if (this.cognome && !this.surname) this.surname = this.cognome;
+  if (this.role && !this.systemRole) this.systemRole = this.role;
+});
+
+export const UserModel: Model<IUser> = mongoose.models.User || mongoose.model<IUser>('User', UserSchema);
+export const User: Model<IUser> = UserModel;
 
 /* ==========================================================================
-   1.B GROUP SCHEMA & MODEL (Gruppi di lavoro & Team)
+   3. GROUP SCHEMA & MODEL (Gruppi di lavoro)
    ========================================================================== */
 export interface IGroupMember {
-  userId: mongoose.Types.ObjectId;
+  userId: string;
   role: 'admin' | 'member';
-  joinedAt: Date;
+  joinedAt: string;
 }
 
-export interface IGroup extends Document {
+export interface IGroup {
+  _id?: string;
+  id?: string;
   name: string;
   description?: string;
-  code: string; // Codice univoco (es. "JES-7A9B")
-  creatorId: mongoose.Types.ObjectId;
+  code: string;
+  inviteLink?: string;
+  creatorId: string;
   members: IGroupMember[];
   avatar?: string;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 const GroupMemberSubSchema = new Schema<IGroupMember>(
   {
-    userId: {
-      type: Schema.Types.ObjectId,
-      ref: 'User',
-      required: true,
-    },
-    role: {
-      type: String,
-      enum: ['admin', 'member'],
-      default: 'member',
-    },
-    joinedAt: {
-      type: Date,
-      default: Date.now,
-    },
+    userId: { type: String, required: true },
+    role: { type: String, enum: ['admin', 'member'], default: 'member' },
+    joinedAt: { type: String, default: () => new Date().toISOString() },
   },
   { _id: false }
 );
 
 const GroupSchema: Schema<IGroup> = new Schema(
   {
+    _id: {
+      type: String,
+      default: () => `grp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    },
     name: {
       type: String,
-      required: [true, 'Il nome del gruppo è obbligatorio'],
+      required: [true, 'Nome gruppo obbligatorio'],
       trim: true,
-      maxlength: [80, 'Nome del gruppo troppo lungo'],
+      maxlength: [100, 'Nome gruppo troppo lungo'],
     },
     description: {
       type: String,
-      trim: true,
-      maxlength: [500, 'Descrizione troppo lunga'],
       default: '',
+      trim: true,
     },
     code: {
       type: String,
-      required: [true, 'Il codice univoco è obbligatorio'],
+      required: true,
       unique: true,
       uppercase: true,
       trim: true,
       index: true,
     },
+    inviteLink: {
+      type: String,
+      default: '',
+    },
     creatorId: {
-      type: Schema.Types.ObjectId,
-      ref: 'User',
+      type: String,
       required: true,
       index: true,
     },
@@ -186,41 +230,61 @@ const GroupSchema: Schema<IGroup> = new Schema(
   },
   {
     timestamps: true,
+    toJSON: {
+      virtuals: true,
+      transform: (_doc, ret: any) => {
+        ret.id = ret._id ? ret._id.toString() : ret.id;
+        delete ret.__v;
+        return ret;
+      },
+    },
+    toObject: {
+      virtuals: true,
+      transform: (_doc, ret: any) => {
+        ret.id = ret._id ? ret._id.toString() : ret.id;
+        return ret;
+      },
+    },
   }
 );
 
-GroupSchema.index({ 'members.userId': 1 });
+GroupSchema.virtual('id').get(function (this: any) {
+  return this._id ? this._id.toString() : undefined;
+});
 
-export const Group: Model<IGroup> = mongoose.models.Group || mongoose.model<IGroup>('Group', GroupSchema);
+export const GroupModel: Model<IGroup> = mongoose.models.Group || mongoose.model<IGroup>('Group', GroupSchema);
+export const Group: Model<IGroup> = GroupModel;
 
 /* ==========================================================================
-   2. CLIENT REQUEST SCHEMA & MODEL (Flusso B2B Acquisizione & Richieste)
+   4. CLIENT REQUEST SCHEMA & MODEL (Richieste Clienti B2B)
    ========================================================================== */
 export type ClientRequestStatus = 'pending' | 'converted_to_poll' | 'confirmed' | 'archived';
 
 export interface IClientSlotPreference {
-  date: string;       // Formato 'YYYY-MM-DD'
-  startTime: string;  // Formato 'HH:mm'
-  endTime: string;    // Formato 'HH:mm'
-  slotKey: string;    // 'YYYY-MM-DDTHH:mm'
+  date: string;
+  startTime: string;
+  endTime: string;
+  slotKey: string;
 }
 
-export interface IClientRequest extends Document {
+export interface IClientRequest {
+  _id?: string;
+  id?: string;
   companyName: string;
   contactEmail: string;
   description: string;
   preferredSlots: IClientSlotPreference[];
   status: ClientRequestStatus;
-  pollEventId?: mongoose.Types.ObjectId;
+  pollEventId?: string | null;
   finalizedSlot?: {
     date: string;
     startTime: string;
     endTime: string;
   };
-  meetLink?: string;
+  meetLink?: string | null;
   emailConfirmationSentAt?: Date;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 const ClientSlotPreferenceSchema = new Schema<IClientSlotPreference>(
@@ -235,33 +299,30 @@ const ClientSlotPreferenceSchema = new Schema<IClientSlotPreference>(
 
 const ClientRequestSchema: Schema<IClientRequest> = new Schema(
   {
+    _id: {
+      type: String,
+      default: () => `req-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    },
     companyName: {
       type: String,
-      required: [true, "Il nome dell'azienda o del referente è obbligatorio"],
+      required: [true, 'Nome azienda obbligatorio'],
       trim: true,
-      maxlength: [100, 'Nome azienda massimo 100 caratteri'],
     },
     contactEmail: {
       type: String,
-      required: [true, "L'email del referente aziendale è obbligatoria"],
+      required: [true, 'Email contatto obbligatoria'],
       trim: true,
       lowercase: true,
-      match: [/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/, 'Formato email non valido'],
       index: true,
     },
     description: {
       type: String,
-      required: [true, 'La descrizione della richiesta è obbligatoria'],
+      required: [true, 'Descrizione obbligatoria'],
       trim: true,
-      maxlength: [1500, 'Descrizione massima 1500 caratteri'],
     },
     preferredSlots: {
       type: [ClientSlotPreferenceSchema],
-      required: true,
-      validate: {
-        validator: (slots: IClientSlotPreference[]) => slots.length >= 2 && slots.length <= 3,
-        message: 'Devi indicare obbligatoriamente tra i 2 e i 3 slot orari di preferenza',
-      },
+      default: [],
     },
     status: {
       type: String,
@@ -270,10 +331,8 @@ const ClientRequestSchema: Schema<IClientRequest> = new Schema(
       index: true,
     },
     pollEventId: {
-      type: Schema.Types.ObjectId,
-      ref: 'Event',
+      type: String,
       default: null,
-      index: true,
     },
     finalizedSlot: {
       date: { type: String },
@@ -282,7 +341,6 @@ const ClientRequestSchema: Schema<IClientRequest> = new Schema(
     },
     meetLink: {
       type: String,
-      trim: true,
       default: null,
     },
     emailConfirmationSentAt: {
@@ -292,104 +350,127 @@ const ClientRequestSchema: Schema<IClientRequest> = new Schema(
   },
   {
     timestamps: true,
+    toJSON: {
+      virtuals: true,
+      transform: (_doc, ret: any) => {
+        ret.id = ret._id ? ret._id.toString() : ret.id;
+        delete ret.__v;
+        return ret;
+      },
+    },
+    toObject: {
+      virtuals: true,
+      transform: (_doc, ret: any) => {
+        ret.id = ret._id ? ret._id.toString() : ret.id;
+        return ret;
+      },
+    },
   }
 );
 
-ClientRequestSchema.index({ status: 1, createdAt: -1 });
+ClientRequestSchema.virtual('id').get(function (this: any) {
+  return this._id ? this._id.toString() : undefined;
+});
 
-export const ClientRequest: Model<IClientRequest> =
+export const ClientRequestModel: Model<IClientRequest> =
   mongoose.models.ClientRequest || mongoose.model<IClientRequest>('ClientRequest', ClientRequestSchema);
+export const ClientRequest: Model<IClientRequest> = ClientRequestModel;
 
 /* ==========================================================================
-   3. EVENT SCHEMA & MODEL (Sondaggi 'poll' & Eventi Associativi 'official')
+   5. EVENT SCHEMA & MODEL (Sondaggi When2meet & Eventi Ufficiali)
    ========================================================================== */
 export type EventType = 'poll' | 'official';
 export type ParticipantStatus = 'pending' | 'accepted' | 'declined';
 
 export interface IParticipant {
-  userId: mongoose.Types.ObjectId;
+  userId: string;
   status: ParticipantStatus;
-  respondedAt?: Date;
+  respondedAt?: string;
   googleCalendarSynced: boolean;
 }
 
 export interface IInvitee {
-  userId: mongoose.Types.ObjectId;
-  isMandatory: boolean; // TRUE: Essenziale (priorità nel matching sondaggio) | FALSE: Opzionale
+  userId: string;
+  isMandatory: boolean;
 }
 
 export interface IFinalizedSlot {
-  date: string;       // Formato 'YYYY-MM-DD'
-  startTime: string;  // Formato 'HH:mm' (es. '10:00')
-  endTime: string;    // Formato 'HH:mm' (es. '11:00')
+  date: string;
+  startTime: string;
+  endTime: string;
 }
 
-export interface IEvent extends Document {
-  titolo: string;
-  descrizione?: string;
-  creatore: mongoose.Types.ObjectId;
+export interface IEvent {
+  _id?: string;
+  id?: string;
+  title: string;
+  description?: string;
+  creatorId: string;
   eventType: EventType;
-  dateProposte: string[];
-  oraInizio: number;
-  oraFine: number;
+  dates: string[];
+  startHour: number;
+  endHour: number;
+  timeSlotBand?: 'morning' | 'afternoon' | 'morning_afternoon';
   slotIntervalMinutes: number;
-  tipo: 'online' | 'in_person';
-  luogo?: string;
-  linkMeet?: string;
+  type: 'online' | 'in_person';
+  location?: string;
+  meetLink?: string;
   googleCalendarEventId?: string;
-  pollDeadline?: Date;
-  stato: 'voting' | 'ready' | 'confirmed';
-  invitati: IInvitee[];
+  pollDeadline?: string;
+  status: 'voting' | 'ready' | 'confirmed';
+  invitees: IInvitee[];
   participants: IParticipant[];
-  dataOraDefinitiva?: IFinalizedSlot;
-  groupId?: mongoose.Types.ObjectId;
+  finalizedSlot?: IFinalizedSlot;
+  groupId?: string | null;
   externalInviteEmails?: string[];
-  clientRequestId?: mongoose.Types.ObjectId;
-  createdAt: Date;
-  updatedAt: Date;
+  clientRequestId?: string | null;
+  clientInfo?: {
+    companyName: string;
+    contactEmail: string;
+  };
+  allowedSlots?: string[];
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 const ParticipantSubSchema = new Schema<IParticipant>(
   {
-    userId: {
-      type: Schema.Types.ObjectId,
-      ref: 'User',
-      required: true,
-    },
-    status: {
-      type: String,
-      enum: ['pending', 'accepted', 'declined'],
-      default: 'pending',
-    },
-    respondedAt: {
-      type: Date,
-    },
-    googleCalendarSynced: {
-      type: Boolean,
-      default: false,
-    },
+    userId: { type: String, required: true },
+    status: { type: String, enum: ['pending', 'accepted', 'declined'], default: 'pending' },
+    respondedAt: { type: String },
+    googleCalendarSynced: { type: Boolean, default: false },
+  },
+  { _id: false }
+);
+
+const InviteeSubSchema = new Schema<IInvitee>(
+  {
+    userId: { type: String, required: true },
+    isMandatory: { type: Boolean, default: false },
   },
   { _id: false }
 );
 
 const EventSchema: Schema<IEvent> = new Schema(
   {
-    titolo: {
+    _id: {
       type: String,
-      required: [true, 'Il titolo del meeting è obbligatorio'],
-      trim: true,
-      maxlength: [120, 'Titolo massimo 120 caratteri'],
+      default: () => `evt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     },
-    descrizione: {
+    title: {
       type: String,
+      required: [true, 'Titolo obbligatorio'],
       trim: true,
-      maxlength: [1000, 'Descrizione massima 1000 caratteri'],
+      maxlength: [150, 'Titolo troppo lungo'],
+    },
+    description: {
+      type: String,
       default: '',
+      trim: true,
     },
-    creatore: {
-      type: Schema.Types.ObjectId,
-      ref: 'User',
-      required: [true, "L'organizzatore è obbligatorio"],
+    creatorId: {
+      type: String,
+      required: true,
       index: true,
     },
     eventType: {
@@ -399,46 +480,37 @@ const EventSchema: Schema<IEvent> = new Schema(
       default: 'poll',
       index: true,
     },
-    dateProposte: {
+    dates: {
       type: [String],
-      required: [true, 'Almeno una data è richiesta'],
-      validate: {
-        validator: (dates: string[]) => dates.length > 0,
-        message: 'Devi specificare almeno una data',
-      },
+      default: [],
     },
-    oraInizio: {
+    startHour: {
       type: Number,
-      required: true,
-      min: 0,
-      max: 23,
       default: 9,
     },
-    oraFine: {
+    endHour: {
       type: Number,
-      required: true,
-      min: 1,
-      max: 24,
       default: 19,
+    },
+    timeSlotBand: {
+      type: String,
     },
     slotIntervalMinutes: {
       type: Number,
       enum: [30, 60],
       default: 60,
     },
-    tipo: {
+    type: {
       type: String,
       enum: ['online', 'in_person'],
       default: 'online',
     },
-    luogo: {
+    location: {
       type: String,
-      trim: true,
       default: '',
     },
-    linkMeet: {
+    meetLink: {
       type: String,
-      trim: true,
       default: '',
     },
     googleCalendarEventId: {
@@ -446,40 +518,29 @@ const EventSchema: Schema<IEvent> = new Schema(
       default: null,
     },
     pollDeadline: {
-      type: Date,
-      index: true,
+      type: String,
     },
-    stato: {
+    status: {
       type: String,
       enum: ['voting', 'ready', 'confirmed'],
       default: 'voting',
       index: true,
     },
-    invitati: [
-      {
-        userId: {
-          type: Schema.Types.ObjectId,
-          ref: 'User',
-          required: true,
-        },
-        isMandatory: {
-          type: Boolean,
-          default: false,
-        },
-      },
-    ],
+    invitees: {
+      type: [InviteeSubSchema],
+      default: [],
+    },
     participants: {
       type: [ParticipantSubSchema],
       default: [],
     },
-    dataOraDefinitiva: {
+    finalizedSlot: {
       date: { type: String },
       startTime: { type: String },
       endTime: { type: String },
     },
     groupId: {
-      type: Schema.Types.ObjectId,
-      ref: 'Group',
+      type: String,
       default: null,
       index: true,
     },
@@ -488,58 +549,84 @@ const EventSchema: Schema<IEvent> = new Schema(
       default: [],
     },
     clientRequestId: {
-      type: Schema.Types.ObjectId,
-      ref: 'ClientRequest',
+      type: String,
       default: null,
-      index: true,
+    },
+    clientInfo: {
+      companyName: { type: String },
+      contactEmail: { type: String },
+    },
+    allowedSlots: {
+      type: [String],
+      default: [],
     },
   },
   {
     timestamps: true,
+    toJSON: {
+      virtuals: true,
+      transform: (_doc, ret: any) => {
+        ret.id = ret._id ? ret._id.toString() : ret.id;
+        delete ret.__v;
+        return ret;
+      },
+    },
+    toObject: {
+      virtuals: true,
+      transform: (_doc, ret: any) => {
+        ret.id = ret._id ? ret._id.toString() : ret.id;
+        return ret;
+      },
+    },
   }
 );
 
-EventSchema.index({ eventType: 1, creatore: 1, stato: 1 });
-EventSchema.index({ eventType: 1, 'participants.userId': 1, 'participants.status': 1 });
-EventSchema.index({ 'invitati.userId': 1, stato: 1 });
+EventSchema.virtual('id').get(function (this: any) {
+  return this._id ? this._id.toString() : undefined;
+});
 
-export const Event: Model<IEvent> = mongoose.models.Event || mongoose.model<IEvent>('Event', EventSchema);
+export const EventModel: Model<IEvent> = mongoose.models.Event || mongoose.model<IEvent>('Event', EventSchema);
+export const Event: Model<IEvent> = EventModel;
+export const PollModel: Model<IEvent> = EventModel;
+export const OfficialEventModel: Model<IEvent> = EventModel;
 
 /* ==========================================================================
-   4. RESPONSE SCHEMA & MODEL (Per i sondaggi When2meet)
+   6. RESPONSE SCHEMA & MODEL (Disponibilità When2meet)
    ========================================================================== */
-export interface IResponse extends Document {
-  eventId: mongoose.Types.ObjectId;
-  userId: mongoose.Types.ObjectId;
-  isMandatory: boolean;
-  disponibilita: string[];
+export interface IResponse {
+  _id?: string;
+  id?: string;
+  eventId: string;
+  userId: string;
+  isMandatory?: boolean;
+  availability: string[];
   status: 'pending' | 'submitted';
-  submittedAt?: Date;
-  reminderSent: boolean;
-  createdAt: Date;
-  updatedAt: Date;
+  submittedAt?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 const ResponseSchema: Schema<IResponse> = new Schema(
   {
+    _id: {
+      type: String,
+      default: () => `resp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    },
     eventId: {
-      type: Schema.Types.ObjectId,
-      ref: 'Event',
+      type: String,
       required: true,
       index: true,
     },
     userId: {
-      type: Schema.Types.ObjectId,
-      ref: 'User',
+      type: String,
       required: true,
       index: true,
     },
     isMandatory: {
       type: Boolean,
       default: false,
-      index: true,
     },
-    disponibilita: {
+    availability: {
       type: [String],
       default: [],
     },
@@ -547,47 +634,55 @@ const ResponseSchema: Schema<IResponse> = new Schema(
       type: String,
       enum: ['pending', 'submitted'],
       default: 'pending',
-      index: true,
     },
     submittedAt: {
-      type: Date,
-      default: null,
-    },
-    reminderSent: {
-      type: Boolean,
-      default: false,
+      type: String,
+      default: () => new Date().toISOString(),
     },
   },
   {
     timestamps: true,
+    toJSON: {
+      virtuals: true,
+      transform: (_doc, ret: any) => {
+        ret.id = ret._id ? ret._id.toString() : ret.id;
+        delete ret.__v;
+        return ret;
+      },
+    },
+    toObject: {
+      virtuals: true,
+      transform: (_doc, ret: any) => {
+        ret.id = ret._id ? ret._id.toString() : ret.id;
+        return ret;
+      },
+    },
   }
 );
 
-ResponseSchema.index({ eventId: 1, userId: 1 }, { unique: true });
-ResponseSchema.index({ eventId: 1, status: 1, reminderSent: 1 });
+ResponseSchema.virtual('id').get(function (this: any) {
+  return this._id ? this._id.toString() : undefined;
+});
 
-export const Response: Model<IResponse> = mongoose.models.Response || mongoose.model<IResponse>('Response', ResponseSchema);
+export const EventResponseModel: Model<IResponse> =
+  mongoose.models.Response || mongoose.model<IResponse>('Response', ResponseSchema);
+export const Response: Model<IResponse> = EventResponseModel;
 
+/* ==========================================================================
+   7. DOCUMENTAZIONE PER CODE VIEW MODAL
+   ========================================================================== */
 export const MONGOOSE_SCHEMAS_CODE = `
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
-// 1. User Schema con ruolo 'client_admin'
-export type UserSystemRole = 'admin' | 'associate' | 'client_admin';
+// 1. User Schema con i 3 ruoli reali ('user' | 'admin_clienti' | 'admin')
+export type UserRole = 'user' | 'admin_clienti' | 'admin';
 
-// 2. ClientRequest Schema (Flusso B2B Richieste Clienti)
-export interface IClientRequest extends Document {
-  companyName: string;
-  contactEmail: string;
-  description: string;
-  preferredSlots: { date: string; startTime: string; endTime: string; slotKey: string }[];
-  status: 'pending' | 'converted_to_poll' | 'confirmed' | 'archived';
-  pollEventId?: mongoose.Types.ObjectId;
-  finalizedSlot?: { date: string; startTime: string; endTime: string };
-  meetLink?: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export const ClientRequest = mongoose.models.ClientRequest || mongoose.model('ClientRequest', ClientRequestSchema);
+// 2. Modelli Mongoose:
+export const UserModel = mongoose.model('User', UserSchema);
+export const GroupModel = mongoose.model('Group', GroupSchema);
+export const EventModel = mongoose.model('Event', EventSchema);
+export const PollModel = EventModel;
+export const OfficialEventModel = EventModel;
+export const ClientRequestModel = mongoose.model('ClientRequest', ClientRequestSchema);
+export const EventResponseModel = mongoose.model('Response', ResponseSchema);
 `;
-

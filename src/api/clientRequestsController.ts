@@ -107,9 +107,13 @@ clientRequestsRouter.post('/', async (req: Request, res: Response) => {
 
     // Invio email immediata di ricezione richiesta al cliente (dall'indirizzo dell'Admin Cliente)
     try {
-      const clientAdmin = await User.findOne({ systemRole: 'client_admin' });
+      const clientAdmin: any = await User.findOne({
+        $or: [{ role: 'admin_clienti' }, { role: 'admin' }],
+      });
       const adminEmail = clientAdmin?.email || req.body.adminEmail || 'antoniomorry26@gmail.com';
-      const adminName = clientAdmin ? `${clientAdmin.nome} ${clientAdmin.cognome}` : 'Admin Clienti JESic';
+      const adminName = clientAdmin
+        ? `${clientAdmin.name || clientAdmin.nome || ''} ${clientAdmin.surname || clientAdmin.cognome || ''}`.trim()
+        : 'Admin Clienti JESic';
 
       const receiptEmailHtml = generateClientRequestReceivedEmailHtml({
         companyName: newRequest.companyName,
@@ -306,7 +310,7 @@ clientRequestsRouter.post('/:id/confirm-final', async (req: Request, res: Respon
       endTime: finalizedEndTime,
     };
     clientReq.meetLink = generatedMeetLink;
-    clientReq.emailConfirmationSentAt = new Date();
+    (clientReq as any).emailConfirmationSentAt = new Date();
     await clientReq.save();
 
     // Aggiornamento eventuale Evento associato

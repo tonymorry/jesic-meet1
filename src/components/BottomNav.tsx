@@ -1,14 +1,14 @@
 /**
  * JESic Meet - Bottom Navigation Bar Mobile-First
  * 
- * Requisiti:
+ * Requisiti di Visibilità e Ruoli:
  * 1. Schermata Principale (Piattaforma):
- *    - SINISTRA ("Gruppi"): Lista dei gruppi a cui l'utente partecipa
- *    - CENTRO ("Sondaggi"): Pagina dedicata ai sondaggi (Creati da te / A cui sei invitato)
- *    - DESTRA ("Profilo"): Pagina del profilo utente
+ *    - "Gruppi": Lista dei gruppi a cui l'utente partecipa
+ *    - "Sondaggi": Hub dedicato ai sondaggi (Creati da te / A cui sei invitato)
+ *    - "Richieste Clienti": visibile e accessibile SOLO ad 'admin' e 'admin_clienti'. Nascosta per 'user'.
+ *    - "Profilo": Pagina del profilo utente
  * 2. Quando l'utente entra in un Gruppo:
- *    - Sblocca la vista completa delle funzionalità interne del gruppo:
- *      Dashboard When2meet, Eventi, Calendario, Richieste Clienti, Profilo.
+ *    - Dashboard When2meet, Eventi, [ + ], Richieste (solo per admin/admin_clienti), Calendario, Profilo.
  */
 
 import React from 'react';
@@ -20,6 +20,7 @@ import {
   ClipboardList,
   Calendar,
   Plus,
+  Briefcase,
 } from 'lucide-react';
 
 export type NavTab = 'groups' | 'polls' | 'profile' | 'dashboard' | 'events' | 'requests' | 'calendar';
@@ -30,7 +31,7 @@ interface BottomNavProps {
   onOpenCreateMenu?: () => void;
   pendingInvitesCount?: number;
   pendingOfficialEventsCount?: number;
-  isClientAdmin?: boolean;
+  isClientAdmin?: boolean; // True SOLO per 'admin' e 'admin_clienti'
   pendingClientRequestsCount?: number;
   isInsideGroup?: boolean; // Se l'utente è dentro un gruppo specifico
 }
@@ -47,18 +48,18 @@ export const BottomNav: React.FC<BottomNavProps> = ({
 }) => {
   return (
     <nav
-      aria-label="Navigazione principale"
+      aria-label="Navigazione principale mobile"
       className="fixed bottom-0 left-0 right-0 z-40 max-w-md mx-auto sm:max-w-xl md:hidden"
     >
       {/* Background glass bar */}
-      <div className="relative bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md border-t border-neutral-200/90 dark:border-neutral-800 px-3 py-1.5 shadow-[0_-4px_24px_rgba(0,0,0,0.08)] dark:shadow-[0_-4px_24px_rgba(0,0,0,0.45)]">
+      <div className="relative bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md border-t border-neutral-200/90 dark:border-neutral-800 px-2 py-1.5 shadow-[0_-4px_24px_rgba(0,0,0,0.08)] dark:shadow-[0_-4px_24px_rgba(0,0,0,0.45)]">
         
         {/* ====================================================================
-            CASO 1: LIVELLO PIATTAFORMA (Home Principale a 3 Tab: Gruppi - Sondaggi - Profilo)
+            CASO 1: LIVELLO PIATTAFORMA (FUORI DA UN GRUPPO)
            ==================================================================== */}
         {!isInsideGroup ? (
           <div className="flex items-center justify-around h-14">
-            {/* 1. SINISTRA: "Gruppi" */}
+            {/* 1. "Gruppi" */}
             <button
               type="button"
               onClick={() => onSelectTab('groups')}
@@ -85,7 +86,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               </span>
             </button>
 
-            {/* 2. CENTRO: "Sondaggi" */}
+            {/* 2. "Sondaggi" */}
             <button
               type="button"
               onClick={() => onSelectTab('polls')}
@@ -119,7 +120,43 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               </span>
             </button>
 
-            {/* 3. DESTRA: "Profilo" */}
+            {/* 3. "Richieste Clienti" (VISIBILE SOLO PER 'admin' e 'admin_clienti', NASCOSTA PER 'user') */}
+            {isClientAdmin && (
+              <button
+                type="button"
+                onClick={() => onSelectTab('requests')}
+                className={`flex-1 flex flex-col items-center justify-center py-1 transition-all active:scale-95 relative cursor-pointer ${
+                  currentTab === 'requests'
+                    ? 'text-[#f23e2e] dark:text-[#f23e2e]'
+                    : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
+                }`}
+                aria-label="Richieste Clienti B2B"
+              >
+                <div className="relative">
+                  <Briefcase
+                    className={`w-5 h-5 transition-transform ${
+                      currentTab === 'requests' ? 'stroke-[2.5px] scale-110' : 'stroke-[1.8px]'
+                    }`}
+                  />
+                  {pendingClientRequestsCount > 0 && (
+                    <span className="absolute -top-1 -right-2.5 min-w-[16px] h-4 px-1 rounded-full bg-[#f23e2e] text-white text-[9px] font-black flex items-center justify-center ring-2 ring-white dark:ring-neutral-900 shadow-xs animate-pulse">
+                      {pendingClientRequestsCount}
+                    </span>
+                  )}
+                </div>
+                <span
+                  className={`text-[10px] mt-1 tracking-tight leading-none ${
+                    currentTab === 'requests'
+                      ? 'font-black text-[#f23e2e]'
+                      : 'font-semibold text-neutral-500 dark:text-neutral-400'
+                  }`}
+                >
+                  Richieste
+                </span>
+              </button>
+            )}
+
+            {/* 4. "Profilo" */}
             <button
               type="button"
               onClick={() => onSelectTab('profile')}
@@ -148,7 +185,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
           </div>
         ) : (
           /* ====================================================================
-             CASO 2: DENTRO UN GRUPPO (Spazio di lavoro completo identico a prima)
+             CASO 2: DENTRO UN GRUPPO
              ==================================================================== */
           <div className="flex items-center justify-between h-14">
             {/* 1. Dashboard Gruppo */}
@@ -226,7 +263,43 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               </div>
             )}
 
-            {/* 4. Calendario Gruppo */}
+            {/* 4. Richieste Clienti (SOLO per admin e admin_clienti) */}
+            {isClientAdmin && (
+              <button
+                type="button"
+                onClick={() => onSelectTab('requests')}
+                className={`flex-1 flex flex-col items-center justify-center py-1 transition-all active:scale-95 relative cursor-pointer ${
+                  currentTab === 'requests'
+                    ? 'text-[#f23e2e] dark:text-[#f23e2e]'
+                    : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
+                }`}
+                aria-label="Richieste Clienti"
+              >
+                <div className="relative">
+                  <Briefcase
+                    className={`w-5 h-5 transition-transform ${
+                      currentTab === 'requests' ? 'stroke-[2.5px] scale-110' : 'stroke-[1.8px]'
+                    }`}
+                  />
+                  {pendingClientRequestsCount > 0 && (
+                    <span className="absolute -top-1 -right-2.5 min-w-[16px] h-4 px-1 rounded-full bg-[#f23e2e] text-white text-[9px] font-black flex items-center justify-center ring-2 ring-white dark:ring-neutral-900 shadow-xs animate-pulse">
+                      {pendingClientRequestsCount}
+                    </span>
+                  )}
+                </div>
+                <span
+                  className={`text-[10px] mt-1 tracking-tight leading-none ${
+                    currentTab === 'requests'
+                      ? 'font-black text-[#f23e2e]'
+                      : 'font-semibold text-neutral-500 dark:text-neutral-400'
+                  }`}
+                >
+                  Richieste
+                </span>
+              </button>
+            )}
+
+            {/* 5. Calendario Gruppo */}
             <button
               type="button"
               onClick={() => onSelectTab('calendar')}
@@ -253,7 +326,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               </span>
             </button>
 
-            {/* 5. Profilo */}
+            {/* 6. Profilo */}
             <button
               type="button"
               onClick={() => onSelectTab('profile')}

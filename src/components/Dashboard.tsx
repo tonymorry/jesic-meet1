@@ -91,8 +91,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </h1>
       </div>
 
-      {/* Scheda Esclusiva Admin Clienti (Accesso rapido a Richieste Clienti) */}
-      {currentUser.systemRole === 'client_admin' && onNavigateToRequests && (
+      {/* Scheda Esclusiva Admin Clienti & Super Admin (Accesso rapido a Richieste Clienti) */}
+      {(currentUser.role === 'admin' || currentUser.role === 'admin_clienti' || (currentUser.systemRole as unknown as string) === 'client_admin') && onNavigateToRequests && (
         <div
           onClick={onNavigateToRequests}
           className="bg-gradient-to-r from-red-950/80 via-neutral-900 to-neutral-900 border border-red-800/60 rounded-3xl p-4 shadow-sm flex items-center justify-between cursor-pointer hover:border-red-700 transition-all group"

@@ -3,18 +3,9 @@
  * Junior Enterprise Sicilia - Intelligent Meeting Scheduler
  */
 
-export type UserRole =
-  | 'Presidente'
-  | 'Vicepresidente'
-  | 'Responsabile IT'
-  | 'Responsabile HR'
-  | 'Responsabile Marketing'
-  | 'Responsabile Finanza'
-  | 'Project Manager'
-  | 'Consulente Junior';
-
-export type AppRole = 'admin' | 'user';
-export type UserSystemRole = 'admin' | 'associate' | 'client_admin';
+export type UserRole = 'user' | 'admin_clienti' | 'admin';
+export type AppRole = UserRole;
+export type UserSystemRole = UserRole;
 
 export interface User {
   id: string;
@@ -22,8 +13,8 @@ export interface User {
   surname: string;
   email: string;
   password?: string;
-  role: AppRole; // 'admin' | 'user' gestito via Database
-  systemRole?: UserSystemRole; // compatibilità
+  role: UserRole; // 'user' (Utente Normale) | 'admin_clienti' (Admin Clienti) | 'admin' (Super Admin)
+  systemRole?: UserRole; // compatibilità
   jesicRole?: string; // Ruolo descrittivo (es. 'Presidente', 'Consulente Junior')
   avatarUrl?: string;
   googleAccessToken?: string;

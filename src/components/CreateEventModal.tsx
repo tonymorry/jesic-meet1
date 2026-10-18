@@ -398,7 +398,7 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
         surname: '',
         email: emailClean,
         role: 'user',
-        systemRole: 'associate',
+        systemRole: 'user',
         googleCalendarConnected: false,
       };
       setNewlyCreatedUsers((prev) => [...prev, newUser]);
