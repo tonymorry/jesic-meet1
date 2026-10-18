@@ -531,6 +531,174 @@ app.post('/api/groups/join', async (req: Request, res: Response) => {
   });
 });
 
+// PATCH /api/groups/:id - Modifica nome o dettagli del gruppo (Creatore o Admin)
+app.patch('/api/groups/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { name, description, avatar, userId } = req.body;
+
+  try {
+    if (mongoose.connection.readyState === 1) {
+      const group = await GroupModel.findOne({ $or: [{ _id: id }, { id }] });
+      if (!group) {
+        return res.status(404).json({ error: 'Gruppo non trovato nel database' });
+      }
+
+      if (userId && group.creatorId !== userId) {
+        const user = await UserModel.findOne({ $or: [{ _id: userId }, { id: userId }] });
+        if (!user || (user.role !== 'admin' && user.role !== 'admin_clienti')) {
+          return res.status(403).json({ error: 'Solo il creatore del gruppo o un admin può modificare il gruppo' });
+        }
+      }
+
+      if (name) group.name = name.trim();
+      if (description !== undefined) group.description = description ? description.trim() : '';
+      if (avatar) group.avatar = avatar;
+      await group.save();
+
+      const mappedGroup = {
+        id: group._id || group.id,
+        name: group.name,
+        description: group.description,
+        code: group.code,
+        inviteLink: group.inviteLink,
+        creatorId: group.creatorId,
+        members: group.members,
+        avatar: group.avatar,
+        createdAt: group.createdAt,
+        updatedAt: group.updatedAt,
+      };
+
+      // Aggiorna anche localStore
+      const localIdx = localStore.groups.findIndex((g) => g.id === id);
+      if (localIdx >= 0) {
+        localStore.groups[localIdx] = { ...localStore.groups[localIdx], ...mappedGroup };
+        saveLocalStore(localStore);
+      }
+
+      return res.json({ success: true, message: 'Gruppo aggiornato con successo', group: mappedGroup });
+    }
+  } catch (err: any) {
+    console.warn('Errore aggiornamento GroupModel MongoDB:', err.message);
+  }
+
+  // Fallback cache locale
+  const localIdx = localStore.groups.findIndex((g) => g.id === id);
+  if (localIdx >= 0) {
+    if (name) localStore.groups[localIdx].name = name.trim();
+    if (description !== undefined) localStore.groups[localIdx].description = description.trim();
+    if (avatar) localStore.groups[localIdx].avatar = avatar;
+    localStore.groups[localIdx].updatedAt = new Date().toISOString();
+    saveLocalStore(localStore);
+    return res.json({ success: true, message: 'Gruppo aggiornato con successo', group: localStore.groups[localIdx] });
+  }
+
+  return res.status(404).json({ error: 'Gruppo non trovato' });
+});
+
+// DELETE /api/groups/:id - Elimina l'intero gruppo (Creatore o Admin)
+app.delete('/api/groups/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const userId = (req.body?.userId || req.query?.userId) as string | undefined;
+
+  try {
+    if (mongoose.connection.readyState === 1) {
+      const group = await GroupModel.findOne({ $or: [{ _id: id }, { id }] });
+      if (!group) {
+        return res.status(404).json({ error: 'Gruppo non trovato nel database' });
+      }
+
+      if (userId && group.creatorId !== userId) {
+        const user = await UserModel.findOne({ $or: [{ _id: userId }, { id: userId }] });
+        if (!user || (user.role !== 'admin' && user.role !== 'admin_clienti')) {
+          return res.status(403).json({ error: 'Solo il creatore del gruppo o un admin può eliminare il gruppo' });
+        }
+      }
+
+      await GroupModel.deleteOne({ $or: [{ _id: id }, { id }] });
+
+      localStore.groups = localStore.groups.filter((g) => g.id !== id);
+      saveLocalStore(localStore);
+
+      return res.json({ success: true, message: 'Gruppo eliminato definitivamente con successo' });
+    }
+  } catch (err: any) {
+    console.warn('Errore eliminazione GroupModel MongoDB:', err.message);
+  }
+
+  localStore.groups = localStore.groups.filter((g) => g.id !== id);
+  saveLocalStore(localStore);
+
+  return res.json({ success: true, message: 'Gruppo eliminato definitivamente con successo' });
+});
+
+// DELETE /api/groups/:id/members/:memberId - Espelli membro dal gruppo (Creatore o Admin)
+const handleRemoveMemberFromGroup = async (req: Request, res: Response) => {
+  const { id, memberId } = req.params;
+  const requesterId = (req.body?.requesterId || req.query?.requesterId) as string | undefined;
+
+  try {
+    if (mongoose.connection.readyState === 1) {
+      const group = await GroupModel.findOne({ $or: [{ _id: id }, { id }] });
+      if (!group) {
+        return res.status(404).json({ error: 'Gruppo non trovato nel database' });
+      }
+
+      if (memberId === group.creatorId) {
+        return res.status(400).json({ error: 'Non puoi espellere il creatore del gruppo' });
+      }
+
+      if (requesterId && group.creatorId !== requesterId) {
+        const user = await UserModel.findOne({ $or: [{ _id: requesterId }, { id: requesterId }] });
+        if (!user || (user.role !== 'admin' && user.role !== 'admin_clienti')) {
+          return res.status(403).json({ error: 'Solo il creatore del gruppo o un admin può espellere membri' });
+        }
+      }
+
+      group.members = group.members.filter((m: any) => m.userId !== memberId);
+      await group.save();
+
+      const mappedGroup = {
+        id: group._id || group.id,
+        name: group.name,
+        description: group.description,
+        code: group.code,
+        inviteLink: group.inviteLink,
+        creatorId: group.creatorId,
+        members: group.members,
+        avatar: group.avatar,
+        createdAt: group.createdAt,
+        updatedAt: group.updatedAt,
+      };
+
+      const localIdx = localStore.groups.findIndex((g) => g.id === id);
+      if (localIdx >= 0) {
+        localStore.groups[localIdx].members = localStore.groups[localIdx].members.filter(
+          (m: any) => m.userId !== memberId
+        );
+        saveLocalStore(localStore);
+      }
+
+      return res.json({ success: true, message: 'Membro rimosso con successo dal gruppo', group: mappedGroup });
+    }
+  } catch (err: any) {
+    console.warn('Errore rimozione membro GroupModel MongoDB:', err.message);
+  }
+
+  const localIdx = localStore.groups.findIndex((g) => g.id === id);
+  if (localIdx >= 0) {
+    localStore.groups[localIdx].members = localStore.groups[localIdx].members.filter(
+      (m: any) => m.userId !== memberId
+    );
+    saveLocalStore(localStore);
+    return res.json({ success: true, message: 'Membro rimosso con successo', group: localStore.groups[localIdx] });
+  }
+
+  return res.status(404).json({ error: 'Gruppo non trovato' });
+};
+
+app.delete('/api/groups/:id/members/:memberId', handleRemoveMemberFromGroup);
+app.post('/api/groups/:id/members/:memberId/remove', handleRemoveMemberFromGroup);
+
 /* ==========================================================================
    4. EVENTS & POLLS API (EventModel / PollModel / OfficialEventModel)
    ========================================================================== */

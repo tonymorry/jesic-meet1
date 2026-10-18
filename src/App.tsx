@@ -14,7 +14,6 @@ import {
   Group,
   AppRole,
 } from './types';
-import { INITIAL_USERS, INITIAL_EVENTS, INITIAL_RESPONSES } from './data/mockData';
 import { isEventPassed } from './utils/dateUtils';
 import { AuthScreen } from './components/AuthScreen';
 import { TopHeader } from './components/TopHeader';
@@ -46,80 +45,6 @@ const STORAGE_CLIENT_REQUESTS_KEY = 'jesic_meet_v3_client_requests';
 const STORAGE_GROUPS_KEY = 'jesic_meet_v3_groups';
 const STORAGE_ACTIVE_GROUP_KEY = 'jesic_meet_v3_active_group_id';
 
-// Gruppi iniziali realistici JESic
-const INITIAL_GROUPS: Group[] = [
-  {
-    id: 'grp-01',
-    name: 'Consulenza Strategica & B2B',
-    description: 'Progetti con aziende, analisi di mercato, piani industriali e audit.',
-    code: 'JES-B2B1',
-    inviteLink: `${typeof window !== 'undefined' ? window.location.origin : ''}/?join=JES-B2B1`,
-    creatorId: 'seed-admin',
-    avatar: '🚀',
-    createdAt: new Date().toISOString(),
-    members: [],
-  },
-  {
-    id: 'grp-02',
-    name: 'Dipartimento IT & Tech',
-    description: 'Sviluppo web app, piattaforme digitali e soluzioni innovative con AI.',
-    code: 'JES-TECH',
-    inviteLink: `${typeof window !== 'undefined' ? window.location.origin : ''}/?join=JES-TECH`,
-    creatorId: 'seed-admin',
-    avatar: '💻',
-    createdAt: new Date().toISOString(),
-    members: [],
-  },
-  {
-    id: 'grp-03',
-    name: 'Area Marketing & Comunicazione',
-    description: 'Social media, brand awareness, grafica e organizzazione eventi.',
-    code: 'JES-MKTG',
-    inviteLink: `${typeof window !== 'undefined' ? window.location.origin : ''}/?join=JES-MKTG`,
-    creatorId: 'seed-admin',
-    avatar: '🔥',
-    createdAt: new Date().toISOString(),
-    members: [],
-  },
-];
-
-// Richieste iniziali demo per testare subito il flusso B2B
-const getTomorrowDateStr = (daysAhead: number = 1) => {
-  const d = new Date();
-  d.setDate(d.getDate() + daysAhead);
-  while (d.getDay() === 0 || d.getDay() === 6) {
-    d.setDate(d.getDate() + 1);
-  }
-  return d.toISOString().split('T')[0];
-};
-
-const INITIAL_CLIENT_REQUESTS: ClientRequest[] = [
-  {
-    id: 'req-sample-01',
-    companyName: 'MedTech Solutions Sicilia',
-    contactEmail: 'direzione@medtech-sicilia.it',
-    description:
-      'Vorremmo organizzare una videocall conoscitiva per valutare una collaborazione per lo sviluppo di una piattaforma software e piano di marketing.',
-    preferredSlots: [
-      {
-        date: getTomorrowDateStr(1),
-        startTime: '11:00',
-        endTime: '12:00',
-        slotKey: `${getTomorrowDateStr(1)}T11:00`,
-      },
-      {
-        date: getTomorrowDateStr(2),
-        startTime: '14:30',
-        endTime: '15:30',
-        slotKey: `${getTomorrowDateStr(2)}T14:30`,
-      },
-    ],
-    status: 'pending',
-    createdAt: new Date(Date.now() - 3600000).toISOString(),
-    updatedAt: new Date(Date.now() - 3600000).toISOString(),
-  },
-];
-
 export default function App() {
   // Riconoscimento rotta /prenota-call
   const [currentRoute, setCurrentRoute] = useState<string>(() => {
@@ -146,17 +71,18 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Lista utenti registrati
+  // Lista utenti registrati (Nessun dato fittizio / mock data)
   const [users, setUsers] = useState<User[]>(() => {
     const saved = localStorage.getItem(STORAGE_USERS_KEY);
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        return Array.isArray(parsed) ? parsed : [];
       } catch (e) {
         console.error(e);
       }
     }
-    return INITIAL_USERS;
+    return [];
   });
 
   // Utente autenticato
@@ -172,17 +98,18 @@ export default function App() {
     return null;
   });
 
-  // Eventi creati
+  // Eventi creati (Inizialmente vuoto)
   const [events, setEvents] = useState<MeetingEvent[]>(() => {
     const saved = localStorage.getItem(STORAGE_EVENTS_KEY);
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        return Array.isArray(parsed) ? parsed : [];
       } catch (e) {
         console.error(e);
       }
     }
-    return INITIAL_EVENTS;
+    return [];
   });
 
   // Risposte alle disponibilità (When2meet)
@@ -190,38 +117,45 @@ export default function App() {
     const saved = localStorage.getItem(STORAGE_RESPONSES_KEY);
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        return Array.isArray(parsed) ? parsed : [];
       } catch (e) {
         console.error(e);
       }
     }
-    return INITIAL_RESPONSES;
+    return [];
   });
 
-  // Richieste Clienti B2B
+  // Richieste Clienti B2B (Inizialmente vuoto)
   const [clientRequests, setClientRequests] = useState<ClientRequest[]>(() => {
     const saved = localStorage.getItem(STORAGE_CLIENT_REQUESTS_KEY);
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        return Array.isArray(parsed)
+          ? parsed.filter((r: any) => !r.id?.startsWith('req-sample'))
+          : [];
       } catch (e) {
         console.error(e);
       }
     }
-    return INITIAL_CLIENT_REQUESTS;
+    return [];
   });
 
-  // Gruppi di lavoro
+  // Gruppi di lavoro (Inizialmente vuoto)
   const [groups, setGroups] = useState<Group[]>(() => {
     const saved = localStorage.getItem(STORAGE_GROUPS_KEY);
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        return Array.isArray(parsed)
+          ? parsed.filter((g: any) => g.creatorId !== 'seed-admin')
+          : [];
       } catch (e) {
         console.error(e);
       }
     }
-    return INITIAL_GROUPS;
+    return [];
   });
 
   // Gruppo Attivo (null se siamo al livello piattaforma / home generale)
@@ -366,8 +300,8 @@ export default function App() {
     }
   }, [currentUser?.id]);
 
-  // Stato Splash Screen iniziale a tendina
-  const [splashFinished, setSplashFinished] = useState(false);
+  // Stato Splash Screen iniziale a tendina (Sempre visibile al refresh/avvio)
+  const [showSplash, setShowSplash] = useState(true);
 
   // Stato UI Navigazione:
   // - Fuori dal gruppo: 'groups' | 'polls' | 'profile'
@@ -600,7 +534,6 @@ export default function App() {
           setUsers((prev) => [...prev.filter((u) => u.id !== createdUser.id), createdUser]);
           setCurrentUser(createdUser);
           setCurrentTab('groups');
-          setSplashFinished(false);
           return;
         }
       }
@@ -617,7 +550,6 @@ export default function App() {
     setUsers((prev) => [...prev, fallbackUser]);
     setCurrentUser(fallbackUser);
     setCurrentTab('groups');
-    setSplashFinished(false);
   };
 
   const handleLoginUser = async (user: User) => {
@@ -638,7 +570,6 @@ export default function App() {
           };
           setCurrentUser(freshUser);
           setCurrentTab('groups');
-          setSplashFinished(false);
           return;
         }
       }
@@ -654,7 +585,6 @@ export default function App() {
     };
     setCurrentUser(fallbackUser);
     setCurrentTab('groups');
-    setSplashFinished(false);
   };
 
   const handleLogout = () => {
@@ -813,13 +743,85 @@ export default function App() {
     return { success: true, message: 'Sei entrato nel gruppo con successo!', group: updatedGroup };
   };
 
-  // LOGICA DEL BOTTONE "+" (Admin: scelta sondaggio vs evento ufficiale; User: diretto sondaggio)
+  // GESTIONE E MODIFICA DEI GRUPPI (Creatore o Admin)
+  const handleUpdateGroupName = async (groupId: string, newName: string) => {
+    if (!currentUser) return;
+    const cleanName = newName.trim();
+    if (!cleanName) return;
+
+    // Aggiornamento locale immediato
+    setGroups((prev) =>
+      prev.map((g) => (g.id === groupId ? { ...g, name: cleanName } : g))
+    );
+
+    try {
+      await fetch(`/api/groups/${groupId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: cleanName, userId: currentUser.id }),
+      });
+    } catch (e) {
+      console.warn('[API update group name error]', e);
+    }
+  };
+
+  const handleDeleteGroup = async (groupId: string) => {
+    if (!currentUser) return;
+
+    // Aggiornamento locale immediato
+    setGroups((prev) => prev.filter((g) => g.id !== groupId));
+    setActiveGroupId(null);
+    localStorage.removeItem(STORAGE_ACTIVE_GROUP_KEY);
+
+    try {
+      await fetch(`/api/groups/${groupId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: currentUser.id }),
+      });
+    } catch (e) {
+      console.warn('[API delete group error]', e);
+    }
+  };
+
+  const handleRemoveMemberFromGroup = async (memberId: string) => {
+    if (!currentUser || !activeGroup) return;
+
+    const updatedMembers = activeGroup.members.filter((m) => m.userId !== memberId);
+    const updatedGroup: Group = { ...activeGroup, members: updatedMembers };
+
+    setGroups((prev) => prev.map((g) => (g.id === activeGroup.id ? updatedGroup : g)));
+
+    try {
+      await fetch(`/api/groups/${activeGroup.id}/members/${memberId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requesterId: currentUser.id }),
+      });
+    } catch (e) {
+      console.warn('[API remove member error]', e);
+    }
+  };
+
+  // LOGICA DEL BOTTONE "+"
+  // REQUISITO 1: Nella Home iniziale (quando l'utente è fuori dai gruppi),
+  // si possono creare ESCLUSIVAMENTE Sondaggi. La creazione Eventi è riservata allo spazio di un Gruppo.
   const handlePlusButtonClick = () => {
     if (!currentUser) return;
+    if (!isInsideGroup) {
+      // Fuori dai gruppi: creazione ESCLUSIVA di sondaggi orari
+      setPollPrefillData(undefined);
+      setEventToEdit(undefined);
+      setIsCreatePollModalOpen(true);
+      return;
+    }
+
+    // All'interno del Gruppo: solo admin e admin_clienti possono creare eventi ufficiali
     if (canCreateOfficialEvents) {
       setIsChoiceModalOpen(true);
     } else {
       setPollPrefillData(undefined);
+      setEventToEdit(undefined);
       setIsCreatePollModalOpen(true);
     }
   };
@@ -1230,7 +1232,12 @@ export default function App() {
   // Evento selezionato nel modale
   const selectedEvent = events.find((e) => e.id === selectedEventId);
 
-  // ROTTA PUBBLICA ESTERNA /prenota-call
+  // 1. ANIMAZIONE SPLASH SCREEN (Mostrata sempre ad ogni avvio/refresh della pagina, prima di AuthScreen e Dashboard)
+  if (showSplash) {
+    return <SplashScreen onFinish={() => setShowSplash(false)} />;
+  }
+
+  // 2. ROTTA PUBBLICA ESTERNA /prenota-call
   if (currentRoute === '/prenota-call') {
     return (
       <PublicBookingForm
@@ -1240,7 +1247,7 @@ export default function App() {
     );
   }
 
-  // SCHERMATA LOGIN / REGISTRAZIONE
+  // 3. SCHERMATA LOGIN / REGISTRAZIONE
   if (!currentUser) {
     return (
       <AuthScreen
@@ -1254,11 +1261,6 @@ export default function App() {
 
   return (
     <>
-      {/* ANIMAZIONE MASCOTTE CARTONATA ALL'ACCESSO */}
-      {!splashFinished && (
-        <SplashScreen onFinish={() => setSplashFinished(true)} />
-      )}
-
       <div className="min-h-screen bg-neutral-100 dark:bg-black font-['Ubuntu',sans-serif] text-neutral-900 dark:text-neutral-100 antialiased flex flex-col transition-colors selection:bg-[#f23e2e] selection:text-white">
         
         <div className="w-full max-w-md sm:max-w-xl md:max-w-4xl lg:max-w-6xl xl:max-w-7xl mx-auto flex-1 flex flex-col bg-white dark:bg-neutral-900 shadow-2xl min-h-screen border-x border-neutral-200/80 dark:border-neutral-800">
@@ -1369,6 +1371,8 @@ export default function App() {
                   allUsers={users}
                   onBackToGroups={handleBackToGroups}
                   onOpenMembersModal={() => setIsGroupMembersModalOpen(true)}
+                  onUpdateGroupName={handleUpdateGroupName}
+                  onDeleteGroup={handleDeleteGroup}
                 />
 
                 {currentTab === 'dashboard' && (
@@ -1476,11 +1480,12 @@ export default function App() {
                 }
                 return true;
               }}
+              onRemoveMember={handleRemoveMemberFromGroup}
             />
           )}
 
-          {/* Menu Scelta Azione "+" per Admin */}
-          {isChoiceModalOpen && (
+          {/* Menu Scelta Azione "+" per Admin (VISIBILE SOLO ALL'INTERNO DI UN GRUPPO) */}
+          {isChoiceModalOpen && isInsideGroup && (
             <CreateActionChoiceModal
               currentUser={currentUser}
               onClose={() => setIsChoiceModalOpen(false)}
@@ -1514,8 +1519,8 @@ export default function App() {
             />
           )}
 
-          {/* Form Creazione/Modifica Evento Associativo Ufficiale (Admin) */}
-          {isCreateOfficialModalOpen && (
+          {/* Form Creazione/Modifica Evento Associativo Ufficiale (VISIBILE SOLO ALL'INTERNO DI UN GRUPPO) */}
+          {isCreateOfficialModalOpen && isInsideGroup && (
             <CreateOfficialEventModal
               currentUser={currentUser}
               allUsers={users}

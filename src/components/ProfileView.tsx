@@ -28,6 +28,7 @@ import {
   Check,
   Image as ImageIcon,
   Crop,
+  X,
 } from 'lucide-react';
 import { ImageCropModal } from './ImageCropModal';
 import { UserAvatar } from './UserAvatar';
@@ -152,6 +153,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   );
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
   const [showPresets, setShowPresets] = useState(false);
+  const [isAvatarMenuOpen, setIsAvatarMenuOpen] = useState(false);
   const [selectedAvatarCategory, setSelectedAvatarCategory] = useState<'all' | 'jesic' | 'exec' | 'dept' | '3d'>('all');
   const [cropImageSource, setCropImageSource] = useState<string | null>(null);
 
@@ -223,9 +225,14 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       <div className="bg-white dark:bg-neutral-900 rounded-3xl p-5 sm:p-6 border border-neutral-200/90 dark:border-neutral-800 shadow-xs relative overflow-hidden transition-colors space-y-4">
         
         <div className="flex flex-col sm:flex-row sm:items-center gap-5">
-          {/* Avatar con pulsante Regola / Camera interattivo */}
+          {/* Avatar Circolare Principale Direttamente Cliccabile */}
           <div className="relative group self-center sm:self-auto shrink-0">
-            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl overflow-hidden shadow-lg shadow-black/10 border-2 border-neutral-200 dark:border-neutral-700 bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center relative">
+            <button
+              type="button"
+              onClick={() => setIsAvatarMenuOpen(true)}
+              className="w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden shadow-lg shadow-black/10 border-2 border-white dark:border-neutral-800 ring-2 ring-neutral-200 dark:ring-neutral-700 bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center relative cursor-pointer group hover:ring-[#f23e2e] transition-all hover:scale-105 active:scale-95"
+              title="Clicca per cambiare foto o scegliere un avatar"
+            >
               {currentUser.avatarUrl ? (
                 <img
                   src={currentUser.avatarUrl}
@@ -238,29 +245,24 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 </div>
               )}
 
-              {/* Overlay hover per modificare / ritagliare foto */}
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="absolute inset-0 bg-black/55 text-white opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 cursor-pointer"
-                title="Scegli e ritaglia foto profilo"
-              >
-                <Crop className="w-5 h-5 text-[#f23e2e]" />
-                <span className="text-[10px] font-bold">Ritaglia / Cambia</span>
-              </button>
-            </div>
-
-            {/* Bottone galleggiante fotocamera per tocco immediato */}
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-[#f23e2e] hover:bg-red-600 text-white shadow-md shadow-red-500/30 flex items-center justify-center border-2 border-white dark:border-neutral-900 transition-all cursor-pointer hover:scale-105 active:scale-95"
-              title="Carica e ritaglia foto da dispositivo"
-            >
-              <Camera className="w-4 h-4" />
+              {/* Overlay hover per indicare il click */}
+              <div className="absolute inset-0 bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 rounded-full">
+                <Camera className="w-5 h-5 text-white" />
+                <span className="text-[9px] font-black uppercase tracking-wider">Modifica</span>
+              </div>
             </button>
 
-            {/* File input nascosto */}
+            {/* Badge galleggiante fotocamera */}
+            <button
+              type="button"
+              onClick={() => setIsAvatarMenuOpen(true)}
+              className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-[#f23e2e] hover:bg-red-600 text-white shadow-md shadow-red-500/30 flex items-center justify-center border-2 border-white dark:border-neutral-900 transition-all cursor-pointer hover:scale-110 active:scale-95"
+              title="Modifica foto profilo"
+            >
+              <Camera className="w-3.5 h-3.5" />
+            </button>
+
+            {/* File input nascosto per upload */}
             <input
               ref={fileInputRef}
               type="file"
@@ -270,7 +272,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             />
           </div>
 
-          {/* Dati Anagrafici e Ruoli (con immagine profilo accanto al nome) */}
+          {/* Dati Anagrafici e Ruoli */}
           <div className="space-y-1.5 flex-1 min-w-0 text-center sm:text-left">
             <div className="flex items-center justify-center sm:justify-start gap-1.5 flex-wrap">
               <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 ${
@@ -311,52 +313,99 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               <Mail className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
               <span>{currentUser.email}</span>
             </p>
-
-            {/* Azioni rapide per la foto profilo */}
-            <div className="pt-2 flex items-center justify-center sm:justify-start gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="py-1.5 px-3 rounded-xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-              >
-                <Upload className="w-3.5 h-3.5 text-[#f23e2e]" />
-                <span>Carica & Ritaglia</span>
-              </button>
-
-              {currentUser.avatarUrl && (
-                <button
-                  type="button"
-                  onClick={() => setCropImageSource(currentUser.avatarUrl!)}
-                  className="py-1.5 px-3 rounded-xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                >
-                  <Crop className="w-3.5 h-3.5 text-[#f23e2e]" />
-                  <span>Regola Attuale</span>
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => setShowPresets(!showPresets)}
-                className="py-1.5 px-3 rounded-xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-              >
-                <ImageIcon className="w-3.5 h-3.5 text-neutral-500" />
-                <span>Galleria Avatar ({PRESET_AVATARS.length})</span>
-              </button>
-
-              {currentUser.avatarUrl && (
-                <button
-                  type="button"
-                  onClick={handleRemovePhoto}
-                  className="py-1.5 px-2.5 rounded-xl text-neutral-400 hover:text-red-600 dark:hover:text-red-400 text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
-                  title="Rimuovi foto personalizzata"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Rimuovi</span>
-                </button>
-              )}
-            </div>
+            <p className="text-[11px] text-neutral-400 dark:text-neutral-500">
+              Tocca la foto profilo per caricarne una nuova o scegliere un avatar.
+            </p>
           </div>
         </div>
+
+        {/* Modal Scelta Azioni Avatar (Aperto cliccando sull'Avatar circolare) */}
+        {isAvatarMenuOpen && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+            <div className="bg-white dark:bg-neutral-900 w-full max-w-sm rounded-3xl p-5 border border-neutral-200 dark:border-neutral-800 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-neutral-100 dark:border-neutral-800">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-950/60 text-[#f23e2e] flex items-center justify-center">
+                    <Camera className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-sm font-black text-neutral-900 dark:text-white">
+                    Foto Profilo
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsAvatarMenuOpen(false)}
+                  className="p-1.5 rounded-full text-neutral-400 hover:text-neutral-700 dark:hover:text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAvatarMenuOpen(false);
+                    fileInputRef.current?.click();
+                  }}
+                  className="w-full p-3 rounded-2xl bg-neutral-50 dark:bg-neutral-800/70 hover:bg-red-50 dark:hover:bg-red-950/30 border border-neutral-200 dark:border-neutral-700 hover:border-[#f23e2e] flex items-center gap-3 transition-all cursor-pointer text-left group"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-red-100 dark:bg-red-950/60 text-[#f23e2e] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                    <Upload className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-neutral-900 dark:text-white group-hover:text-[#f23e2e]">
+                      Carica e Ritaglia Foto
+                    </p>
+                    <p className="text-[10px] text-neutral-500 dark:text-neutral-400">
+                      Seleziona una foto dal tuo dispositivo ed effettua il crop
+                    </p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAvatarMenuOpen(false);
+                    setShowPresets(true);
+                  }}
+                  className="w-full p-3 rounded-2xl bg-neutral-50 dark:bg-neutral-800/70 hover:bg-red-50 dark:hover:bg-red-950/30 border border-neutral-200 dark:border-neutral-700 hover:border-[#f23e2e] flex items-center gap-3 transition-all cursor-pointer text-left group"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-neutral-200 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-200 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                    <ImageIcon className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-neutral-900 dark:text-white group-hover:text-[#f23e2e]">
+                      Galleria Avatar JESic
+                    </p>
+                    <p className="text-[10px] text-neutral-500 dark:text-neutral-400">
+                      Scegli tra gli avatar ufficiali e 3D preimpostati
+                    </p>
+                  </div>
+                </button>
+
+                {currentUser.avatarUrl && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAvatarMenuOpen(false);
+                      handleRemovePhoto();
+                    }}
+                    className="w-full p-3 rounded-2xl bg-red-50/70 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/60 border border-red-200/60 dark:border-red-900/40 flex items-center gap-3 transition-all cursor-pointer text-left text-red-600 dark:text-red-400"
+                  >
+                    <div className="w-9 h-9 rounded-xl bg-red-100 dark:bg-red-900/60 text-red-600 dark:text-red-300 flex items-center justify-center shrink-0">
+                      <Trash2 className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold">Rimuovi Foto Profilo</p>
+                      <p className="text-[10px] text-red-500/80">Torna all'avatar con la tua iniziale</p>
+                    </div>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Cassetto Galleria Avatar Preimpostati & Professionale */}
         {showPresets && (
@@ -644,32 +693,11 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </button>
         </div>
 
-        <div className="p-3 bg-neutral-50 dark:bg-neutral-800/60 rounded-2xl border border-neutral-100 dark:border-neutral-800 text-xs text-neutral-600 dark:text-neutral-300 flex items-start gap-2.5">
-          {calendarConnected ? (
-            <>
-              <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-              <div className="space-y-1 text-[11px]">
-                <p className="font-semibold text-neutral-800 dark:text-neutral-200">
-                  Sincronizzazione automatica attiva e collegata permanente
-                </p>
-                <p className="text-neutral-500 dark:text-neutral-400 text-[10px] leading-relaxed">
-                  Ogni evento inserito o confermato nel calendario dell'app (sondaggi When2meet, assemblee ufficiali, CDA e call clienti) viene automaticamente inserito nel Google Calendar di <strong>{currentUser.email}</strong>.
-                </p>
-              </div>
-            </>
-          ) : (
-            <>
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0 mt-1" />
-              <div className="text-[11px]">
-                <p className="font-semibold text-neutral-800 dark:text-neutral-200">
-                  Sincronizzazione disattivata
-                </p>
-                <p className="text-neutral-500 dark:text-neutral-400 text-[10px]">
-                  Gli eventi confermati non verranno aggiunti al tuo Google Calendar personale.
-                </p>
-              </div>
-            </>
-          )}
+        <div className="p-3.5 bg-neutral-50 dark:bg-neutral-800/60 rounded-2xl border border-neutral-100 dark:border-neutral-800 text-xs text-neutral-600 dark:text-neutral-300 flex items-center gap-2.5">
+          <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <p className="text-xs font-medium text-neutral-700 dark:text-neutral-200 leading-relaxed">
+            Ogni evento viene inserito automaticamente nel Google Calendar di {currentUser.email}.
+          </p>
         </div>
       </div>
 
