@@ -274,31 +274,6 @@ export default function App() {
       .catch((e) => console.log('[Sync /api/client-requests]', e));
   }, []);
 
-  // Se l'utente non fa parte di nessun gruppo, inseriscilo nel primo gruppo di esempio per comodità
-  useEffect(() => {
-    if (currentUser && groups.length > 0) {
-      const isMemberOfAny = groups.some((g) => g.members.some((m) => m.userId === currentUser.id));
-      if (!isMemberOfAny) {
-        setGroups((prev) =>
-          prev.map((g, idx) =>
-            idx === 0
-              ? {
-                  ...g,
-                  members: [
-                    ...g.members,
-                    {
-                      userId: currentUser.id,
-                      role: currentUser.role === 'admin' ? 'admin' : 'member',
-                      joinedAt: new Date().toISOString(),
-                    },
-                  ],
-                }
-              : g
-          )
-        );
-      }
-    }
-  }, [currentUser?.id]);
 
   // Stato Splash Screen iniziale a tendina (Sempre visibile al refresh/avvio)
   const [showSplash, setShowSplash] = useState(true);
