@@ -143,27 +143,25 @@ app.get('/api/users', async (_req: Request, res: Response) => {
   return res.json({ users: localStore.users });
 });
 
-// POST /api/users - Registrazione / Sincronizzazione utente nel Database
-app.post('/api/users', async (req: Request, res: Response) => {
+// Gestione Registrazione / Sincronizzazione utente nel Database
+const handleUserSync = async (req: Request, res: Response) => {
   try {
-    const { id, name, surname, email, password, role, systemRole, jesicRole, avatarUrl, googleCalendarConnected } = req.body;
+    const { id, name, surname, email, password, jesicRole, avatarUrl, googleCalendarConnected } = req.body;
     if (!name || !surname || !email) {
       return res.status(400).json({ error: 'Nome, cognome ed email sono obbligatori' });
     }
 
     const cleanEmail = email.toLowerCase().trim();
-    const validRoles: UserRole[] = ['user', 'admin_clienti', 'admin'];
 
     if (mongoose.connection.readyState === 1) {
       const existing = await UserModel.findOne({ email: cleanEmail });
       if (existing) {
-        // Aggiorna l'utente esistente
-        if (role && validRoles.includes(role)) {
-          existing.role = role;
-          existing.systemRole = role;
-        }
-        if (jesicRole) existing.jesicRole = jesicRole;
-        if (avatarUrl) existing.avatarUrl = avatarUrl;
+        // REGOLA 1: Se l'utente esiste già nel DB, NON sovrascrivere MAI il 'role'.
+        // MongoDB è l'unica fonte di verità!
+        if (name && !existing.name) existing.name = name;
+        if (surname && !existing.surname) existing.surname = surname;
+        if (jesicRole && !existing.jesicRole) existing.jesicRole = jesicRole;
+        if (avatarUrl && !existing.avatarUrl) existing.avatarUrl = avatarUrl;
         if (googleCalendarConnected !== undefined) existing.googleCalendarConnected = Boolean(googleCalendarConnected);
         await existing.save();
 
@@ -172,8 +170,8 @@ app.post('/api/users', async (req: Request, res: Response) => {
           name: existing.name,
           surname: existing.surname,
           email: existing.email,
-          role: existing.role,
-          systemRole: existing.role,
+          role: existing.role || 'user',
+          systemRole: existing.role || 'user',
           jesicRole: existing.jesicRole,
           avatarUrl: existing.avatarUrl,
           googleCalendarConnected: existing.googleCalendarConnected,
@@ -181,8 +179,9 @@ app.post('/api/users', async (req: Request, res: Response) => {
         return res.json({ user: jsonUser });
       }
 
-      const totalUsers = await UserModel.countDocuments();
-      const assignedRole: UserRole = role && validRoles.includes(role) ? role : totalUsers === 0 ? 'admin' : 'user';
+      // REGOLA 1: Di base TUTTI i nuovi utenti nascono SEMPRE e solo come 'user' (Utente Normale).
+      // Nessuna logica count === 0 ? 'admin' : 'user'!
+      const assignedRole: UserRole = 'user';
 
       const newUserDoc = await UserModel.create({
         _id: id || `user-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -218,9 +217,14 @@ app.post('/api/users', async (req: Request, res: Response) => {
   // Fallback cache locale
   const cleanEmail = req.body.email?.toLowerCase().trim();
   const existingIdx = localStore.users.findIndex((u) => u.email.toLowerCase() === cleanEmail);
-  const isFirst = localStore.users.length === 0;
-  const assignedRole = req.body.role || (isFirst ? 'admin' : 'user');
 
+  if (existingIdx >= 0) {
+    // Mantieni il ruolo già memorizzato come fonte di verità
+    return res.json({ user: localStore.users[existingIdx] });
+  }
+
+  // Nuovo utente sempre 'user'
+  const assignedRole: UserRole = 'user';
   const newUser = {
     id: req.body.id || `user-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     name: req.body.name,
@@ -236,32 +240,33 @@ app.post('/api/users', async (req: Request, res: Response) => {
     updatedAt: new Date().toISOString(),
   };
 
-  if (existingIdx >= 0) {
-    localStore.users[existingIdx] = { ...localStore.users[existingIdx], ...newUser };
-  } else {
-    localStore.users.push(newUser);
-  }
+  localStore.users.push(newUser);
   saveLocalStore(localStore);
 
   return res.status(201).json({ user: newUser });
-});
+};
 
-// PATCH /api/users/:id/role - Assegnazione 3 Ruoli ('user', 'admin_clienti', 'admin') protetta da Super Admin
+// Entrambi gli endpoint registrano/sincronizzano rispettando il ruolo da MongoDB
+app.post('/api/users', handleUserSync);
+app.post('/api/users/sync', handleUserSync);
+
+// PATCH /api/users/:id/role - Assegnazione 3 Ruoli ('user', 'admin', 'admin_clienti')
 app.patch('/api/users/:id/role', async (req: Request, res: Response) => {
   const { id } = req.params;
   const { role, adminId } = req.body;
 
   const validRoles: UserRole[] = ['user', 'admin_clienti', 'admin'];
   if (!validRoles.includes(role)) {
-    return res.status(400).json({ error: "Il ruolo deve essere 'user', 'admin_clienti' o 'admin'" });
+    return res.status(400).json({ error: "Il ruolo deve essere 'user', 'admin' o 'admin_clienti'" });
   }
 
   try {
     if (mongoose.connection.readyState === 1) {
       if (adminId) {
         const adminUser = await UserModel.findOne({ $or: [{ _id: adminId }, { id: adminId }] });
-        if (!adminUser || adminUser.role !== 'admin') {
-          return res.status(403).json({ error: 'Accesso negato: solo i Super Admin possono modificare i ruoli' });
+        // Autorizza sia 'admin' che 'admin_clienti' (che eredita i permessi di admin)
+        if (!adminUser || (adminUser.role !== 'admin' && adminUser.role !== 'admin_clienti')) {
+          return res.status(403).json({ error: 'Accesso negato: solo Admin o Admin Clienti possono modificare i ruoli' });
         }
       }
 

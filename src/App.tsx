@@ -411,20 +411,24 @@ export default function App() {
     setIsDarkMode((prev) => !prev);
   };
 
-  // Permessi Ruolo dal DATABASE: 3 Ruoli ('user', 'admin_clienti', 'admin')
+  // Gerarchia Esatta dei 3 Ruoli: 'user' (Livello 1) < 'admin' (Livello 2) < 'admin_clienti' (Livello 3)
   const isAdmin = currentUser?.role === 'admin';
-  const isClientAdmin =
-    isAdmin ||
-    currentUser?.role === 'admin_clienti' ||
-    currentUser?.systemRole === 'admin_clienti' ||
-    (currentUser?.systemRole as unknown as string) === 'client_admin';
+  const isAdminClienti = currentUser?.role === 'admin_clienti';
 
-  // Protezione Rotta Richieste: visibile e accessibile SOLO per 'admin' e 'admin_clienti'. Bloccata per 'user'.
+  // Livello 2 & 3: Creazione Eventi Ufficiali e Gestione Ruoli
+  const canCreateOfficialEvents = isAdmin || isAdminClienti;
+  const canManageRoles = isAdmin || isAdminClienti;
+
+  // Livello 3 (Esclusivo): Visibilità e accesso alla tab "Richieste Clienti"
+  const isClientAdmin = isAdminClienti; // Sbloccato SOLO per 'admin_clienti'
+  const canAccessClientRequests = isClientAdmin;
+
+  // Protezione Rotta Richieste: visibile e accessibile SOLO ad 'admin_clienti'. Bloccata per 'user' e 'admin'.
   useEffect(() => {
-    if (currentTab === 'requests' && !isClientAdmin) {
+    if (currentTab === 'requests' && !canAccessClientRequests) {
       setCurrentTab(isInsideGroup ? 'dashboard' : 'groups');
     }
-  }, [currentTab, isClientAdmin, isInsideGroup]);
+  }, [currentTab, canAccessClientRequests, isInsideGroup]);
 
   // Supporto invito automatico tramite URL parametro ?join=CODE
   useEffect(() => {
@@ -569,10 +573,10 @@ export default function App() {
     } catch {}
   };
 
-  // GESTIONE REGISTRAZIONE / LOGIN SINCRONIZZATA CON MONGODB
+  // GESTIONE REGISTRAZIONE / LOGIN SINCRONIZZATA CON MONGODB (Default sempre 'user')
   const handleRegisterUser = async (newUserData: Omit<User, 'id'>) => {
-    const isFirstUser = users.length === 0;
-    const assignedRole: AppRole = newUserData.role || (isFirstUser ? 'admin' : 'user');
+    // REGOLA: Di base tutti i nuovi utenti nascono sempre e solo con role 'user'
+    const assignedRole: AppRole = 'user';
 
     try {
       const res = await fetch('/api/users', {
@@ -812,7 +816,7 @@ export default function App() {
   // LOGICA DEL BOTTONE "+" (Admin: scelta sondaggio vs evento ufficiale; User: diretto sondaggio)
   const handlePlusButtonClick = () => {
     if (!currentUser) return;
-    if (isAdmin) {
+    if (canCreateOfficialEvents) {
       setIsChoiceModalOpen(true);
     } else {
       setPollPrefillData(undefined);

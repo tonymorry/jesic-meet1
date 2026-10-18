@@ -283,7 +283,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                 {effectiveRole === 'admin' ? (
                   <>
                     <ShieldCheck className="w-3 h-3 text-[#f23e2e]" />
-                    <span>⚡ Super Admin</span>
+                    <span>⚡ Admin</span>
                   </>
                 ) : effectiveRole === 'admin_clienti' ? (
                   <>
@@ -488,8 +488,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         </div>
       </div>
 
-      {/* PANNELLO AMMINISTRAZIONE RUOLI (COMPLETAMENTE NASCOSTO per gli utenti standard, visibile SOLO per role === 'admin' nel DB) */}
-      {currentUser.role === 'admin' && (
+      {/* PANNELLO AMMINISTRAZIONE RUOLI (visibile ad 'admin' e 'admin_clienti', nascosto per 'user') */}
+      {(currentUser.role === 'admin' || currentUser.role === 'admin_clienti') && (
         <div className="bg-white dark:bg-neutral-900 rounded-3xl p-5 border border-neutral-200/90 dark:border-neutral-800 shadow-xs space-y-3.5 transition-colors">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
@@ -502,7 +502,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                     Gestione Ruoli e Permessi
                   </h3>
                   <span className="text-[9px] font-black uppercase tracking-wider bg-red-100 dark:bg-red-950/60 text-[#f23e2e] px-2 py-0.5 rounded-full">
-                    Admin DB
+                    {currentUser.role === 'admin_clienti' ? 'Admin Clienti' : 'Admin'}
                   </span>
                 </div>
                 <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
@@ -518,7 +518,6 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             ) : (
               allUsers.map((user) => {
                 const isMe = user.id === currentUser.id;
-                const userIsAdmin = user.role === 'admin';
 
                 return (
                   <div
@@ -541,18 +540,18 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                     <div className="flex items-center gap-2 shrink-0">
                       <span
                         className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                          user.role === 'admin'
-                            ? 'bg-red-100 dark:bg-red-950/60 text-[#f23e2e] border border-red-200 dark:border-red-900/40'
-                            : user.role === 'admin_clienti'
+                          user.role === 'admin_clienti'
                             ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900/40'
+                            : user.role === 'admin'
+                            ? 'bg-red-100 dark:bg-red-950/60 text-[#f23e2e] border border-red-200 dark:border-red-900/40'
                             : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300'
                         }`}
                       >
-                        {user.role === 'admin'
-                          ? 'Super Admin'
-                          : user.role === 'admin_clienti'
+                        {user.role === 'admin_clienti'
                           ? 'Admin Clienti'
-                          : 'Utente'}
+                          : user.role === 'admin'
+                          ? 'Admin'
+                          : 'Utente Normale'}
                       </span>
 
                       {!isMe && onUpdateUserRole ? (
@@ -563,19 +562,19 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                             const newRole = e.target.value as AppRole;
                             onUpdateUserRole(user.id, newRole);
                             const roleLabel =
-                              newRole === 'admin'
-                                ? 'Super Admin'
-                                : newRole === 'admin_clienti'
+                              newRole === 'admin_clienti'
                                 ? 'Admin Clienti'
-                                : 'Utente Standard';
+                                : newRole === 'admin'
+                                ? 'Admin'
+                                : 'Utente Normale';
                             setFeedbackMsg(`Ruolo di ${user.name} impostato su "${roleLabel}" nel Database!`);
                             setTimeout(() => setFeedbackMsg(null), 3500);
                           }}
                           className="text-[11px] font-bold px-2 py-1 rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-900 text-neutral-800 dark:text-neutral-200 cursor-pointer shadow-2xs hover:border-[#f23e2e] focus:outline-none focus:ring-2 focus:ring-[#f23e2e]/40 transition-all"
                         >
-                          <option value="user">👤 Utente</option>
+                          <option value="user">👤 Utente Normale</option>
+                          <option value="admin">⚡ Admin</option>
                           <option value="admin_clienti">🏢 Admin Clienti</option>
-                          <option value="admin">⚡ Super Admin</option>
                         </select>
                       ) : (
                         isMe && (

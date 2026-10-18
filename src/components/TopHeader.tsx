@@ -257,29 +257,54 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             )}
           </button>
 
-          {/* Profilo Utente Connesso */}
+          {/* Profilo Utente Connesso con Badge Ruolo Statico (Nessun selettore di test) */}
           <button
             type="button"
             onClick={onNavigateToProfile}
             className="flex items-center gap-2 p-1 pl-1.5 pr-2.5 rounded-full border border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 transition-all text-left cursor-pointer"
-            title="Visualizza il tuo profilo"
+            title="Visualizza il tuo profilo (Gestione Ruoli disponibile per Admin nel Profilo)"
           >
             <UserAvatar user={currentUser} size="sm" />
-            <div className="hidden sm:block leading-none">
+            <div className="hidden sm:block leading-tight">
               <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200 block truncate max-w-[120px]">
                 {currentUser.name} {currentUser.surname}
               </span>
-              <span className="text-[9px] text-neutral-400 uppercase tracking-wider font-bold">
-                {currentUser.role === 'admin'
-                  ? '⚡ Super Admin'
-                  : currentUser.role === 'admin_clienti'
-                  ? '🏢 Admin Clienti'
+              <span
+                className={`inline-block text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-full ${
+                  currentUser.role === 'admin_clienti'
+                    ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-400 border border-amber-300/50 dark:border-amber-800/50'
+                    : currentUser.role === 'admin'
+                    ? 'bg-red-100 dark:bg-red-950/80 text-[#f23e2e] border border-red-300/50 dark:border-red-800/50'
+                    : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300'
+                }`}
+              >
+                {currentUser.role === 'admin_clienti'
+                  ? 'Admin Clienti'
+                  : currentUser.role === 'admin'
+                  ? 'Admin'
                   : 'Utente'}
               </span>
             </div>
-            <span className="sm:hidden text-xs font-semibold text-neutral-800 dark:text-neutral-200 max-w-[80px] truncate">
-              {currentUser.name}
-            </span>
+            <div className="sm:hidden flex flex-col items-start leading-tight">
+              <span className="text-xs font-semibold text-neutral-800 dark:text-neutral-200 max-w-[80px] truncate">
+                {currentUser.name}
+              </span>
+              <span
+                className={`text-[8px] font-black uppercase tracking-wider px-1 py-0.2 rounded-md ${
+                  currentUser.role === 'admin_clienti'
+                    ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-400'
+                    : currentUser.role === 'admin'
+                    ? 'bg-red-100 dark:bg-red-950/80 text-[#f23e2e]'
+                    : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300'
+                }`}
+              >
+                {currentUser.role === 'admin_clienti'
+                  ? 'Admin Clienti'
+                  : currentUser.role === 'admin'
+                  ? 'Admin'
+                  : 'Utente'}
+              </span>
+            </div>
           </button>
         </div>
 
