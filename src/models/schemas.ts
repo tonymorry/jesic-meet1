@@ -17,10 +17,13 @@ import mongoose, { Schema, Document, Model } from 'mongoose';
    ========================================================================== */
 export type UserSystemRole = 'admin' | 'associate' | 'client_admin';
 
+export type AppRole = 'admin' | 'user';
+
 export interface IUser extends Document {
   nome: string;
   cognome: string;
   email: string;
+  role: AppRole; // 'admin' | 'user' - gestito direttamente dal Database
   systemRole: UserSystemRole; // 'admin' | 'associate' | 'client_admin'
   ruolo?: string; // Es. Presidente, Vicepresidente, Project Manager, Consulente Junior
   avatarUrl?: string;
@@ -53,6 +56,12 @@ const UserSchema: Schema<IUser> = new Schema(
       trim: true,
       lowercase: true,
       match: [/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/, 'Formato email non valido'],
+      index: true,
+    },
+    role: {
+      type: String,
+      enum: ['admin', 'user'],
+      default: 'user',
       index: true,
     },
     systemRole: {
@@ -97,6 +106,92 @@ UserSchema.virtual('nomeCompleto').get(function (this: IUser) {
 });
 
 export const User: Model<IUser> = mongoose.models.User || mongoose.model<IUser>('User', UserSchema);
+
+/* ==========================================================================
+   1.B GROUP SCHEMA & MODEL (Gruppi di lavoro & Team)
+   ========================================================================== */
+export interface IGroupMember {
+  userId: mongoose.Types.ObjectId;
+  role: 'admin' | 'member';
+  joinedAt: Date;
+}
+
+export interface IGroup extends Document {
+  name: string;
+  description?: string;
+  code: string; // Codice univoco (es. "JES-7A9B")
+  creatorId: mongoose.Types.ObjectId;
+  members: IGroupMember[];
+  avatar?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const GroupMemberSubSchema = new Schema<IGroupMember>(
+  {
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
+    role: {
+      type: String,
+      enum: ['admin', 'member'],
+      default: 'member',
+    },
+    joinedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  { _id: false }
+);
+
+const GroupSchema: Schema<IGroup> = new Schema(
+  {
+    name: {
+      type: String,
+      required: [true, 'Il nome del gruppo è obbligatorio'],
+      trim: true,
+      maxlength: [80, 'Nome del gruppo troppo lungo'],
+    },
+    description: {
+      type: String,
+      trim: true,
+      maxlength: [500, 'Descrizione troppo lunga'],
+      default: '',
+    },
+    code: {
+      type: String,
+      required: [true, 'Il codice univoco è obbligatorio'],
+      unique: true,
+      uppercase: true,
+      trim: true,
+      index: true,
+    },
+    creatorId: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+      index: true,
+    },
+    members: {
+      type: [GroupMemberSubSchema],
+      default: [],
+    },
+    avatar: {
+      type: String,
+      default: '👥',
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+GroupSchema.index({ 'members.userId': 1 });
+
+export const Group: Model<IGroup> = mongoose.models.Group || mongoose.model<IGroup>('Group', GroupSchema);
 
 /* ==========================================================================
    2. CLIENT REQUEST SCHEMA & MODEL (Flusso B2B Acquisizione & Richieste)
@@ -247,6 +342,8 @@ export interface IEvent extends Document {
   invitati: IInvitee[];
   participants: IParticipant[];
   dataOraDefinitiva?: IFinalizedSlot;
+  groupId?: mongoose.Types.ObjectId;
+  externalInviteEmails?: string[];
   clientRequestId?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -379,6 +476,16 @@ const EventSchema: Schema<IEvent> = new Schema(
       date: { type: String },
       startTime: { type: String },
       endTime: { type: String },
+    },
+    groupId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Group',
+      default: null,
+      index: true,
+    },
+    externalInviteEmails: {
+      type: [String],
+      default: [],
     },
     clientRequestId: {
       type: Schema.Types.ObjectId,

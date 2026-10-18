@@ -11,6 +11,8 @@ import {
   InviteeConfig,
   UserSystemRole,
   ClientRequest,
+  Group,
+  AppRole,
 } from './types';
 import { INITIAL_USERS, INITIAL_EVENTS, INITIAL_RESPONSES } from './data/mockData';
 import { isEventPassed } from './utils/dateUtils';
@@ -21,6 +23,10 @@ import { Dashboard } from './components/Dashboard';
 import { EventsFeedView } from './components/EventsFeedView';
 import { CalendarView } from './components/CalendarView';
 import { ProfileView } from './components/ProfileView';
+import { GroupsHubView } from './components/GroupsHubView';
+import { PollsHubView } from './components/PollsHubView';
+import { GroupWorkspaceHeader } from './components/GroupWorkspaceHeader';
+import { GroupMembersModal } from './components/GroupMembersModal';
 import { CreateEventModal, PreFillClientData } from './components/CreateEventModal';
 import { CreateOfficialEventModal } from './components/CreateOfficialEventModal';
 import { CreateActionChoiceModal } from './components/CreateActionChoiceModal';
@@ -37,6 +43,45 @@ const STORAGE_CURRENT_USER_KEY = 'jesic_meet_v3_current_user';
 const STORAGE_EVENTS_KEY = 'jesic_meet_v3_events';
 const STORAGE_RESPONSES_KEY = 'jesic_meet_v3_responses';
 const STORAGE_CLIENT_REQUESTS_KEY = 'jesic_meet_v3_client_requests';
+const STORAGE_GROUPS_KEY = 'jesic_meet_v3_groups';
+const STORAGE_ACTIVE_GROUP_KEY = 'jesic_meet_v3_active_group_id';
+
+// Gruppi iniziali realistici JESic
+const INITIAL_GROUPS: Group[] = [
+  {
+    id: 'grp-01',
+    name: 'Consulenza Strategica & B2B',
+    description: 'Progetti con aziende, analisi di mercato, piani industriali e audit.',
+    code: 'JES-B2B1',
+    inviteLink: `${typeof window !== 'undefined' ? window.location.origin : ''}/?join=JES-B2B1`,
+    creatorId: 'seed-admin',
+    avatar: '🚀',
+    createdAt: new Date().toISOString(),
+    members: [],
+  },
+  {
+    id: 'grp-02',
+    name: 'Dipartimento IT & Tech',
+    description: 'Sviluppo web app, piattaforme digitali e soluzioni innovative con AI.',
+    code: 'JES-TECH',
+    inviteLink: `${typeof window !== 'undefined' ? window.location.origin : ''}/?join=JES-TECH`,
+    creatorId: 'seed-admin',
+    avatar: '💻',
+    createdAt: new Date().toISOString(),
+    members: [],
+  },
+  {
+    id: 'grp-03',
+    name: 'Area Marketing & Comunicazione',
+    description: 'Social media, brand awareness, grafica e organizzazione eventi.',
+    code: 'JES-MKTG',
+    inviteLink: `${typeof window !== 'undefined' ? window.location.origin : ''}/?join=JES-MKTG`,
+    creatorId: 'seed-admin',
+    avatar: '🔥',
+    createdAt: new Date().toISOString(),
+    members: [],
+  },
+];
 
 // Richieste iniziali demo per testare subito il flusso B2B
 const getTomorrowDateStr = (daysAhead: number = 1) => {
@@ -153,7 +198,7 @@ export default function App() {
     return INITIAL_RESPONSES;
   });
 
-  // Richieste Clienti B2B (Mongoose ClientRequest replica su frontend)
+  // Richieste Clienti B2B
   const [clientRequests, setClientRequests] = useState<ClientRequest[]>(() => {
     const saved = localStorage.getItem(STORAGE_CLIENT_REQUESTS_KEY);
     if (saved) {
@@ -165,6 +210,30 @@ export default function App() {
     }
     return INITIAL_CLIENT_REQUESTS;
   });
+
+  // Gruppi di lavoro
+  const [groups, setGroups] = useState<Group[]>(() => {
+    const saved = localStorage.getItem(STORAGE_GROUPS_KEY);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    return INITIAL_GROUPS;
+  });
+
+  // Gruppo Attivo (null se siamo al livello piattaforma / home generale)
+  const [activeGroupId, setActiveGroupId] = useState<string | null>(() => {
+    return localStorage.getItem(STORAGE_ACTIVE_GROUP_KEY) || null;
+  });
+
+  const activeGroup = groups.find((g) => g.id === activeGroupId) || null;
+  const isInsideGroup = Boolean(activeGroup);
+
+  // Modale Membri del Gruppo
+  const [isGroupMembersModalOpen, setIsGroupMembersModalOpen] = useState(false);
 
   // Salvataggio localStorage
   useEffect(() => {
@@ -191,11 +260,51 @@ export default function App() {
     localStorage.setItem(STORAGE_CLIENT_REQUESTS_KEY, JSON.stringify(clientRequests));
   }, [clientRequests]);
 
+  useEffect(() => {
+    localStorage.setItem(STORAGE_GROUPS_KEY, JSON.stringify(groups));
+  }, [groups]);
+
+  useEffect(() => {
+    if (activeGroupId) {
+      localStorage.setItem(STORAGE_ACTIVE_GROUP_KEY, activeGroupId);
+    } else {
+      localStorage.removeItem(STORAGE_ACTIVE_GROUP_KEY);
+    }
+  }, [activeGroupId]);
+
+  // Se l'utente non fa parte di nessun gruppo, inseriscilo nel primo gruppo di esempio per comodità
+  useEffect(() => {
+    if (currentUser && groups.length > 0) {
+      const isMemberOfAny = groups.some((g) => g.members.some((m) => m.userId === currentUser.id));
+      if (!isMemberOfAny) {
+        setGroups((prev) =>
+          prev.map((g, idx) =>
+            idx === 0
+              ? {
+                  ...g,
+                  members: [
+                    ...g.members,
+                    {
+                      userId: currentUser.id,
+                      role: currentUser.role === 'admin' ? 'admin' : 'member',
+                      joinedAt: new Date().toISOString(),
+                    },
+                  ],
+                }
+              : g
+          )
+        );
+      }
+    }
+  }, [currentUser?.id]);
+
   // Stato Splash Screen iniziale a tendina
   const [splashFinished, setSplashFinished] = useState(false);
 
-  // Stato UI Navigazione
-  const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
+  // Stato UI Navigazione:
+  // - Fuori dal gruppo: 'groups' | 'polls' | 'profile'
+  // - Dentro un gruppo: 'dashboard' | 'events' | 'calendar' | 'requests' | 'profile'
+  const [currentTab, setCurrentTab] = useState<NavTab>('groups');
 
   // Modali Creazione
   const [isChoiceModalOpen, setIsChoiceModalOpen] = useState(false);
@@ -234,9 +343,24 @@ export default function App() {
     setIsDarkMode((prev) => !prev);
   };
 
-  // Permessi Ruolo
-  const isClientAdmin = currentUser?.systemRole === 'client_admin';
-  const isAdmin = currentUser?.systemRole === 'admin' || isClientAdmin;
+  // Permessi Ruolo dal DATABASE
+  const isAdmin = currentUser?.role === 'admin';
+  const isClientAdmin = isAdmin || currentUser?.systemRole === 'client_admin';
+
+  // Supporto invito automatico tramite URL parametro ?join=CODE
+  useEffect(() => {
+    if (typeof window !== 'undefined' && currentUser) {
+      const params = new URLSearchParams(window.location.search);
+      const joinCode = params.get('join');
+      if (joinCode) {
+        handleJoinGroup(joinCode).then(() => {
+          try {
+            window.history.replaceState({}, '', window.location.pathname);
+          } catch {}
+        });
+      }
+    }
+  }, [currentUser]);
 
   // Navigazione alla pagina pubblica /prenota-call
   const navigateToPublicBooking = () => {
@@ -270,21 +394,18 @@ export default function App() {
 
     setClientRequests((prev) => [newClientRequest, ...prev]);
 
-    // Chiamata backend proxy se attiva
     try {
       fetch('/api/client-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestData),
       }).catch((e) => console.log('[Client Request API local sync]', e));
-    } catch (e) {
-      // Ignora errori di rete locali
-    }
+    } catch {}
 
     return true;
   };
 
-  // Handler: Conversione Richiesta Cliente in Sondaggio Team (PRE-COMPILAZIONE AUTOMATICA)
+  // Conversione Richiesta Cliente in Sondaggio Team
   const handleConvertToPoll = (request: ClientRequest) => {
     const prefill: PreFillClientData = {
       title: `Call con ${request.companyName}`,
@@ -301,7 +422,7 @@ export default function App() {
     setIsCreatePollModalOpen(true);
   };
 
-  // Handler: Chiusura Flusso B2B - Conferma Evento Finale, Generazione Meet & Invio Email
+  // Conferma Evento Finale B2B
   const handleConfirmFinalClientEvent = async (
     request: ClientRequest,
     finalSlot: { date: string; startTime: string; endTime: string },
@@ -309,7 +430,6 @@ export default function App() {
   ) => {
     const generatedMeet = `https://meet.google.com/jes-${Math.random().toString(36).substring(2, 6)}-meet`;
 
-    // 1. Aggiorna stato ClientRequest a 'confirmed'
     setClientRequests((prev) =>
       prev.map((r) =>
         r.id === request.id
@@ -324,7 +444,6 @@ export default function App() {
       )
     );
 
-    // 2. Se c'è un evento sondaggio collegato, confermalo
     if (eventId) {
       setEvents((prev) =>
         prev.map((e) =>
@@ -338,12 +457,9 @@ export default function App() {
             : e
         )
       );
-    }
 
-    // Sincronizzazione automatica Google Calendar per la call cliente confermata
-    if (eventId) {
       const targetEvt = events.find((e) => e.id === eventId);
-      if (targetEvt) {
+      if (targetEvt && currentUser) {
         const updatedEvt: MeetingEvent = {
           ...targetEvt,
           status: 'confirmed',
@@ -357,7 +473,6 @@ export default function App() {
       }
     }
 
-    // 3. Chiamata API backend per invio email Nodemailer + Google Calendar
     try {
       await fetch(`/api/client-requests/${request.id}/confirm-final`, {
         method: 'POST',
@@ -372,45 +487,82 @@ export default function App() {
           adminEmail: currentUser?.email,
         }),
       }).catch((e) => console.log('[API confirmation sync]', e));
-    } catch (e) {
-      console.warn('Avviso backend confirmation sync:', e);
-    }
+    } catch {}
   };
 
-  // GESTIONE REGISTRAZIONE / LOGIN (Attiva l'animazione d'accesso con la mascotte)
+  // GESTIONE REGISTRAZIONE / LOGIN
   const handleRegisterUser = (newUserData: Omit<User, 'id'>) => {
     const newId = `user-${Date.now()}`;
-    const systemRole: UserSystemRole = 'client_admin';
+    const isFirstUser = users.length === 0;
+    const assignedRole: AppRole = newUserData.role || (isFirstUser ? 'admin' : 'user');
     const newUser: User = {
       ...newUserData,
       id: newId,
-      systemRole,
+      role: assignedRole,
+      systemRole: assignedRole === 'admin' ? 'client_admin' : 'associate',
     };
     const updatedUsers = [...users, newUser];
     setUsers(updatedUsers);
     setCurrentUser(newUser);
+    setCurrentTab('groups');
     setSplashFinished(false);
+
+    fetch('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newUser),
+    }).catch((e) => console.log('[API register user sync]', e));
   };
 
   const handleLoginUser = (user: User) => {
-    const withRole = { ...user, systemRole: user.systemRole || 'client_admin' };
+    const guaranteedRole: AppRole = user.role || 'user';
+    const withRole: User = {
+      ...user,
+      role: guaranteedRole,
+      systemRole: user.systemRole || (guaranteedRole === 'admin' ? 'client_admin' : 'associate'),
+    };
     setCurrentUser(withRole);
+    setCurrentTab('groups');
     setSplashFinished(false);
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
+    setActiveGroupId(null);
+    setCurrentTab('groups');
   };
 
-  // Aggiornamento Ruolo Sistema (client_admin vs admin vs associate)
-  const handleUpdateUserRole = (newSystemRole: UserSystemRole) => {
-    if (!currentUser) return;
-    const updated = { ...currentUser, systemRole: newSystemRole };
-    setCurrentUser(updated);
-    setUsers((prev) => prev.map((u) => (u.id === currentUser.id ? updated : u)));
+  // Aggiornamento Ruolo Utente nel DATABASE (Protetto per soli Admin)
+  const handleUpdateUserRole = (targetUserId: string, newRole: AppRole) => {
+    if (currentUser?.role !== 'admin') return;
+
+    const updatedUsers = users.map((u) =>
+      u.id === targetUserId
+        ? {
+            ...u,
+            role: newRole,
+            systemRole: newRole === 'admin' ? ('admin' as const) : ('associate' as const),
+          }
+        : u
+    );
+    setUsers(updatedUsers);
+
+    if (currentUser.id === targetUserId) {
+      setCurrentUser({
+        ...currentUser,
+        role: newRole,
+        systemRole: newRole === 'admin' ? 'admin' : 'associate',
+      });
+    }
+
+    fetch(`/api/users/${targetUserId}/role`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role: newRole, adminId: currentUser.id }),
+    }).catch((e) => console.log('[API user role update]', e));
   };
 
-  // Aggiornamento Profilo Utente (foto avatar, dati personali)
+  // Aggiornamento Profilo Utente (foto avatar, Google Calendar)
   const handleUpdateUserProfile = (updates: Partial<User>) => {
     if (!currentUser) return;
     const updated = { ...currentUser, ...updates };
@@ -418,7 +570,110 @@ export default function App() {
     setUsers((prev) => prev.map((u) => (u.id === currentUser.id ? updated : u)));
   };
 
-  // 1. LOGICA DEL BOTTONE "+" (Controllo Ruolo Admin / Admin Clienti)
+  // GESTIONE GRUPPI
+  const handleSelectGroup = (group: Group) => {
+    setActiveGroupId(group.id);
+    setCurrentTab('dashboard');
+  };
+
+  const handleBackToGroups = () => {
+    setActiveGroupId(null);
+    setCurrentTab('groups');
+  };
+
+  const handleCreateGroup = (name: string, description: string, avatar?: string) => {
+    if (!currentUser) return;
+    const code = `JES-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+    const newGroup: Group = {
+      id: `grp-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+      name: name.trim(),
+      description: description ? description.trim() : '',
+      code,
+      inviteLink: `${typeof window !== 'undefined' ? window.location.origin : ''}/?join=${code}`,
+      creatorId: currentUser.id,
+      avatar: avatar || '👥',
+      createdAt: new Date().toISOString(),
+      members: [
+        {
+          userId: currentUser.id,
+          role: 'admin',
+          joinedAt: new Date().toISOString(),
+        },
+      ],
+    };
+
+    const updated = [newGroup, ...groups];
+    setGroups(updated);
+    setActiveGroupId(newGroup.id);
+    setCurrentTab('dashboard');
+
+    fetch('/api/groups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name,
+        description,
+        avatar,
+        creatorId: currentUser.id,
+      }),
+    }).catch((e) => console.log('[API create group sync]', e));
+  };
+
+  const handleJoinGroup = async (
+    codeOrLink: string
+  ): Promise<{ success: boolean; message: string; group?: Group }> => {
+    if (!currentUser) return { success: false, message: 'Devi aver effettuato l\'accesso.' };
+
+    let code = codeOrLink.trim().toUpperCase();
+    if (code.includes('JOIN/')) {
+      code = code.split('JOIN/')[1].split('?')[0].split('/')[0];
+    } else if (code.includes('JOIN=')) {
+      code = code.split('JOIN=')[1].split('&')[0];
+    }
+
+    const targetGroup = groups.find((g) => g.code.toUpperCase() === code);
+    if (!targetGroup) {
+      return { success: false, message: 'Nessun gruppo trovato con questo codice d\'invito.' };
+    }
+
+    const alreadyMember = targetGroup.members.some((m) => m.userId === currentUser.id);
+    if (alreadyMember) {
+      setActiveGroupId(targetGroup.id);
+      setCurrentTab('dashboard');
+      return { success: true, message: 'Sei già membro di questo gruppo!', group: targetGroup };
+    }
+
+    const updatedGroup: Group = {
+      ...targetGroup,
+      members: [
+        ...targetGroup.members,
+        {
+          userId: currentUser.id,
+          role: 'member',
+          joinedAt: new Date().toISOString(),
+        },
+      ],
+      updatedAt: new Date().toISOString(),
+    };
+
+    const updatedGroups = groups.map((g) => (g.id === targetGroup.id ? updatedGroup : g));
+    setGroups(updatedGroups);
+    setActiveGroupId(updatedGroup.id);
+    setCurrentTab('dashboard');
+
+    fetch('/api/groups/join', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        codeOrLink: code,
+        userId: currentUser.id,
+      }),
+    }).catch((e) => console.log('[API join group sync]', e));
+
+    return { success: true, message: 'Sei entrato nel gruppo con successo!', group: updatedGroup };
+  };
+
+  // LOGICA DEL BOTTONE "+" (Admin: scelta sondaggio vs evento ufficiale; User: diretto sondaggio)
   const handlePlusButtonClick = () => {
     if (!currentUser) return;
     if (isAdmin) {
@@ -429,569 +684,697 @@ export default function App() {
     }
   };
 
-  // SE SIAMO SULLA ROTTA PUBBLICA /prenota-call: RENDERIZZA FORM PUBBLICO DIRETTO SENZA LOGIN!
-  if (currentRoute === '/prenota-call') {
-    return (
-      <>
-        {!splashFinished && <SplashScreen onFinish={() => setSplashFinished(true)} />}
-        <PublicBookingForm
-          onSubmitRequest={handleClientRequestSubmit}
-          onBackToApp={navigateBackToApp}
-        />
-      </>
-    );
-  }
+  // CREAZIONE SONDAGGIO (POLL)
+  const handleCreatePollEvent = (
+    newEventData: Omit<MeetingEvent, 'id' | 'createdAt'>,
+    creatorAvailability: string[],
+    newUsersToRegister?: User[]
+  ) => {
+    if (!currentUser) return;
+    const newId = `evt-${Date.now()}`;
+    const nowIso = new Date().toISOString();
 
-  // Se nessun utente è autenticato, mostriamo la pagina di registrazione o accesso con link B2B
-  if (!currentUser) {
-    return (
-      <>
-        {!splashFinished && <SplashScreen onFinish={() => setSplashFinished(true)} />}
-        <AuthScreen
-          registeredUsers={users}
-          onLogin={handleLoginUser}
-          onRegister={handleRegisterUser}
-        />
-      </>
-    );
-  }
+    if (newUsersToRegister && newUsersToRegister.length > 0) {
+      setUsers((prev) => [...prev, ...newUsersToRegister]);
+    }
 
-  // Conteggio sondaggi pendenti per badge Dashboard
+    const newMeetingEvent: MeetingEvent = {
+      ...newEventData,
+      id: newId,
+      creatorId: currentUser.id,
+      eventType: 'poll',
+      groupId: activeGroup?.id,
+      createdAt: nowIso,
+    };
+
+    setEvents((prev) => [newMeetingEvent, ...prev]);
+
+    if (creatorAvailability.length > 0) {
+      const orgResponse: EventResponse = {
+        id: `resp-${Date.now()}-creator`,
+        eventId: newId,
+        userId: currentUser.id,
+        isMandatory: true,
+        availability: creatorAvailability,
+        status: 'submitted',
+        submittedAt: nowIso,
+      };
+      setResponses((prev) => [...prev, orgResponse]);
+    }
+
+    setIsCreatePollModalOpen(false);
+    setPollPrefillData(undefined);
+    setEventToEdit(undefined);
+
+    fetch('/api/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newMeetingEvent),
+    }).catch((e) => console.log('[API create poll sync]', e));
+  };
+
+  const handleUpdatePollEvent = (updatedEvent: MeetingEvent) => {
+    setEvents((prev) => prev.map((e) => (e.id === updatedEvent.id ? updatedEvent : e)));
+    setIsCreatePollModalOpen(false);
+    setEventToEdit(undefined);
+  };
+
+  // CREAZIONE EVENTO UFFICIALE (ADMIN)
+  const handleCreateOfficialEvent = (
+    newEventData: Omit<MeetingEvent, 'id' | 'createdAt'>
+  ) => {
+    if (!currentUser) return;
+    const newId = `evt-${Date.now()}`;
+    const nowIso = new Date().toISOString();
+
+    const newMeetingEvent: MeetingEvent = {
+      ...newEventData,
+      id: newId,
+      creatorId: currentUser.id,
+      eventType: 'official',
+      groupId: activeGroup?.id,
+      createdAt: nowIso,
+    };
+
+    setEvents((prev) => [newMeetingEvent, ...prev]);
+    setIsCreateOfficialModalOpen(false);
+    setEventToEdit(undefined);
+
+    fetch('/api/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newMeetingEvent),
+    }).catch((e) => console.log('[API create official event sync]', e));
+  };
+
+  const handleUpdateOfficialEvent = (updatedEvent: MeetingEvent) => {
+    setEvents((prev) => prev.map((e) => (e.id === updatedEvent.id ? updatedEvent : e)));
+    setIsCreateOfficialModalOpen(false);
+    setEventToEdit(undefined);
+  };
+
+  // SALVATAGGIO DISPONIBILITÀ (When2meet)
+  const handleSaveAvailability = (
+    eventId: string,
+    availability: string[],
+    newUsersToRegister?: User[]
+  ) => {
+    if (!currentUser) return;
+
+    if (newUsersToRegister && newUsersToRegister.length > 0) {
+      setUsers((prev) => [...prev, ...newUsersToRegister]);
+    }
+
+    const existingIndex = responses.findIndex(
+      (r) => r.eventId === eventId && r.userId === currentUser.id
+    );
+
+    const nowIso = new Date().toISOString();
+
+    if (existingIndex >= 0) {
+      const updated = [...responses];
+      updated[existingIndex] = {
+        ...updated[existingIndex],
+        availability,
+        status: 'submitted',
+        submittedAt: nowIso,
+      };
+      setResponses(updated);
+    } else {
+      const newResponse: EventResponse = {
+        id: `resp-${Date.now()}`,
+        eventId,
+        userId: currentUser.id,
+        isMandatory: true,
+        availability,
+        status: 'submitted',
+        submittedAt: nowIso,
+      };
+      setResponses((prev) => [...prev, newResponse]);
+    }
+
+    setEvents((prev) =>
+      prev.map((e) => {
+        if (e.id === eventId) {
+          const isInvited = e.invitees.some((inv) => inv.userId === currentUser.id);
+          if (!isInvited) {
+            return {
+              ...e,
+              invitees: [...e.invitees, { userId: currentUser.id, isMandatory: false }],
+            };
+          }
+        }
+        return e;
+      })
+    );
+  };
+
+  // RIFIUTO SONDAGGIO DA PARTE DELL'INVITATO
+  const handleDeclinePoll = (eventId: string) => {
+    if (!currentUser) return;
+    const existingIndex = responses.findIndex(
+      (r) => r.eventId === eventId && r.userId === currentUser.id
+    );
+    if (existingIndex >= 0) {
+      const updated = [...responses];
+      updated[existingIndex] = {
+        ...updated[existingIndex],
+        status: 'pending',
+        availability: [],
+      };
+      setResponses(updated);
+    }
+
+    setEvents((prev) =>
+      prev.map((e) =>
+        e.id === eventId
+          ? {
+              ...e,
+              invitees: e.invitees.filter((inv) => inv.userId !== currentUser.id),
+              externalInviteEmails: e.externalInviteEmails?.filter(
+                (email) => email.toLowerCase() !== currentUser.email.toLowerCase()
+              ),
+            }
+          : e
+      )
+    );
+
+    fetch(`/api/events/${eventId}/decline`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: currentUser.id }),
+    }).catch((e) => console.log('[API decline poll]', e));
+  };
+
+  // CONFERMA SLOT FINALE SONDAGGIO
+  const handleConfirmMeetingSlot = async (
+    eventId: string,
+    finalSlot: { date: string; startTime: string; endTime: string }
+  ) => {
+    const targetEvt = events.find((e) => e.id === eventId);
+    const generatedMeet = `https://meet.google.com/jes-${Math.random().toString(36).substring(2, 6)}-${Math.random().toString(36).substring(2, 6)}`;
+
+    setEvents((prev) =>
+      prev.map((e) =>
+        e.id === eventId
+          ? {
+              ...e,
+              status: 'confirmed',
+              finalizedSlot: finalSlot,
+              meetLink: e.type === 'online' ? (e.meetLink || generatedMeet) : undefined,
+            }
+          : e
+      )
+    );
+
+    if (targetEvt && currentUser) {
+      const updatedEvt: MeetingEvent = {
+        ...targetEvt,
+        status: 'confirmed',
+        finalizedSlot: finalSlot,
+        meetLink: targetEvt.type === 'online' ? (targetEvt.meetLink || generatedMeet) : undefined,
+      };
+      const attendeeUsers = users.filter((u) => targetEvt.invitees.some((inv) => inv.userId === u.id));
+      autoSyncMeetingEventToCalendar(updatedEvt, finalSlot, currentUser, attendeeUsers).catch((err) =>
+        console.log('[Auto Google Calendar Sync confirmed poll]', err)
+      );
+    }
+  };
+
+  // PARTECIPA AD EVENTO ASSOCIATIVO UFFICIALE
+  const handleParticipateOfficialEvent = async (eventId: string) => {
+    if (!currentUser) return;
+    const nowIso = new Date().toISOString();
+
+    setEvents((prev) =>
+      prev.map((e) => {
+        if (e.id === eventId) {
+          const currentParts = e.participants || [];
+          const partIndex = currentParts.findIndex((p) => p.userId === currentUser.id);
+          let newParticipants;
+          if (partIndex >= 0) {
+            newParticipants = [...currentParts];
+            newParticipants[partIndex] = {
+              ...newParticipants[partIndex],
+              status: 'accepted',
+              respondedAt: nowIso,
+              googleCalendarSynced: true,
+            };
+          } else {
+            newParticipants = [
+              ...currentParts,
+              {
+                userId: currentUser.id,
+                status: 'accepted' as const,
+                respondedAt: nowIso,
+                googleCalendarSynced: true,
+              },
+            ];
+          }
+          return { ...e, participants: newParticipants };
+        }
+        return e;
+      })
+    );
+
+    const targetEvt = events.find((e) => e.id === eventId);
+    if (targetEvt && targetEvt.finalizedSlot) {
+      autoSyncMeetingEventToCalendar(targetEvt, targetEvt.finalizedSlot, currentUser, [currentUser]).catch((err) =>
+        console.log('[Google Calendar auto-sync participate]', err)
+      );
+    }
+
+    try {
+      await fetch(`/api/events/${eventId}/participate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: currentUser.id }),
+      }).catch((e) => console.log('[API participate sync]', e));
+    } catch {}
+  };
+
+  // RIFIUTA EVENTO ASSOCIATIVO UFFICIALE
+  const handleDeclineOfficialEvent = async (eventId: string) => {
+    if (!currentUser) return;
+    const nowIso = new Date().toISOString();
+
+    setEvents((prev) =>
+      prev.map((e) => {
+        if (e.id === eventId) {
+          const currentParts = e.participants || [];
+          const partIndex = currentParts.findIndex((p) => p.userId === currentUser.id);
+          let newParticipants;
+          if (partIndex >= 0) {
+            newParticipants = [...currentParts];
+            newParticipants[partIndex] = {
+              ...newParticipants[partIndex],
+              status: 'declined',
+              respondedAt: nowIso,
+              googleCalendarSynced: false,
+            };
+          } else {
+            newParticipants = [
+              ...currentParts,
+              {
+                userId: currentUser.id,
+                status: 'declined' as const,
+                respondedAt: nowIso,
+                googleCalendarSynced: false,
+              },
+            ];
+          }
+          return { ...e, participants: newParticipants };
+        }
+        return e;
+      })
+    );
+
+    try {
+      await fetch(`/api/events/${eventId}/decline`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: currentUser.id }),
+      }).catch((e) => console.log('[API decline sync]', e));
+    } catch {}
+  };
+
+  // SOLLECITI RISPOSTE
+  const handleTriggerReminders = (eventId: string) => {
+    const targetEvent = events.find((e) => e.id === eventId);
+    if (!targetEvent) return;
+    alert(`Solleciti email inviati con successo agli invitati che non hanno ancora votato per "${targetEvent.title}".`);
+  };
+
+  // AGGIORNAMENTO INVITATI
+  const handleUpdateEventInvitees = (
+    eventId: string,
+    newInvitees: InviteeConfig[],
+    newUsersToRegister?: User[]
+  ) => {
+    if (newUsersToRegister && newUsersToRegister.length > 0) {
+      setUsers((prev) => [...prev, ...newUsersToRegister]);
+    }
+    setEvents((prev) =>
+      prev.map((e) => (e.id === eventId ? { ...e, invitees: newInvitees } : e))
+    );
+  };
+
+  // Badge conteggio notifiche
   const pendingInvitesCount = events.filter((e) => {
     if (e.eventType === 'official') return false;
     if (isEventPassed(e)) return false;
-    if (e.creatorId === currentUser.id || e.status === 'confirmed') return false;
-    const isInvited = e.invitees.some((i) => i.userId === currentUser.id);
+    if (!currentUser) return false;
+    if (e.creatorId === currentUser.id) return false;
+    const isInvited =
+      e.invitees.some((i) => i.userId === currentUser.id) ||
+      e.externalInviteEmails?.some((email) => email.toLowerCase() === currentUser.email.toLowerCase());
     if (!isInvited) return false;
     const resp = responses.find((r) => r.eventId === e.id && r.userId === currentUser.id);
     return !resp || resp.status === 'pending';
   }).length;
 
-  // Conteggio eventi associativi ufficiali pendenti per badge Eventi
   const pendingOfficialEventsCount = events.filter((e) => {
     if (e.eventType !== 'official') return false;
     if (isEventPassed(e)) return false;
-    const isInvited = e.invitees.some((i) => i.userId === currentUser.id);
+    if (!currentUser) return false;
+    const isInvited =
+      e.invitees.some((i) => i.userId === currentUser.id) ||
+      e.externalInviteEmails?.some((email) => email.toLowerCase() === currentUser.email.toLowerCase());
     if (!isInvited) return false;
-    const participant = e.participants?.find((p) => p.userId === currentUser.id);
-    return !participant || participant.status === 'pending';
+    const myPart = e.participants?.find((p) => p.userId === currentUser.id);
+    return !myPart || myPart.status === 'pending';
   }).length;
 
-  // Conteggio richieste clienti in attesa per badge Tab "Richieste"
   const pendingClientRequestsCount = clientRequests.filter((r) => r.status === 'pending').length;
 
-  // AZIONE "PARTECIPA" a Evento Associativo (Bacheca Inviti)
-  const handleParticipateOfficialEvent = async (event: MeetingEvent) => {
-    const updatedParticipants = [...(event.participants || [])];
-    const existingIndex = updatedParticipants.findIndex((p) => p.userId === currentUser.id);
-
-    const newParticipantRecord = {
-      userId: currentUser.id,
-      status: 'accepted' as const,
-      respondedAt: new Date().toISOString(),
-      googleCalendarSynced: true,
-    };
-
-    if (existingIndex >= 0) {
-      updatedParticipants[existingIndex] = newParticipantRecord;
-    } else {
-      updatedParticipants.push(newParticipantRecord);
-    }
-
-    setEvents((prev) =>
-      prev.map((e) => (e.id === event.id ? { ...e, participants: updatedParticipants } : e))
-    );
-  };
-
-  // AZIONE "NON PARTECIPO"
-  const handleDeclineOfficialEvent = (event: MeetingEvent) => {
-    const updatedParticipants = [...(event.participants || [])];
-    const existingIndex = updatedParticipants.findIndex((p) => p.userId === currentUser.id);
-
-    const newParticipantRecord = {
-      userId: currentUser.id,
-      status: 'declined' as const,
-      respondedAt: new Date().toISOString(),
-      googleCalendarSynced: false,
-    };
-
-    if (existingIndex >= 0) {
-      updatedParticipants[existingIndex] = newParticipantRecord;
-    } else {
-      updatedParticipants.push(newParticipantRecord);
-    }
-
-    setEvents((prev) =>
-      prev.map((e) => (e.id === event.id ? { ...e, participants: updatedParticipants } : e))
-    );
-  };
-
-  // Handler: Salvataggio disponibilità When2meet
-  const handleSaveAvailability = (eventId: string, slots: string[]) => {
-    setResponses((prev) => {
-      const existingIndex = prev.findIndex(
-        (r) => r.eventId === eventId && r.userId === currentUser.id
-      );
-      const isMandatory =
-        events
-          .find((e) => e.id === eventId)
-          ?.invitees.find((i) => i.userId === currentUser.id)?.isMandatory ?? false;
-
-      const newResponse: EventResponse = {
-        id: existingIndex >= 0 ? prev[existingIndex].id : `resp-${Date.now()}`,
-        eventId,
-        userId: currentUser.id,
-        isMandatory,
-        availability: slots,
-        status: 'submitted',
-        submittedAt: new Date().toISOString(),
-      };
-
-      if (existingIndex >= 0) {
-        const updated = [...prev];
-        updated[existingIndex] = newResponse;
-        return updated;
-      } else {
-        return [...prev, newResponse];
-      }
-    });
-
-    setEvents((prev) =>
-      prev.map((evt) => {
-        if (evt.id !== eventId || evt.status === 'confirmed') return evt;
-        const mandatoryInvitees = evt.invitees.filter((i) => i.isMandatory);
-        const mandatoryIds = new Set(mandatoryInvitees.map((i) => i.userId));
-
-        const allEventResponses = responses.filter((r) => r.eventId === eventId);
-        const submittedMandatoryCount = mandatoryInvitees.filter((i) => {
-          if (i.userId === currentUser.id) return true;
-          const r = allEventResponses.find((res) => res.userId === i.userId);
-          return r && r.status === 'submitted';
-        }).length;
-
-        if (submittedMandatoryCount >= mandatoryIds.size) {
-          return { ...evt, status: 'ready' };
-        }
-        return evt;
-      })
-    );
-  };
-
-  // Handler: Conferma orario finale sondaggio When2meet
-  const handleConfirmMeetingSlot = (
-    eventId: string,
-    slot: { date: string; startTime: string; endTime: string }
-  ) => {
-    const meetLink = `https://meet.google.com/jes-${Math.random().toString(36).substring(2, 6)}-meet`;
-
-    setEvents((prev) =>
-      prev.map((evt) => {
-        if (evt.id !== eventId) return evt;
-        return {
-          ...evt,
-          status: 'confirmed',
-          finalizedSlot: slot,
-          meetLink: evt.type === 'online' ? evt.meetLink || meetLink : undefined,
-        };
-      })
-    );
-
-    // Sincronizzazione automatica con Google Calendar
-    const targetEvt = events.find((e) => e.id === eventId);
-    if (targetEvt) {
-      const updatedEvt: MeetingEvent = {
-        ...targetEvt,
-        status: 'confirmed',
-        finalizedSlot: slot,
-        meetLink: targetEvt.type === 'online' ? targetEvt.meetLink || meetLink : undefined,
-      };
-      const attendeeUsers = users.filter((u) => targetEvt.invitees.some((inv) => inv.userId === u.id));
-      autoSyncMeetingEventToCalendar(updatedEvt, slot, currentUser, attendeeUsers).catch((err) =>
-        console.log('[Auto Google Calendar Sync error]', err)
-      );
-
-      // Se l'evento era collegato a una richiesta cliente, chiudi anche la richiesta
-      if (targetEvt.clientRequestId) {
-        setClientRequests((prev) =>
-          prev.map((r) =>
-            r.id === targetEvt.clientRequestId
-              ? {
-                  ...r,
-                  status: 'confirmed',
-                  finalizedSlot: slot,
-                  meetLink: targetEvt.meetLink || meetLink,
-                  updatedAt: new Date().toISOString(),
-                }
-              : r
-          )
-        );
-      }
-    }
-  };
-
-  // Handler: Invia solleciti
-  const handleTriggerReminders = (eventId: string) => {
-    setResponses((prev) =>
-      prev.map((r) =>
-        r.eventId === eventId && r.status === 'pending' ? { ...r, reminderSent: true } : r
-      )
-    );
-  };
-
-  // Handler: Modifica lista invitati
-  const handleUpdateEventInvitees = (
-    eventId: string,
-    updatedInvitees: InviteeConfig[],
-    newUsersToRegister: User[] = []
-  ) => {
-    if (newUsersToRegister.length > 0) {
-      setUsers((prev) => {
-        const existingIds = new Set(prev.map((u) => u.id));
-        const filteredNew = newUsersToRegister.filter((nu) => !existingIds.has(nu.id));
-        return [...prev, ...filteredNew];
-      });
-    }
-
-    setEvents((prev) =>
-      prev.map((evt) => {
-        if (evt.id !== eventId) return evt;
-        return {
-          ...evt,
-          invitees: updatedInvitees,
-        };
-      })
-    );
-  };
-
-  // Handler: Creazione Sondaggio Disponibilità (When2meet)
-  const handleCreatePollEvent = (
-    newEventData: Omit<MeetingEvent, 'id' | 'createdAt'>,
-    creatorAvailability: string[],
-    newUsersToRegister: User[] = []
-  ) => {
-    const newId = `poll-${Date.now()}`;
-    const newEvent: MeetingEvent = {
-      ...newEventData,
-      id: newId,
-      eventType: 'poll',
-      createdAt: new Date().toISOString(),
-    };
-
-    if (newUsersToRegister.length > 0) {
-      setUsers((prev) => {
-        const existingIds = new Set(prev.map((u) => u.id));
-        const filteredNew = newUsersToRegister.filter((nu) => !existingIds.has(nu.id));
-        return [...prev, ...filteredNew];
-      });
-    }
-
-    const creatorResponse: EventResponse = {
-      id: `resp-${newId}-${currentUser.id}`,
-      eventId: newId,
-      userId: currentUser.id,
-      isMandatory: true,
-      availability: [],
-      status: 'pending',
-    };
-
-    const otherResponses: EventResponse[] = newEvent.invitees
-      .filter((inv) => inv.userId !== currentUser.id)
-      .map((inv) => ({
-        id: `resp-${newId}-${inv.userId}`,
-        eventId: newId,
-        userId: inv.userId,
-        isMandatory: inv.isMandatory,
-        availability: [],
-        status: 'pending',
-      }));
-
-    setEvents((prev) => [newEvent, ...prev]);
-    setResponses((prev) => [...prev, creatorResponse, ...otherResponses]);
-
-    // Se originato da richiesta cliente, aggiorna lo status della richiesta a 'converted_to_poll'
-    if (newEventData.clientRequestId) {
-      setClientRequests((prev) =>
-        prev.map((r) =>
-          r.id === newEventData.clientRequestId
-            ? { ...r, status: 'converted_to_poll', pollEventId: newId, updatedAt: new Date().toISOString() }
-            : r
-        )
-      );
-    }
-
-    setPollPrefillData(undefined);
-    setIsCreatePollModalOpen(false);
-    setSelectedEventId(newId);
-  };
-
-  // Handler: Creazione Evento Associativo Ufficiale (Admin)
-  const handleCreateOfficialEvent = (
-    newEventData: Omit<MeetingEvent, 'id' | 'createdAt'>
-  ) => {
-    const newId = `official-${Date.now()}`;
-    const newEvent: MeetingEvent = {
-      ...newEventData,
-      id: newId,
-      eventType: 'official',
-      createdAt: new Date().toISOString(),
-    };
-
-    setEvents((prev) => [newEvent, ...prev]);
-
-    // Sincronizzazione automatica Google Calendar per evento ufficiale inserito nel calendario
-    if (newEvent.finalizedSlot) {
-      const attendeeUsers = users.filter((u) => newEvent.invitees.some((inv) => inv.userId === u.id));
-      autoSyncMeetingEventToCalendar(
-        newEvent,
-        newEvent.finalizedSlot,
-        currentUser,
-        attendeeUsers
-      ).catch((err) => console.log('[Auto Google Calendar Sync official event]', err));
-    }
-
-    setIsCreateOfficialModalOpen(false);
-    setCurrentTab('events');
-  };
-
-  // Handler: Modifica Sondaggio di Disponibilità esistente (organizzatore)
-  const handleUpdatePollEvent = (updatedEvent: MeetingEvent) => {
-    setEvents((prev) => prev.map((e) => (e.id === updatedEvent.id ? updatedEvent : e)));
-
-    // Assicura che ogni invitato abbia un record di risposta
-    setResponses((prev) => {
-      const existingUserIds = new Set(
-        prev.filter((r) => r.eventId === updatedEvent.id).map((r) => r.userId)
-      );
-      const newResponses: EventResponse[] = updatedEvent.invitees
-        .filter((inv) => !existingUserIds.has(inv.userId))
-        .map((inv) => ({
-          id: `resp-${updatedEvent.id}-${inv.userId}`,
-          eventId: updatedEvent.id,
-          userId: inv.userId,
-          isMandatory: inv.isMandatory,
-          availability: [],
-          status: 'pending',
-        }));
-      return [...prev, ...newResponses];
-    });
-
-    setEventToEdit(undefined);
-    setIsCreatePollModalOpen(false);
-    setSelectedEventId(updatedEvent.id);
-  };
-
-  // Handler: Modifica Evento Associativo Ufficiale esistente (organizzatore)
-  const handleUpdateOfficialEvent = (updatedEvent: MeetingEvent) => {
-    setEvents((prev) => prev.map((e) => (e.id === updatedEvent.id ? updatedEvent : e)));
-    setEventToEdit(undefined);
-    setIsCreateOfficialModalOpen(false);
-    setSelectedEventId(updatedEvent.id);
-  };
-
+  // Evento selezionato nel modale
   const selectedEvent = events.find((e) => e.id === selectedEventId);
+
+  // ROTTA PUBBLICA ESTERNA /prenota-call
+  if (currentRoute === '/prenota-call') {
+    return (
+      <PublicBookingForm
+        onSubmitRequest={handleClientRequestSubmit}
+        onBackToApp={navigateBackToApp}
+      />
+    );
+  }
+
+  // SCHERMATA LOGIN / REGISTRAZIONE
+  if (!currentUser) {
+    return (
+      <AuthScreen
+        registeredUsers={users}
+        onLogin={handleLoginUser}
+        onRegister={handleRegisterUser}
+        onOpenPublicBooking={navigateToPublicBooking}
+      />
+    );
+  }
 
   return (
     <>
-      {!splashFinished && <SplashScreen onFinish={() => setSplashFinished(true)} />}
-      <div className="min-h-screen bg-[#1e1e1e] text-neutral-900 dark:text-neutral-100 flex justify-center selection:bg-[#f23e2e] selection:text-white transition-colors">
-      {/* Mobile & PC responsive centered app shell container */}
-      <div className="w-full max-w-md sm:max-w-xl md:max-w-4xl lg:max-w-6xl xl:max-w-7xl bg-white dark:bg-[#1e1e1e] min-h-screen flex flex-col shadow-2xl relative transition-colors">
+      {/* ANIMAZIONE MASCOTTE CARTONATA ALL'ACCESSO */}
+      {!splashFinished && (
+        <SplashScreen onFinish={() => setSplashFinished(true)} />
+      )}
+
+      <div className="min-h-screen bg-neutral-100 dark:bg-black font-['Ubuntu',sans-serif] text-neutral-900 dark:text-neutral-100 antialiased flex flex-col transition-colors selection:bg-[#f23e2e] selection:text-white">
         
-        {/* Header Superiore (Con navigazione PC integrata e menu responsive) */}
-        <TopHeader
-          currentUser={currentUser}
-          onLogout={handleLogout}
-          onNavigateToProfile={() => setCurrentTab('profile')}
-          isDarkMode={isDarkMode}
-          onToggleDarkMode={toggleDarkMode}
-          currentTab={currentTab}
-          onSelectTab={setCurrentTab}
-          onOpenCreateMenu={handlePlusButtonClick}
-          pendingInvitesCount={pendingInvitesCount}
-          pendingOfficialEventsCount={pendingOfficialEventsCount}
-          isClientAdmin={isClientAdmin}
-          pendingClientRequestsCount={pendingClientRequestsCount}
-        />
+        <div className="w-full max-w-md sm:max-w-xl md:max-w-4xl lg:max-w-6xl xl:max-w-7xl mx-auto flex-1 flex flex-col bg-white dark:bg-neutral-900 shadow-2xl min-h-screen border-x border-neutral-200/80 dark:border-neutral-800">
+          
+          {/* Header Superiore */}
+          <TopHeader
+            currentUser={currentUser}
+            onLogout={handleLogout}
+            onNavigateToProfile={() => setCurrentTab('profile')}
+            isDarkMode={isDarkMode}
+            onToggleDarkMode={toggleDarkMode}
+            currentTab={currentTab}
+            onSelectTab={setCurrentTab}
+            onOpenCreateMenu={handlePlusButtonClick}
+            pendingInvitesCount={pendingInvitesCount}
+            pendingOfficialEventsCount={pendingOfficialEventsCount}
+            isClientAdmin={isAdmin}
+            pendingClientRequestsCount={pendingClientRequestsCount}
+            isInsideGroup={isInsideGroup}
+            onBackToGroups={handleBackToGroups}
+          />
 
-        {/* Banner scorrevole rapido per aprire o testare la rotta esterna /prenota-call - ESCLUSIVO PER ADMIN CLIENTI */}
-        {isClientAdmin && (
-          <div className="bg-neutral-900 text-neutral-300 px-4 sm:px-6 py-2 text-[11px] border-b border-neutral-800 flex items-center justify-between">
-            <span className="truncate">
-              🔗 Link pubblico clienti: <code className="text-[#f23e2e] font-mono font-bold">/prenota-call</code>
-            </span>
-            <button
-              type="button"
-              onClick={navigateToPublicBooking}
-              className="text-[#f23e2e] hover:underline font-black shrink-0 ml-2 cursor-pointer"
-            >
-              Apri Form Esterno &rarr;
-            </button>
-          </div>
-        )}
+          {/* Banner scorrevole rapido per aprire o testare la rotta esterna /prenota-call (Solo Admin) */}
+          {isAdmin && (
+            <div className="bg-neutral-900 text-neutral-300 px-4 sm:px-6 py-2 text-[11px] border-b border-neutral-800 flex items-center justify-between">
+              <span className="truncate">
+                🔗 Link pubblico clienti: <code className="text-[#f23e2e] font-mono font-bold">/prenota-call</code>
+              </span>
+              <button
+                type="button"
+                onClick={navigateToPublicBooking}
+                className="text-[#f23e2e] hover:underline font-black shrink-0 ml-2 cursor-pointer"
+              >
+                Apri Form Esterno &rarr;
+              </button>
+            </div>
+          )}
 
-        {/* Contenuto Principale Switch tra le sezioni */}
-        <main className="flex-1 overflow-y-auto pb-20 md:pb-8">
-          {currentTab === 'dashboard' && (
-            <Dashboard
+          {/* CONTENUTO PRINCIPALE */}
+          <main className="flex-1 overflow-y-auto pb-24 md:pb-8 p-3 sm:p-5">
+            
+            {/* ====================================================================
+                CASO 1: LIVELLO PIATTAFORMA (NON IN UN GRUPPO)
+                Barra navigazione a 3 sezioni: Gruppi (Sinistra) - Sondaggi (Centro) - Profilo (Destra)
+               ==================================================================== */}
+            {!isInsideGroup ? (
+              <>
+                {/* 1. SINISTRA: "Gruppi" (Home principale dei gruppi) */}
+                {currentTab === 'groups' && (
+                  <GroupsHubView
+                    currentUser={currentUser}
+                    groups={groups}
+                    allUsers={users}
+                    onSelectGroup={handleSelectGroup}
+                    onCreateGroup={handleCreateGroup}
+                    onJoinGroup={handleJoinGroup}
+                  />
+                )}
+
+                {/* 2. CENTRO: "Sondaggi" (Creati da te / A cui sei invitato) */}
+                {currentTab === 'polls' && (
+                  <PollsHubView
+                    currentUser={currentUser}
+                    events={events}
+                    allUsers={users}
+                    responses={responses}
+                    onOpenCreatePoll={handlePlusButtonClick}
+                    onOpenPollDetail={(evtId) => setSelectedEventId(evtId)}
+                    onDeclinePoll={handleDeclinePoll}
+                  />
+                )}
+
+                {/* 3. DESTRA: "Profilo" */}
+                {currentTab === 'profile' && (
+                  <ProfileView
+                    currentUser={currentUser}
+                    allUsers={users}
+                    onLogout={handleLogout}
+                    onUpdateUserRole={handleUpdateUserRole}
+                    onUpdateUserProfile={handleUpdateUserProfile}
+                  />
+                )}
+              </>
+            ) : activeGroup ? (
+              /* ====================================================================
+                  CASO 2: DENTRO UN GRUPPO (SPAZIO DI LAVORO COMPLETO)
+                  Identico a tutte le funzionalità complete esistenti
+                 ==================================================================== */
+              <>
+                {/* Header dello Spazio di Lavoro Gruppo */}
+                <GroupWorkspaceHeader
+                  activeGroup={activeGroup}
+                  currentUser={currentUser}
+                  allUsers={users}
+                  onBackToGroups={handleBackToGroups}
+                  onOpenMembersModal={() => setIsGroupMembersModalOpen(true)}
+                />
+
+                {currentTab === 'dashboard' && (
+                  <Dashboard
+                    currentUser={currentUser}
+                    allEvents={events.filter((e) => !e.groupId || e.groupId === activeGroup.id)}
+                    allResponses={responses}
+                    allUsers={users}
+                    onOpenEvent={(evt) => setSelectedEventId(evt.id)}
+                    onOpenCreateModal={handlePlusButtonClick}
+                    onNavigateToRequests={() => setCurrentTab('requests')}
+                    pendingClientRequestsCount={clientRequests.filter((r) => r.status === 'pending').length}
+                  />
+                )}
+
+                {currentTab === 'events' && (
+                  <EventsFeedView
+                    currentUser={currentUser}
+                    allEvents={events.filter((e) => !e.groupId || e.groupId === activeGroup.id)}
+                    allUsers={users}
+                    onParticipate={(evt) => handleParticipateOfficialEvent(evt.id)}
+                    onDecline={(evt) => handleDeclineOfficialEvent(evt.id)}
+                    onOpenCalendarTab={() => setCurrentTab('calendar')}
+                    onOpenOfficialEventDetail={(evt) => setSelectedEventId(evt.id)}
+                    onEditOfficialEvent={(evt) => {
+                      setEventToEdit(evt);
+                      setIsCreateOfficialModalOpen(true);
+                    }}
+                  />
+                )}
+
+                {currentTab === 'requests' && isAdmin && (
+                  <ClientRequestsDashboard
+                    currentUser={currentUser}
+                    requests={clientRequests}
+                    allEvents={events}
+                    allUsers={users}
+                    onConvertToPoll={handleConvertToPoll}
+                    onConfirmFinalEvent={handleConfirmFinalClientEvent}
+                    onOpenPublicBooking={navigateToPublicBooking}
+                    onOpenEventDetail={(evtId) => setSelectedEventId(evtId)}
+                  />
+                )}
+
+                {currentTab === 'calendar' && (
+                  <CalendarView
+                    currentUser={currentUser}
+                    allEvents={events.filter((e) => !e.groupId || e.groupId === activeGroup.id)}
+                    allUsers={users}
+                    onOpenEventDetail={(evt) => setSelectedEventId(evt.id)}
+                  />
+                )}
+
+                {currentTab === 'profile' && (
+                  <ProfileView
+                    currentUser={currentUser}
+                    allUsers={users}
+                    onLogout={handleLogout}
+                    onUpdateUserRole={handleUpdateUserRole}
+                    onUpdateUserProfile={handleUpdateUserProfile}
+                  />
+                )}
+              </>
+            ) : null}
+          </main>
+
+          {/* Bottom Navigation Bar */}
+          <BottomNav
+            currentTab={currentTab}
+            onSelectTab={setCurrentTab}
+            onOpenCreateMenu={handlePlusButtonClick}
+            pendingInvitesCount={pendingInvitesCount}
+            pendingOfficialEventsCount={pendingOfficialEventsCount}
+            isClientAdmin={isAdmin}
+            pendingClientRequestsCount={pendingClientRequestsCount}
+            isInsideGroup={isInsideGroup}
+          />
+
+          {/* Modale Membri del Gruppo Attivo */}
+          {isGroupMembersModalOpen && activeGroup && (
+            <GroupMembersModal
+              group={activeGroup}
               currentUser={currentUser}
-              allEvents={events}
-              allResponses={responses}
               allUsers={users}
-              onOpenEvent={(evt) => setSelectedEventId(evt.id)}
-              onOpenCreateModal={handlePlusButtonClick}
-              onNavigateToRequests={() => setCurrentTab('requests')}
-              pendingClientRequestsCount={clientRequests.filter((r) => r.status === 'pending').length}
+              onClose={() => setIsGroupMembersModalOpen(false)}
+              onAddMemberEmail={async (email) => {
+                const cleanEmail = email.trim().toLowerCase();
+                const matchedUser = users.find((u) => u.email.toLowerCase() === cleanEmail);
+                if (matchedUser) {
+                  if (!activeGroup.members.some((m) => m.userId === matchedUser.id)) {
+                    const updatedGroup: Group = {
+                      ...activeGroup,
+                      members: [
+                        ...activeGroup.members,
+                        {
+                          userId: matchedUser.id,
+                          role: 'member',
+                          joinedAt: new Date().toISOString(),
+                        },
+                      ],
+                    };
+                    setGroups((prev) => prev.map((g) => (g.id === activeGroup.id ? updatedGroup : g)));
+                  }
+                  return true;
+                }
+                return true;
+              }}
             />
           )}
 
-          {currentTab === 'events' && (
-            <EventsFeedView
+          {/* Menu Scelta Azione "+" per Admin */}
+          {isChoiceModalOpen && (
+            <CreateActionChoiceModal
               currentUser={currentUser}
-              allEvents={events}
+              onClose={() => setIsChoiceModalOpen(false)}
+              onSelectCreatePoll={() => {
+                setPollPrefillData(undefined);
+                setEventToEdit(undefined);
+                setIsCreatePollModalOpen(true);
+              }}
+              onSelectCreateOfficialEvent={() => {
+                setEventToEdit(undefined);
+                setIsCreateOfficialModalOpen(true);
+              }}
+            />
+          )}
+
+          {/* Form Creazione/Modifica Sondaggio di Disponibilità */}
+          {isCreatePollModalOpen && (
+            <CreateEventModal
+              currentUser={currentUser}
               allUsers={users}
-              onParticipate={handleParticipateOfficialEvent}
-              onDecline={handleDeclineOfficialEvent}
-              onOpenCalendarTab={() => setCurrentTab('calendar')}
-              onOpenOfficialEventDetail={(evt) => setSelectedEventId(evt.id)}
-              onEditOfficialEvent={(evt) => {
+              onClose={() => {
+                setIsCreatePollModalOpen(false);
+                setPollPrefillData(undefined);
+                setEventToEdit(undefined);
+              }}
+              onCreateEvent={handleCreatePollEvent}
+              prefillData={pollPrefillData}
+              eventToEdit={eventToEdit}
+              onUpdateEvent={handleUpdatePollEvent}
+              activeGroup={activeGroup || undefined}
+            />
+          )}
+
+          {/* Form Creazione/Modifica Evento Associativo Ufficiale (Admin) */}
+          {isCreateOfficialModalOpen && (
+            <CreateOfficialEventModal
+              currentUser={currentUser}
+              allUsers={users}
+              onClose={() => {
+                setIsCreateOfficialModalOpen(false);
+                setEventToEdit(undefined);
+              }}
+              onCreateOfficialEvent={handleCreateOfficialEvent}
+              eventToEdit={eventToEdit}
+              onUpdateOfficialEvent={handleUpdateOfficialEvent}
+              activeGroup={activeGroup || undefined}
+            />
+          )}
+
+          {/* Modale Dettaglio Sondaggio Disponibilità When2meet */}
+          {selectedEvent && selectedEvent.eventType === 'poll' && (
+            <EventDetailModal
+              event={selectedEvent}
+              currentUser={currentUser}
+              allUsers={users}
+              allResponses={responses}
+              onClose={() => setSelectedEventId(null)}
+              onSaveAvailability={handleSaveAvailability}
+              onConfirmMeetingSlot={handleConfirmMeetingSlot}
+              onTriggerReminders={handleTriggerReminders}
+              onUpdateEventInvitees={handleUpdateEventInvitees}
+              onEditPoll={(evt) => {
+                setSelectedEventId(null);
+                setEventToEdit(evt);
+                setIsCreatePollModalOpen(true);
+              }}
+            />
+          )}
+
+          {/* Modale Dettaglio Pagina Evento Associativo Ufficiale */}
+          {selectedEvent && selectedEvent.eventType === 'official' && (
+            <OfficialEventDetailModal
+              event={selectedEvent}
+              currentUser={currentUser}
+              allUsers={users}
+              onClose={() => setSelectedEventId(null)}
+              onParticipate={(evt) => handleParticipateOfficialEvent(evt.id)}
+              onDecline={(evt) => handleDeclineOfficialEvent(evt.id)}
+              onEditEvent={(evt) => {
+                setSelectedEventId(null);
                 setEventToEdit(evt);
                 setIsCreateOfficialModalOpen(true);
               }}
             />
           )}
 
-          {/* TAB ESCLUSIVA RUOLO "ADMIN CLIENTI": RICHIESTE CLIENTI B2B */}
-          {currentTab === 'requests' && isClientAdmin && (
-            <ClientRequestsDashboard
-              currentUser={currentUser}
-              requests={clientRequests}
-              allEvents={events}
-              allUsers={users}
-              onConvertToPoll={handleConvertToPoll}
-              onConfirmFinalEvent={handleConfirmFinalClientEvent}
-              onOpenPublicBooking={navigateToPublicBooking}
-              onOpenEventDetail={(evtId) => setSelectedEventId(evtId)}
-            />
-          )}
-
-          {currentTab === 'calendar' && (
-            <CalendarView
-              currentUser={currentUser}
-              allEvents={events}
-              allUsers={users}
-              onOpenEventDetail={(evt) => setSelectedEventId(evt.id)}
-            />
-          )}
-
-          {currentTab === 'profile' && (
-            <ProfileView
-              currentUser={currentUser}
-              onLogout={handleLogout}
-              onUpdateUserRole={handleUpdateUserRole}
-              onUpdateUserProfile={handleUpdateUserProfile}
-            />
-          )}
-        </main>
-
-        {/* Bottom Navigation Bar con supporto Tab esclusiva Richieste Clienti */}
-        <BottomNav
-          currentTab={currentTab}
-          onSelectTab={setCurrentTab}
-          onOpenCreateMenu={handlePlusButtonClick}
-          pendingInvitesCount={pendingInvitesCount}
-          pendingOfficialEventsCount={pendingOfficialEventsCount}
-          isClientAdmin={isClientAdmin}
-          pendingClientRequestsCount={pendingClientRequestsCount}
-        />
-
-        {/* Menu Scelta Azione "+" per Admin / Admin Clienti */}
-        {isChoiceModalOpen && (
-          <CreateActionChoiceModal
-            currentUser={currentUser}
-            onClose={() => setIsChoiceModalOpen(false)}
-            onSelectCreatePoll={() => {
-              setPollPrefillData(undefined);
-              setEventToEdit(undefined);
-              setIsCreatePollModalOpen(true);
-            }}
-            onSelectCreateOfficialEvent={() => {
-              setEventToEdit(undefined);
-              setIsCreateOfficialModalOpen(true);
-            }}
-          />
-        )}
-
-        {/* Form Creazione/Modifica Sondaggio di Disponibilità (When2meet style + Pre-compilazione da Richiesta Cliente) */}
-        {isCreatePollModalOpen && (
-          <CreateEventModal
-            currentUser={currentUser}
-            allUsers={users}
-            onClose={() => {
-              setIsCreatePollModalOpen(false);
-              setPollPrefillData(undefined);
-              setEventToEdit(undefined);
-            }}
-            onCreateEvent={handleCreatePollEvent}
-            prefillData={pollPrefillData}
-            eventToEdit={eventToEdit}
-            onUpdateEvent={handleUpdatePollEvent}
-          />
-        )}
-
-        {/* Form Creazione/Modifica Evento Associativo Ufficiale (Admin) */}
-        {isCreateOfficialModalOpen && (
-          <CreateOfficialEventModal
-            currentUser={currentUser}
-            allUsers={users}
-            onClose={() => {
-              setIsCreateOfficialModalOpen(false);
-              setEventToEdit(undefined);
-            }}
-            onCreateOfficialEvent={handleCreateOfficialEvent}
-            eventToEdit={eventToEdit}
-            onUpdateOfficialEvent={handleUpdateOfficialEvent}
-          />
-        )}
-
-        {/* Modale Dettaglio Sondaggio Disponibilità When2meet */}
-        {selectedEvent && selectedEvent.eventType === 'poll' && (
-          <EventDetailModal
-            event={selectedEvent}
-            currentUser={currentUser}
-            allUsers={users}
-            allResponses={responses}
-            onClose={() => setSelectedEventId(null)}
-            onSaveAvailability={handleSaveAvailability}
-            onConfirmMeetingSlot={handleConfirmMeetingSlot}
-            onTriggerReminders={handleTriggerReminders}
-            onUpdateEventInvitees={handleUpdateEventInvitees}
-            onEditPoll={(evt) => {
-              setSelectedEventId(null);
-              setEventToEdit(evt);
-              setIsCreatePollModalOpen(true);
-            }}
-          />
-        )}
-
-        {/* Modale Dettaglio Pagina Evento Associativo Ufficiale */}
-        {selectedEvent && selectedEvent.eventType === 'official' && (
-          <OfficialEventDetailModal
-            event={selectedEvent}
-            currentUser={currentUser}
-            allUsers={users}
-            onClose={() => setSelectedEventId(null)}
-            onParticipate={handleParticipateOfficialEvent}
-            onDecline={handleDeclineOfficialEvent}
-            onEditEvent={(evt) => {
-              setSelectedEventId(null);
-              setEventToEdit(evt);
-              setIsCreateOfficialModalOpen(true);
-            }}
-          />
-        )}
-
+        </div>
       </div>
-    </div>
     </>
   );
 }

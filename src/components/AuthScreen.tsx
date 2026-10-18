@@ -90,6 +90,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       surname: cognome.trim(),
       email: emailClean,
       password: password,
+      role: registeredUsers.length === 0 ? 'admin' : 'user',
       googleCalendarConnected,
     });
   };

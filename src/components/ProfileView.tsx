@@ -11,7 +11,7 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { User, UserSystemRole } from '../types';
+import { AppRole, User, UserSystemRole } from '../types';
 import {
   Mail,
   Calendar,
@@ -34,8 +34,9 @@ import { UserAvatar } from './UserAvatar';
 
 interface ProfileViewProps {
   currentUser: User;
+  allUsers?: User[];
   onLogout: () => void;
-  onUpdateUserRole?: (newSystemRole: UserSystemRole) => void;
+  onUpdateUserRole?: (targetUserId: string, newRole: AppRole) => void;
   onUpdateUserProfile?: (updates: Partial<User>) => void;
 }
 
@@ -141,6 +142,7 @@ const PRESET_AVATARS: PresetAvatar[] = [
 
 export const ProfileView: React.FC<ProfileViewProps> = ({
   currentUser,
+  allUsers = [],
   onLogout,
   onUpdateUserRole,
   onUpdateUserProfile,
@@ -487,81 +489,93 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         </div>
       </div>
 
-      {/* Controllo Ruolo Sistema (Admin Clienti vs Admin vs Associato) */}
-      <div className="bg-white dark:bg-neutral-900 rounded-3xl p-5 border border-neutral-200/90 dark:border-neutral-800 shadow-xs space-y-3 transition-colors">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-xl bg-red-100 dark:bg-red-950/60 text-[#f23e2e] flex items-center justify-center">
-            <Shield className="w-4 h-4" />
+      {/* PANNELLO AMMINISTRAZIONE RUOLI (COMPLETAMENTE NASCOSTO per gli utenti standard, visibile SOLO per role === 'admin' nel DB) */}
+      {currentUser.role === 'admin' && (
+        <div className="bg-white dark:bg-neutral-900 rounded-3xl p-5 border border-neutral-200/90 dark:border-neutral-800 shadow-xs space-y-3.5 transition-colors">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-red-100 dark:bg-red-950/60 text-[#f23e2e] flex items-center justify-center shadow-xs">
+                <Shield className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-black text-neutral-900 dark:text-white">
+                    Gestione Ruoli Utenti Database
+                  </h3>
+                  <span className="text-[9px] font-black uppercase tracking-wider bg-red-100 dark:bg-red-950/60 text-[#f23e2e] px-2 py-0.5 rounded-full">
+                    Admin DB
+                  </span>
+                </div>
+                <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
+                  Modifica i ruoli memorizzati nel database per gli altri utenti registrati.
+                </p>
+              </div>
+            </div>
           </div>
-          <div>
-            <h3 className="text-xs font-black text-neutral-900 dark:text-white">
-              Ruolo Sistema App & Permessi
-            </h3>
-            <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
-              Seleziona il ruolo per testare la tab esclusiva e i permessi
-            </p>
+
+          <div className="space-y-2 pt-1 max-h-64 overflow-y-auto pr-1">
+            {allUsers.length === 0 ? (
+              <p className="text-xs text-neutral-400 p-2 text-center">Nessun altro utente registrato.</p>
+            ) : (
+              allUsers.map((user) => {
+                const isMe = user.id === currentUser.id;
+                const userIsAdmin = user.role === 'admin';
+
+                return (
+                  <div
+                    key={user.id}
+                    className="p-3 rounded-2xl border border-neutral-200/80 dark:border-neutral-800 bg-neutral-50/70 dark:bg-neutral-800/40 flex items-center justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <UserAvatar user={user} size="sm" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-neutral-900 dark:text-white truncate">
+                          {user.name} {user.surname}
+                          {isMe && ' (Tu)'}
+                        </p>
+                        <p className="text-[10px] text-neutral-400 truncate font-mono">
+                          {user.email}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span
+                        className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                          userIsAdmin
+                            ? 'bg-red-100 dark:bg-red-950/60 text-[#f23e2e] border border-red-200 dark:border-red-900/40'
+                            : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300'
+                        }`}
+                      >
+                        {userIsAdmin ? 'Admin' : 'User'}
+                      </span>
+
+                      {!isMe && onUpdateUserRole && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newRole: AppRole = userIsAdmin ? 'user' : 'admin';
+                            onUpdateUserRole(user.id, newRole);
+                            setFeedbackMsg(`Ruolo di ${user.name} aggiornato a ${newRole.toUpperCase()} nel DB!`);
+                            setTimeout(() => setFeedbackMsg(null), 3000);
+                          }}
+                          className={`text-[11px] font-bold px-2.5 py-1 rounded-xl transition-all cursor-pointer ${
+                            userIsAdmin
+                              ? 'bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-300'
+                              : 'bg-[#f23e2e] hover:bg-red-600 text-white shadow-2xs'
+                          }`}
+                        >
+                          {userIsAdmin ? 'Rendi User' : 'Rendi Admin'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
-          {/* 1. ADMIN CLIENTI */}
-          <button
-            type="button"
-            onClick={() => onUpdateUserRole && onUpdateUserRole('client_admin')}
-            className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
-              currentSystemRole === 'client_admin'
-                ? 'border-[#f23e2e] bg-red-50 dark:bg-red-950/40 text-[#f23e2e] font-black shadow-xs ring-1 ring-[#f23e2e]'
-                : 'border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
-            }`}
-          >
-            <div className="flex items-center gap-1.5 text-xs font-black">
-              <ShieldCheck className="w-4 h-4 text-[#f23e2e]" />
-              <span>Admin Clienti</span>
-            </div>
-            <p className="text-[10px] text-neutral-500 dark:text-neutral-400 mt-1 font-normal leading-tight">
-              Tutti i poteri Admin + tab esclusiva <strong>Richieste Clienti</strong> e conversione in sondaggi.
-            </p>
-          </button>
-
-          {/* 2. ADMIN STANDARD */}
-          <button
-            type="button"
-            onClick={() => onUpdateUserRole && onUpdateUserRole('admin')}
-            className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
-              currentSystemRole === 'admin'
-                ? 'border-[#f23e2e] bg-red-50 dark:bg-red-950/40 text-[#f23e2e] font-black shadow-xs'
-                : 'border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
-            }`}
-          >
-            <div className="flex items-center gap-1.5 text-xs">
-              <ShieldCheck className="w-4 h-4 text-[#f23e2e]" />
-              <span>Admin (Standard)</span>
-            </div>
-            <p className="text-[10px] text-neutral-500 dark:text-neutral-400 mt-1 font-normal leading-tight">
-              Il tasto "+" mostra scelta tra Sondaggio ed Evento Associativo ufficiale.
-            </p>
-          </button>
-
-          {/* 3. ASSOCIATO */}
-          <button
-            type="button"
-            onClick={() => onUpdateUserRole && onUpdateUserRole('associate')}
-            className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
-              currentSystemRole === 'associate'
-                ? 'border-[#f23e2e] bg-red-50 dark:bg-red-950/40 text-[#f23e2e] font-black shadow-xs'
-                : 'border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-300'
-            }`}
-          >
-            <div className="flex items-center gap-1.5 text-xs">
-              <Award className="w-4 h-4 text-neutral-500" />
-              <span>Associate (Associato)</span>
-            </div>
-            <p className="text-[10px] text-neutral-500 dark:text-neutral-400 mt-1 font-normal leading-tight">
-              Il tasto "+" apre direttamente il form per creare sondaggi di disponibilità.
-            </p>
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* Sincronizzazione Google Calendar (Sempre Collegato) */}
       <div className="bg-white dark:bg-neutral-900 rounded-3xl p-5 border border-neutral-200/90 dark:border-neutral-800 shadow-xs space-y-3.5 transition-colors">

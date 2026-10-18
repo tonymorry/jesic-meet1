@@ -13,6 +13,7 @@ export type UserRole =
   | 'Project Manager'
   | 'Consulente Junior';
 
+export type AppRole = 'admin' | 'user';
 export type UserSystemRole = 'admin' | 'associate' | 'client_admin';
 
 export interface User {
@@ -21,11 +22,31 @@ export interface User {
   surname: string;
   email: string;
   password?: string;
-  role?: string; // Ruolo descrittivo JESic (es. 'Presidente', 'Consulente Junior')
-  systemRole?: UserSystemRole; // 'admin' | 'associate' | 'client_admin'
+  role: AppRole; // 'admin' | 'user' gestito via Database
+  systemRole?: UserSystemRole; // compatibilità
+  jesicRole?: string; // Ruolo descrittivo (es. 'Presidente', 'Consulente Junior')
   avatarUrl?: string;
   googleAccessToken?: string;
   googleCalendarConnected?: boolean;
+}
+
+export interface GroupMember {
+  userId: string;
+  role: 'admin' | 'member';
+  joinedAt: string;
+}
+
+export interface Group {
+  id: string;
+  name: string;
+  description?: string;
+  code: string; // Codice univoco per entrare (es. "JES-7A9B")
+  inviteLink?: string;
+  creatorId: string;
+  members: GroupMember[];
+  avatar?: string;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export type EventKind = 'poll' | 'official';
@@ -103,6 +124,8 @@ export interface MeetingEvent {
     contactEmail: string;
   };
   allowedSlots?: string[]; // Se vincolato agli slot specificati dal cliente (es. 2 o 3 slot)
+  groupId?: string; // Se legato a un gruppo specifico (null se creato a livello generale)
+  externalInviteEmails?: string[]; // Destinatari invitati via email fuori da qualsiasi gruppo
 }
 
 export type ResponseStatus = 'pending' | 'submitted';

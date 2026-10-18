@@ -248,7 +248,8 @@ export const EventDetailModal: React.FC<EventDetailModalProps> = ({
       name: firstName,
       surname: lastName,
       email: emailVal,
-      role: 'Consulente Junior',
+      role: 'user',
+      jesicRole: 'Consulente Junior',
       googleCalendarConnected: false,
     };
 

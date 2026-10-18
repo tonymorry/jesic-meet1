@@ -8,7 +8,7 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { User, MeetingEvent, InviteeConfig, ClientSlotPreference } from '../types';
+import { User, MeetingEvent, InviteeConfig, ClientSlotPreference, Group } from '../types';
 import { UserAvatar } from './UserAvatar';
 import {
   X,
@@ -30,6 +30,7 @@ import {
   AlertCircle,
   RotateCcw,
   Lock,
+  Mail,
 } from 'lucide-react';
 
 export interface PreFillClientData {
@@ -55,6 +56,7 @@ interface CreateEventModalProps {
   prefillData?: PreFillClientData;
   eventToEdit?: MeetingEvent;
   onUpdateEvent?: (updatedEvent: MeetingEvent) => void;
+  activeGroup?: Group;
 }
 
 export const CreateEventModal: React.FC<CreateEventModalProps> = ({
@@ -65,6 +67,7 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
   prefillData,
   eventToEdit,
   onUpdateEvent,
+  activeGroup,
 }) => {
   // Ora il wizard ha solo 3 step (rimosso step orari disponibilità organizzatore)
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -146,7 +149,7 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
           allUsers.find((user) => user.id === inv.userId) ||
           (inv.userId === currentUser.id
             ? currentUser
-            : { id: inv.userId, name: 'Utente', surname: '', email: '' });
+            : { id: inv.userId, name: 'Utente', surname: '', email: '', role: 'user' as const });
         return { user: u, isMandatory: inv.isMandatory };
       });
     }
@@ -161,6 +164,10 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
   const [manualNameInput, setManualNameInput] = useState('');
   const [manualEmailInput, setManualEmailInput] = useState('');
   const [showManualAddFields, setShowManualAddFields] = useState(false);
+  const [directEmailInput, setDirectEmailInput] = useState('');
+  const [externalInviteEmails, setExternalInviteEmails] = useState<string[]>(
+    eventToEdit?.externalInviteEmails || []
+  );
 
   // Lista nuovi utenti generati al volo durante la creazione
   const [newlyCreatedUsers, setNewlyCreatedUsers] = useState<User[]>([]);
@@ -358,7 +365,8 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
         name: firstName,
         surname: lastName,
         email: emailVal,
-        role: 'Consulente Junior',
+        role: 'user',
+        jesicRole: 'Consulente Junior',
         googleCalendarConnected: false,
       };
 
@@ -369,6 +377,38 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
     setManualNameInput('');
     setManualEmailInput('');
     setShowManualAddFields(false);
+  };
+
+  // Inserimento rapido diretto via email (sia dentro che fuori dal gruppo)
+  const handleDirectEmailAdd = () => {
+    const emailClean = directEmailInput.trim().toLowerCase();
+    if (!emailClean || !emailClean.includes('@')) return;
+
+    const existing = combinedRegisteredUsers.find((u) => u.email.toLowerCase() === emailClean);
+    if (existing) {
+      if (!selectedInvitees.some((i) => i.user.id === existing.id)) {
+        setSelectedInvitees([...selectedInvitees, { user: existing, isMandatory: false }]);
+      }
+    } else {
+      const [localPart] = emailClean.split('@');
+      const derivedName = localPart.charAt(0).toUpperCase() + localPart.slice(1);
+      const newUser: User = {
+        id: `ext-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        name: derivedName,
+        surname: '',
+        email: emailClean,
+        role: 'user',
+        systemRole: 'associate',
+        googleCalendarConnected: false,
+      };
+      setNewlyCreatedUsers((prev) => [...prev, newUser]);
+      setSelectedInvitees((prev) => [...prev, { user: newUser, isMandatory: false }]);
+    }
+
+    if (!externalInviteEmails.includes(emailClean)) {
+      setExternalInviteEmails((prev) => [...prev, emailClean]);
+    }
+    setDirectEmailInput('');
   };
 
   const toggleInviteeMandatory = (userId: string) => {
@@ -421,6 +461,8 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
         meetLink: meetingType === 'online' ? (eventToEdit.meetLink || meetLink) : undefined,
         pollDeadline: new Date(pollDeadline).toISOString(),
         invitees: inviteesConfig,
+        groupId: activeGroup?.id || eventToEdit.groupId,
+        externalInviteEmails: externalInviteEmails.length > 0 ? externalInviteEmails : eventToEdit.externalInviteEmails,
       });
       onClose();
       return;
@@ -446,6 +488,8 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
         clientRequestId: prefillData?.clientRequestId,
         clientInfo: prefillData?.clientInfo,
         allowedSlots: prefillData?.fixedSlots?.map((s) => s.slotKey),
+        groupId: activeGroup?.id,
+        externalInviteEmails: externalInviteEmails.length > 0 ? externalInviteEmails : undefined,
       },
       [], // Inizialmente nessun orario spuntato in automatico
       newlyCreatedUsers
@@ -951,6 +995,78 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
                   Contrassegna come <strong>Essenziale (⭐)</strong> le persone indispensabili per la riunione.
                   L'algoritmo di matching garantirà la loro presenza al 100%.
                 </p>
+              </div>
+
+              {/* BANNER SE APERTO DENTRO UN GRUPPO: INVITO RAPIDO MEMBRI GRUPPO */}
+              {activeGroup && (
+                <div className="bg-red-50/70 dark:bg-red-950/40 border border-red-200/80 dark:border-red-900/50 rounded-2xl p-3 flex items-center justify-between gap-3 shadow-2xs">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="text-xl shrink-0 p-1 bg-white dark:bg-neutral-800 rounded-xl border border-red-100 dark:border-red-900/40">
+                      {activeGroup.avatar || '👥'}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-black text-neutral-900 dark:text-white truncate">
+                        Gruppo: {activeGroup.name}
+                      </p>
+                      <p className="text-[10px] text-neutral-500 dark:text-neutral-400">
+                        {activeGroup.members.length} membri in questo gruppo
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const groupUserIds = activeGroup.members.map((m) => m.userId);
+                      const groupUsers = allUsers.filter((u) => groupUserIds.includes(u.id));
+                      const newSelected = [...selectedInvitees];
+                      groupUsers.forEach((u) => {
+                        if (!newSelected.some((item) => item.user.id === u.id)) {
+                          newSelected.push({ user: u, isMandatory: false });
+                        }
+                      });
+                      setSelectedInvitees(newSelected);
+                    }}
+                    className="px-3 py-1.5 bg-[#f23e2e] hover:bg-red-600 text-white rounded-xl text-[11px] font-bold shrink-0 transition-all cursor-pointer shadow-xs active:scale-95"
+                  >
+                    + Invita tutti i membri
+                  </button>
+                </div>
+              )}
+
+              {/* INVITO DIRETTO TRAMITE EMAIL (CASO UTENTE FUORI DAL GRUPPO & INVITATI ESTERNI) */}
+              <div className="bg-neutral-50 dark:bg-neutral-800/80 p-3 rounded-2xl border border-neutral-200 dark:border-neutral-700 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-neutral-900 dark:text-white flex items-center gap-1.5">
+                    <Mail className="w-4 h-4 text-[#f23e2e]" />
+                    <span>Invita per indirizzo email {!activeGroup ? '(Fuori dal gruppo)' : ''}</span>
+                  </span>
+                  <span className="text-[10px] text-neutral-400 font-mono">
+                    Rapido & Diretto
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="email"
+                    value={directEmailInput}
+                    onChange={(e) => setDirectEmailInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleDirectEmailAdd();
+                      }
+                    }}
+                    placeholder="Es. collega@jesic.it oppure mario@azienda.com"
+                    className="flex-1 px-3 py-2 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-red-500/20"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleDirectEmailAdd}
+                    disabled={!directEmailInput.trim()}
+                    className="px-3.5 py-2 bg-[#f23e2e] hover:bg-red-600 disabled:opacity-40 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 shadow-xs active:scale-95"
+                  >
+                    + Invita
+                  </button>
+                </div>
               </div>
 
               {/* TENDINA PER SELEZIONARE DAI REGISTRATI */}

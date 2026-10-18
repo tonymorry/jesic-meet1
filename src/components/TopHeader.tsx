@@ -17,6 +17,7 @@ import {
   Calendar,
   Inbox,
   Plus,
+  Users,
   User as UserIcon,
 } from 'lucide-react';
 
@@ -33,6 +34,8 @@ export interface TopHeaderProps {
   pendingOfficialEventsCount?: number;
   isClientAdmin?: boolean;
   pendingClientRequestsCount?: number;
+  isInsideGroup?: boolean;
+  onBackToGroups?: () => void;
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
@@ -41,13 +44,15 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   onNavigateToProfile,
   isDarkMode,
   onToggleDarkMode,
-  currentTab = 'dashboard',
+  currentTab = 'groups',
   onSelectTab,
   onOpenCreateMenu,
   pendingInvitesCount = 0,
   pendingOfficialEventsCount = 0,
   isClientAdmin = false,
   pendingClientRequestsCount = 0,
+  isInsideGroup = false,
+  onBackToGroups,
 }) => {
   return (
     <header className="sticky top-0 z-30 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md border-b border-neutral-200/80 dark:border-neutral-800 px-4 sm:px-6 py-2.5 sm:py-3 transition-colors">
@@ -76,92 +81,149 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         {/* NAVIGAZIONE DESKTOP / PC (Visibile su schermi medi e grandi >= md) */}
         {onSelectTab && (
           <nav className="hidden md:flex items-center gap-1 bg-neutral-100 dark:bg-neutral-800/80 p-1 rounded-2xl border border-neutral-200/80 dark:border-neutral-700/60 shadow-2xs">
-            {/* 1. Dashboard */}
-            <button
-              type="button"
-              onClick={() => onSelectTab('dashboard')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                currentTab === 'dashboard'
-                  ? 'bg-white dark:bg-neutral-900 text-[#f23e2e] shadow-xs'
-                  : 'text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white'
-              }`}
-            >
-              <Home className="w-3.5 h-3.5" />
-              <span>Dashboard</span>
-              {pendingInvitesCount > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full bg-[#f23e2e] text-white text-[9px] font-black">
-                  {pendingInvitesCount}
-                </span>
-              )}
-            </button>
+            {!isInsideGroup ? (
+              /* Piattaforma Level: 3 Tab (Gruppi - Sondaggi - Profilo) */
+              <>
+                <button
+                  type="button"
+                  onClick={() => onSelectTab('groups')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    currentTab === 'groups'
+                      ? 'bg-white dark:bg-neutral-900 text-[#f23e2e] shadow-xs font-black'
+                      : 'text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>Gruppi</span>
+                </button>
 
-            {/* 2. Eventi */}
-            <button
-              type="button"
-              onClick={() => onSelectTab('events')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer relative ${
-                currentTab === 'events'
-                  ? 'bg-white dark:bg-neutral-900 text-[#f23e2e] shadow-xs'
-                  : 'text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white'
-              }`}
-            >
-              <ClipboardList className="w-3.5 h-3.5" />
-              <span>Eventi</span>
-              {pendingOfficialEventsCount > 0 && (
-                <span className="px-1.5 py-0.2 rounded-full bg-[#f23e2e] text-white text-[9px] font-black">
-                  {pendingOfficialEventsCount}
-                </span>
-              )}
-            </button>
+                <button
+                  type="button"
+                  onClick={() => onSelectTab('polls')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer relative ${
+                    currentTab === 'polls'
+                      ? 'bg-white dark:bg-neutral-900 text-[#f23e2e] shadow-xs font-black'
+                      : 'text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Inbox className="w-3.5 h-3.5" />
+                  <span>Sondaggi</span>
+                  {pendingInvitesCount > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full bg-[#f23e2e] text-white text-[9px] font-black">
+                      {pendingInvitesCount}
+                    </span>
+                  )}
+                </button>
 
-            {/* 3. Richieste Clienti (Esclusivo Admin Clienti) */}
-            {isClientAdmin && (
-              <button
-                type="button"
-                onClick={() => onSelectTab('requests')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                  currentTab === 'requests'
-                    ? 'bg-white dark:bg-neutral-900 text-[#f23e2e] shadow-xs'
-                    : 'text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white'
-                }`}
-              >
-                <Inbox className="w-3.5 h-3.5" />
-                <span>Richieste Clienti</span>
-                {pendingClientRequestsCount > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full bg-[#f23e2e] text-white text-[9px] font-black animate-pulse">
-                    {pendingClientRequestsCount}
-                  </span>
+                <button
+                  type="button"
+                  onClick={() => onSelectTab('profile')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    currentTab === 'profile'
+                      ? 'bg-white dark:bg-neutral-900 text-[#f23e2e] shadow-xs font-black'
+                      : 'text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white'
+                  }`}
+                >
+                  <UserIcon className="w-3.5 h-3.5" />
+                  <span>Profilo</span>
+                </button>
+              </>
+            ) : (
+              /* Group Workspace Level */
+              <>
+                {onBackToGroups && (
+                  <button
+                    type="button"
+                    onClick={onBackToGroups}
+                    className="px-2.5 py-1.5 rounded-xl text-xs font-bold text-neutral-500 hover:text-[#f23e2e] hover:bg-white dark:hover:bg-neutral-900 transition-all flex items-center gap-1 cursor-pointer mr-1"
+                  >
+                    <span>← Gruppi</span>
+                  </button>
                 )}
-              </button>
+
+                {/* 1. Dashboard */}
+                <button
+                  type="button"
+                  onClick={() => onSelectTab('dashboard')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    currentTab === 'dashboard'
+                      ? 'bg-white dark:bg-neutral-900 text-[#f23e2e] shadow-xs'
+                      : 'text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Home className="w-3.5 h-3.5" />
+                  <span>Dashboard</span>
+                </button>
+
+                {/* 2. Eventi */}
+                <button
+                  type="button"
+                  onClick={() => onSelectTab('events')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer relative ${
+                    currentTab === 'events'
+                      ? 'bg-white dark:bg-neutral-900 text-[#f23e2e] shadow-xs'
+                      : 'text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white'
+                  }`}
+                >
+                  <ClipboardList className="w-3.5 h-3.5" />
+                  <span>Eventi</span>
+                  {pendingOfficialEventsCount > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full bg-[#f23e2e] text-white text-[9px] font-black">
+                      {pendingOfficialEventsCount}
+                    </span>
+                  )}
+                </button>
+
+                {/* 3. Richieste Clienti (Esclusivo Admin Clienti) */}
+                {isClientAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => onSelectTab('requests')}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                      currentTab === 'requests'
+                        ? 'bg-white dark:bg-neutral-900 text-[#f23e2e] shadow-xs'
+                        : 'text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <Inbox className="w-3.5 h-3.5" />
+                    <span>Richieste Clienti</span>
+                    {pendingClientRequestsCount > 0 && (
+                      <span className="px-1.5 py-0.2 rounded-full bg-[#f23e2e] text-white text-[9px] font-black animate-pulse">
+                        {pendingClientRequestsCount}
+                      </span>
+                    )}
+                  </button>
+                )}
+
+                {/* 4. Calendario */}
+                <button
+                  type="button"
+                  onClick={() => onSelectTab('calendar')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    currentTab === 'calendar'
+                      ? 'bg-white dark:bg-neutral-900 text-[#f23e2e] shadow-xs'
+                      : 'text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>Calendario</span>
+                </button>
+
+                {/* 5. Profilo */}
+                <button
+                  type="button"
+                  onClick={() => onSelectTab('profile')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    currentTab === 'profile'
+                      ? 'bg-white dark:bg-neutral-900 text-[#f23e2e] shadow-xs'
+                      : 'text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white'
+                  }`}
+                >
+                  <UserIcon className="w-3.5 h-3.5" />
+                  <span>Profilo</span>
+                </button>
+              </>
             )}
-
-            {/* 4. Calendario */}
-            <button
-              type="button"
-              onClick={() => onSelectTab('calendar')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                currentTab === 'calendar'
-                  ? 'bg-white dark:bg-neutral-900 text-[#f23e2e] shadow-xs'
-                  : 'text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white'
-              }`}
-            >
-              <Calendar className="w-3.5 h-3.5" />
-              <span>Calendario</span>
-            </button>
-
-            {/* 5. Profilo */}
-            <button
-              type="button"
-              onClick={() => onSelectTab('profile')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                currentTab === 'profile'
-                  ? 'bg-white dark:bg-neutral-900 text-[#f23e2e] shadow-xs'
-                  : 'text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white'
-              }`}
-            >
-              <UserIcon className="w-3.5 h-3.5" />
-              <span>Profilo</span>
-            </button>
           </nav>
         )}
 
@@ -208,11 +270,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                 {currentUser.name} {currentUser.surname}
               </span>
               <span className="text-[9px] text-neutral-400 uppercase tracking-wider">
-                {currentUser.systemRole === 'client_admin'
-                  ? 'Admin Clienti'
-                  : currentUser.systemRole === 'admin'
-                  ? 'Admin'
-                  : 'Associato'}
+                {currentUser.role === 'admin' ? 'Admin DB' : 'Utente'}
               </span>
             </div>
             <span className="sm:hidden text-xs font-semibold text-neutral-800 dark:text-neutral-200 max-w-[80px] truncate">

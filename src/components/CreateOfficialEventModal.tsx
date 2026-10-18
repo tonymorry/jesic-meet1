@@ -8,7 +8,7 @@
  */
 
 import React, { useState } from 'react';
-import { User, MeetingEvent, InviteeConfig, ParticipantResponse } from '../types';
+import { User, MeetingEvent, InviteeConfig, ParticipantResponse, Group } from '../types';
 import { UserAvatar } from './UserAvatar';
 import {
   X,
@@ -24,6 +24,7 @@ import {
   CheckSquare,
   Square,
   AlertCircle,
+  Mail,
 } from 'lucide-react';
 
 interface CreateOfficialEventModalProps {
@@ -35,6 +36,7 @@ interface CreateOfficialEventModalProps {
   ) => void;
   eventToEdit?: MeetingEvent;
   onUpdateOfficialEvent?: (updatedEvent: MeetingEvent) => void;
+  activeGroup?: Group;
 }
 
 export const CreateOfficialEventModal: React.FC<CreateOfficialEventModalProps> = ({
@@ -44,6 +46,7 @@ export const CreateOfficialEventModal: React.FC<CreateOfficialEventModalProps> =
   onCreateOfficialEvent,
   eventToEdit,
   onUpdateOfficialEvent,
+  activeGroup,
 }) => {
   const [title, setTitle] = useState(eventToEdit?.title || '');
   const [description, setDescription] = useState(eventToEdit?.description || '');
@@ -115,9 +118,30 @@ export const CreateOfficialEventModal: React.FC<CreateOfficialEventModalProps> =
     }
   };
 
+  const [directEmailInput, setDirectEmailInput] = useState('');
+  const [externalInviteEmails, setExternalInviteEmails] = useState<string[]>(
+    eventToEdit?.externalInviteEmails || []
+  );
+
+  const handleAddDirectEmail = () => {
+    const email = directEmailInput.trim().toLowerCase();
+    if (!email || !email.includes('@')) return;
+    if (!externalInviteEmails.includes(email)) {
+      setExternalInviteEmails([...externalInviteEmails, email]);
+    }
+    setDirectEmailInput('');
+  };
+
   // BOTTONE RAPIDO: "Invita tutti gli associati"
   const handleInviteAll = () => {
     setSelectedUserIds(otherUsers.map((u) => u.id));
+  };
+
+  // BOTTONE RAPIDO: "Invita membri del gruppo attivo"
+  const handleInviteGroupMembers = () => {
+    if (!activeGroup) return;
+    const groupUserIds = activeGroup.members.map((m) => m.userId).filter((id) => id !== currentUser.id);
+    setSelectedUserIds(Array.from(new Set([...selectedUserIds, ...groupUserIds])));
   };
 
   const handleDeselectAll = () => {
@@ -194,6 +218,8 @@ export const CreateOfficialEventModal: React.FC<CreateOfficialEventModalProps> =
         },
         invitees: allInviteesList,
         participants: updatedParticipants,
+        groupId: activeGroup?.id || eventToEdit.groupId,
+        externalInviteEmails: externalInviteEmails.length > 0 ? externalInviteEmails : eventToEdit.externalInviteEmails,
       });
       onClose();
       return;
@@ -219,6 +245,8 @@ export const CreateOfficialEventModal: React.FC<CreateOfficialEventModalProps> =
       },
       invitees: allInviteesList,
       participants: initialParticipants,
+      groupId: activeGroup?.id,
+      externalInviteEmails: externalInviteEmails.length > 0 ? externalInviteEmails : undefined,
     });
   };
 
@@ -442,15 +470,24 @@ export const CreateOfficialEventModal: React.FC<CreateOfficialEventModalProps> =
                 <span>Destinatari Invito ({selectedUserIds.length} selezionati)</span>
               </div>
 
-              {/* Tasto Rapido: Invita tutti gli associati */}
-              <div className="flex items-center gap-1">
+              {/* Tasti Rapidi Selezione */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {activeGroup && (
+                  <button
+                    type="button"
+                    onClick={handleInviteGroupMembers}
+                    className="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg font-bold text-[10px] flex items-center gap-1 transition-all cursor-pointer shadow-xs"
+                  >
+                    <span>Membri Gruppo ({activeGroup.members.length})</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={handleInviteAll}
                   className="px-2.5 py-1 bg-red-100 hover:bg-red-200 dark:bg-red-950/60 dark:hover:bg-red-900 text-[#f23e2e] rounded-lg font-bold text-[10px] flex items-center gap-1 transition-all cursor-pointer"
                 >
                   <UserCheck className="w-3 h-3" />
-                  <span>Invita tutti ({otherUsers.length})</span>
+                  <span>Tutti ({otherUsers.length})</span>
                 </button>
                 {selectedUserIds.length > 0 && (
                   <button
@@ -462,6 +499,57 @@ export const CreateOfficialEventModal: React.FC<CreateOfficialEventModalProps> =
                   </button>
                 )}
               </div>
+            </div>
+
+            {/* Inserimento Diretto via Email */}
+            <div className="space-y-1.5 pt-1">
+              <span className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400 flex items-center gap-1">
+                <Mail className="w-3.5 h-3.5 text-[#f23e2e]" />
+                <span>Invita inserendo email {!activeGroup ? '(Fuori dal gruppo)' : ''}</span>
+              </span>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="email"
+                  value={directEmailInput}
+                  onChange={(e) => setDirectEmailInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddDirectEmail();
+                    }
+                  }}
+                  placeholder="Es. collega@jesic.it oppure mario@azienda.com"
+                  className="flex-1 px-3 py-1.5 bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-xl text-xs text-neutral-900 dark:text-white placeholder:text-neutral-400 focus:outline-none focus:border-[#f23e2e]"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddDirectEmail}
+                  disabled={!directEmailInput.trim()}
+                  className="px-3 py-1.5 bg-[#f23e2e] hover:bg-red-600 disabled:opacity-40 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 shadow-xs"
+                >
+                  + Aggiungi
+                </button>
+              </div>
+
+              {externalInviteEmails.length > 0 && (
+                <div className="flex flex-wrap gap-1 pt-1">
+                  {externalInviteEmails.map((email) => (
+                    <span
+                      key={email}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-100 dark:bg-red-950/60 text-[#f23e2e] text-[10px] font-mono font-bold"
+                    >
+                      <span>{email}</span>
+                      <button
+                        type="button"
+                        onClick={() => setExternalInviteEmails(externalInviteEmails.filter((e) => e !== email))}
+                        className="hover:text-red-900 cursor-pointer"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Barra di ricerca associati */}

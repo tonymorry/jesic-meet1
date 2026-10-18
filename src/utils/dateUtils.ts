@@ -53,3 +53,18 @@ export const isEventPassed = (event: MeetingEvent): boolean => {
 
   return false;
 };
+
+/**
+ * Formatta una data YYYY-MM-DD in forma breve leggibile (es. "Lun 13 Ott")
+ */
+export const formatDateShort = (dateStr: string): string => {
+  try {
+    const [year, month, day] = dateStr.split('-');
+    const d = new Date(Number(year), Number(month) - 1, Number(day));
+    const weekday = new Intl.DateTimeFormat('it-IT', { weekday: 'short' }).format(d);
+    const monthStr = new Intl.DateTimeFormat('it-IT', { month: 'short' }).format(d);
+    return `${weekday.charAt(0).toUpperCase() + weekday.slice(1)} ${day} ${monthStr}`;
+  } catch {
+    return dateStr;
+  }
+};

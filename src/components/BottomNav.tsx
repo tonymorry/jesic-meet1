@@ -1,28 +1,38 @@
 /**
  * JESic Meet - Bottom Navigation Bar Mobile-First
- * Brand JESic: Rosso #f23e2e, Bianco, Nero
  * 
- * 5 Sezioni Principali:
- * 1. 🏠 DASHBOARD (Sondaggi disponibilità stile When2meet)
- * 2. 📋 EVENTI (Bacheca inviti ufficiali in sospeso con Partecipa/Non Partecipo)
- * 3. ➕ NUOVO (Bottone centrale rialzato rosso con controllo ruolo Admin vs Associate)
- * 4. 🗓️ CALENDARIO (Vista grafica mensile/settimanale impegni associativi)
- * 5. 👤 PROFILO
+ * Requisiti:
+ * 1. Schermata Principale (Piattaforma):
+ *    - SINISTRA ("Gruppi"): Lista dei gruppi a cui l'utente partecipa
+ *    - CENTRO ("Sondaggi"): Pagina dedicata ai sondaggi (Creati da te / A cui sei invitato)
+ *    - DESTRA ("Profilo"): Pagina del profilo utente
+ * 2. Quando l'utente entra in un Gruppo:
+ *    - Sblocca la vista completa delle funzionalità interne del gruppo:
+ *      Dashboard When2meet, Eventi, Calendario, Richieste Clienti, Profilo.
  */
 
 import React from 'react';
-import { Home, ClipboardList, Plus, Calendar, User as UserIcon, Inbox } from 'lucide-react';
+import {
+  Users,
+  Inbox,
+  User as UserIcon,
+  Home,
+  ClipboardList,
+  Calendar,
+  Plus,
+} from 'lucide-react';
 
-export type NavTab = 'dashboard' | 'events' | 'requests' | 'calendar' | 'profile';
+export type NavTab = 'groups' | 'polls' | 'profile' | 'dashboard' | 'events' | 'requests' | 'calendar';
 
 interface BottomNavProps {
   currentTab: NavTab;
   onSelectTab: (tab: NavTab) => void;
-  onOpenCreateMenu: () => void;
+  onOpenCreateMenu?: () => void;
   pendingInvitesCount?: number;
   pendingOfficialEventsCount?: number;
   isClientAdmin?: boolean;
   pendingClientRequestsCount?: number;
+  isInsideGroup?: boolean; // Se l'utente è dentro un gruppo specifico
 }
 
 export const BottomNav: React.FC<BottomNavProps> = ({
@@ -33,6 +43,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   pendingOfficialEventsCount = 0,
   isClientAdmin = false,
   pendingClientRequestsCount = 0,
+  isInsideGroup = false,
 }) => {
   return (
     <nav
@@ -41,179 +52,235 @@ export const BottomNav: React.FC<BottomNavProps> = ({
     >
       {/* Background glass bar */}
       <div className="relative bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md border-t border-neutral-200/90 dark:border-neutral-800 px-3 py-1.5 shadow-[0_-4px_24px_rgba(0,0,0,0.08)] dark:shadow-[0_-4px_24px_rgba(0,0,0,0.45)]">
-        <div className="flex items-center justify-between h-14">
-          
-          {/* 1. 🏠 DASHBOARD */}
-          <button
-            type="button"
-            onClick={() => onSelectTab('dashboard')}
-            className={`flex-1 flex flex-col items-center justify-center py-1 transition-all active:scale-95 relative cursor-pointer ${
-              currentTab === 'dashboard'
-                ? 'text-[#f23e2e] dark:text-[#f23e2e]'
-                : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
-            }`}
-            aria-label="Dashboard sondaggi"
-          >
-            <div className="relative">
-              <Home
-                className={`w-5 h-5 transition-transform ${
-                  currentTab === 'dashboard' ? 'stroke-[2.5px] scale-110' : 'stroke-[1.8px]'
-                }`}
-              />
-              {pendingInvitesCount > 0 && (
-                <span className="absolute -top-1 -right-2.5 min-w-[16px] h-4 px-1 rounded-full bg-[#f23e2e] text-white text-[9px] font-black flex items-center justify-center ring-2 ring-white dark:ring-neutral-900 shadow-xs">
-                  {pendingInvitesCount}
-                </span>
-              )}
-            </div>
-            <span
-              className={`text-[10px] mt-1 tracking-tight leading-none ${
-                currentTab === 'dashboard'
-                  ? 'font-black text-[#f23e2e]'
-                  : 'font-semibold text-neutral-500 dark:text-neutral-400'
-              }`}
-            >
-              Dashboard
-            </span>
-          </button>
-
-          {/* 2. 📋 EVENTI (Bacheca Inviti) */}
-          <button
-            type="button"
-            onClick={() => onSelectTab('events')}
-            className={`flex-1 flex flex-col items-center justify-center py-1 transition-all active:scale-95 relative cursor-pointer ${
-              currentTab === 'events'
-                ? 'text-[#f23e2e] dark:text-[#f23e2e]'
-                : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
-            }`}
-            aria-label="Bacheca Eventi"
-          >
-            <div className="relative">
-              <ClipboardList
-                className={`w-5 h-5 transition-transform ${
-                  currentTab === 'events' ? 'stroke-[2.5px] scale-110' : 'stroke-[1.8px]'
-                }`}
-              />
-              {pendingOfficialEventsCount > 0 && (
-                <span className="absolute -top-1 -right-2.5 min-w-[16px] h-4 px-1 rounded-full bg-[#f23e2e] text-white text-[9px] font-black flex items-center justify-center ring-2 ring-white dark:ring-neutral-900 shadow-xs">
-                  {pendingOfficialEventsCount}
-                </span>
-              )}
-            </div>
-            <span
-              className={`text-[10px] mt-1 tracking-tight leading-none ${
-                currentTab === 'events'
-                  ? 'font-black text-[#f23e2e]'
-                  : 'font-semibold text-neutral-500 dark:text-neutral-400'
-              }`}
-            >
-              Eventi
-            </span>
-          </button>
-
-          {/* TAB ESCLUSIVA RUOLO "ADMIN CLIENTI": 📥 RICHIESTE CLIENTI */}
-          {isClientAdmin && (
+        
+        {/* ====================================================================
+            CASO 1: LIVELLO PIATTAFORMA (Home Principale a 3 Tab: Gruppi - Sondaggi - Profilo)
+           ==================================================================== */}
+        {!isInsideGroup ? (
+          <div className="flex items-center justify-around h-14">
+            {/* 1. SINISTRA: "Gruppi" */}
             <button
               type="button"
-              onClick={() => onSelectTab('requests')}
-              className={`flex-1 flex flex-col items-center justify-center py-1 transition-all active:scale-95 relative cursor-pointer ${
-                currentTab === 'requests'
+              onClick={() => onSelectTab('groups')}
+              className={`flex-1 flex flex-col items-center justify-center py-1 transition-all active:scale-95 cursor-pointer ${
+                currentTab === 'groups'
                   ? 'text-[#f23e2e] dark:text-[#f23e2e]'
                   : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
               }`}
-              aria-label="Richieste Clienti B2B"
+              aria-label="Gruppi"
+            >
+              <Users
+                className={`w-5 h-5 transition-transform ${
+                  currentTab === 'groups' ? 'stroke-[2.5px] scale-110' : 'stroke-[1.8px]'
+                }`}
+              />
+              <span
+                className={`text-[10px] mt-1 tracking-tight leading-none ${
+                  currentTab === 'groups'
+                    ? 'font-black text-[#f23e2e]'
+                    : 'font-semibold text-neutral-500 dark:text-neutral-400'
+                }`}
+              >
+                Gruppi
+              </span>
+            </button>
+
+            {/* 2. CENTRO: "Sondaggi" */}
+            <button
+              type="button"
+              onClick={() => onSelectTab('polls')}
+              className={`flex-1 flex flex-col items-center justify-center py-1 transition-all active:scale-95 relative cursor-pointer ${
+                currentTab === 'polls'
+                  ? 'text-[#f23e2e] dark:text-[#f23e2e]'
+                  : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
+              }`}
+              aria-label="Sondaggi di disponibilità"
             >
               <div className="relative">
                 <Inbox
                   className={`w-5 h-5 transition-transform ${
-                    currentTab === 'requests' ? 'stroke-[2.5px] scale-110 text-[#f23e2e]' : 'stroke-[1.8px]'
+                    currentTab === 'polls' ? 'stroke-[2.5px] scale-110' : 'stroke-[1.8px]'
                   }`}
                 />
-                {pendingClientRequestsCount > 0 && (
-                  <span className="absolute -top-1 -right-2.5 min-w-[16px] h-4 px-1 rounded-full bg-[#f23e2e] text-white text-[9px] font-black flex items-center justify-center ring-2 ring-white dark:ring-neutral-900 shadow-xs animate-pulse">
-                    {pendingClientRequestsCount}
+                {pendingInvitesCount > 0 && (
+                  <span className="absolute -top-1 -right-2.5 min-w-[16px] h-4 px-1 rounded-full bg-[#f23e2e] text-white text-[9px] font-black flex items-center justify-center ring-2 ring-white dark:ring-neutral-900 shadow-xs">
+                    {pendingInvitesCount}
                   </span>
                 )}
               </div>
               <span
                 className={`text-[10px] mt-1 tracking-tight leading-none ${
-                  currentTab === 'requests'
+                  currentTab === 'polls'
                     ? 'font-black text-[#f23e2e]'
                     : 'font-semibold text-neutral-500 dark:text-neutral-400'
                 }`}
               >
-                Richieste
+                Sondaggi
               </span>
             </button>
-          )}
 
-          {/* 3. ➕ NUOVO (Bottone centrale rialzato rosso #f23e2e) */}
-          <div className="relative -top-5 flex items-center justify-center px-1">
+            {/* 3. DESTRA: "Profilo" */}
             <button
               type="button"
-              onClick={onOpenCreateMenu}
-              className="group relative flex items-center justify-center w-14 h-14 rounded-full bg-gradient-to-tr from-[#f23e2e] to-red-500 text-white shadow-[0_8px_20px_rgba(229,57,53,0.45)] hover:shadow-[0_12px_24px_rgba(229,57,53,0.55)] active:scale-90 transition-all duration-200 ring-4 ring-white dark:ring-neutral-900 cursor-pointer"
-              aria-label="Crea nuovo"
+              onClick={() => onSelectTab('profile')}
+              className={`flex-1 flex flex-col items-center justify-center py-1 transition-all active:scale-95 cursor-pointer ${
+                currentTab === 'profile'
+                  ? 'text-[#f23e2e] dark:text-[#f23e2e]'
+                  : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
+              }`}
+              aria-label="Profilo personale"
             >
-              <Plus className="w-7 h-7 stroke-[2.8px] transition-transform duration-200 group-hover:rotate-90" />
+              <UserIcon
+                className={`w-5 h-5 transition-transform ${
+                  currentTab === 'profile' ? 'stroke-[2.5px] scale-110' : 'stroke-[1.8px]'
+                }`}
+              />
+              <span
+                className={`text-[10px] mt-1 tracking-tight leading-none ${
+                  currentTab === 'profile'
+                    ? 'font-black text-[#f23e2e]'
+                    : 'font-semibold text-neutral-500 dark:text-neutral-400'
+                }`}
+              >
+                Profilo
+              </span>
             </button>
           </div>
-
-          {/* 4. 🗓️ CALENDARIO */}
-          <button
-            type="button"
-            onClick={() => onSelectTab('calendar')}
-            className={`flex-1 flex flex-col items-center justify-center py-1 transition-all active:scale-95 cursor-pointer ${
-              currentTab === 'calendar'
-                ? 'text-[#f23e2e] dark:text-[#f23e2e]'
-                : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
-            }`}
-            aria-label="Calendario"
-          >
-            <Calendar
-              className={`w-5 h-5 transition-transform ${
-                currentTab === 'calendar' ? 'stroke-[2.5px] scale-110' : 'stroke-[1.8px]'
+        ) : (
+          /* ====================================================================
+             CASO 2: DENTRO UN GRUPPO (Spazio di lavoro completo identico a prima)
+             ==================================================================== */
+          <div className="flex items-center justify-between h-14">
+            {/* 1. Dashboard Gruppo */}
+            <button
+              type="button"
+              onClick={() => onSelectTab('dashboard')}
+              className={`flex-1 flex flex-col items-center justify-center py-1 transition-all active:scale-95 relative cursor-pointer ${
+                currentTab === 'dashboard'
+                  ? 'text-[#f23e2e] dark:text-[#f23e2e]'
+                  : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
               }`}
-            />
-            <span
-              className={`text-[10px] mt-1 tracking-tight leading-none ${
+              aria-label="Dashboard sondaggi gruppo"
+            >
+              <Home
+                className={`w-5 h-5 transition-transform ${
+                  currentTab === 'dashboard' ? 'stroke-[2.5px] scale-110' : 'stroke-[1.8px]'
+                }`}
+              />
+              <span
+                className={`text-[10px] mt-1 tracking-tight leading-none ${
+                  currentTab === 'dashboard'
+                    ? 'font-black text-[#f23e2e]'
+                    : 'font-semibold text-neutral-500 dark:text-neutral-400'
+                }`}
+              >
+                Dashboard
+              </span>
+            </button>
+
+            {/* 2. Eventi Ufficiali Gruppo */}
+            <button
+              type="button"
+              onClick={() => onSelectTab('events')}
+              className={`flex-1 flex flex-col items-center justify-center py-1 transition-all active:scale-95 relative cursor-pointer ${
+                currentTab === 'events'
+                  ? 'text-[#f23e2e] dark:text-[#f23e2e]'
+                  : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
+              }`}
+              aria-label="Bacheca Eventi"
+            >
+              <div className="relative">
+                <ClipboardList
+                  className={`w-5 h-5 transition-transform ${
+                    currentTab === 'events' ? 'stroke-[2.5px] scale-110' : 'stroke-[1.8px]'
+                  }`}
+                />
+                {pendingOfficialEventsCount > 0 && (
+                  <span className="absolute -top-1 -right-2.5 min-w-[16px] h-4 px-1 rounded-full bg-[#f23e2e] text-white text-[9px] font-black flex items-center justify-center ring-2 ring-white dark:ring-neutral-900 shadow-xs">
+                    {pendingOfficialEventsCount}
+                  </span>
+                )}
+              </div>
+              <span
+                className={`text-[10px] mt-1 tracking-tight leading-none ${
+                  currentTab === 'events'
+                    ? 'font-black text-[#f23e2e]'
+                    : 'font-semibold text-neutral-500 dark:text-neutral-400'
+                }`}
+              >
+                Eventi
+              </span>
+            </button>
+
+            {/* 3. Tasto Centrale "+" Creazione */}
+            {onOpenCreateMenu && (
+              <div className="flex-1 flex items-center justify-center -mt-5">
+                <button
+                  type="button"
+                  onClick={onOpenCreateMenu}
+                  aria-label="Crea nuovo sondaggio o evento"
+                  className="w-12 h-12 rounded-full bg-[#f23e2e] hover:bg-red-600 text-white shadow-lg shadow-red-600/35 hover:shadow-red-600/50 flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer ring-4 ring-white dark:ring-neutral-900"
+                >
+                  <Plus className="w-6 h-6 stroke-[3px]" />
+                </button>
+              </div>
+            )}
+
+            {/* 4. Calendario Gruppo */}
+            <button
+              type="button"
+              onClick={() => onSelectTab('calendar')}
+              className={`flex-1 flex flex-col items-center justify-center py-1 transition-all active:scale-95 cursor-pointer ${
                 currentTab === 'calendar'
-                  ? 'font-black text-[#f23e2e]'
-                  : 'font-semibold text-neutral-500 dark:text-neutral-400'
+                  ? 'text-[#f23e2e] dark:text-[#f23e2e]'
+                  : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
               }`}
+              aria-label="Calendario impegni"
             >
-              Calendario
-            </span>
-          </button>
+              <Calendar
+                className={`w-5 h-5 transition-transform ${
+                  currentTab === 'calendar' ? 'stroke-[2.5px] scale-110' : 'stroke-[1.8px]'
+                }`}
+              />
+              <span
+                className={`text-[10px] mt-1 tracking-tight leading-none ${
+                  currentTab === 'calendar'
+                    ? 'font-black text-[#f23e2e]'
+                    : 'font-semibold text-neutral-500 dark:text-neutral-400'
+                }`}
+              >
+                Calendario
+              </span>
+            </button>
 
-          {/* 5. 👤 PROFILO */}
-          <button
-            type="button"
-            onClick={() => onSelectTab('profile')}
-            className={`flex-1 flex flex-col items-center justify-center py-1 transition-all active:scale-95 cursor-pointer ${
-              currentTab === 'profile'
-                ? 'text-[#f23e2e] dark:text-[#f23e2e]'
-                : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
-            }`}
-            aria-label="Profilo"
-          >
-            <UserIcon
-              className={`w-5 h-5 transition-transform ${
-                currentTab === 'profile' ? 'stroke-[2.5px] scale-110' : 'stroke-[1.8px]'
-              }`}
-            />
-            <span
-              className={`text-[10px] mt-1 tracking-tight leading-none ${
+            {/* 5. Profilo */}
+            <button
+              type="button"
+              onClick={() => onSelectTab('profile')}
+              className={`flex-1 flex flex-col items-center justify-center py-1 transition-all active:scale-95 cursor-pointer ${
                 currentTab === 'profile'
-                  ? 'font-black text-[#f23e2e]'
-                  : 'font-semibold text-neutral-500 dark:text-neutral-400'
+                  ? 'text-[#f23e2e] dark:text-[#f23e2e]'
+                  : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
               }`}
+              aria-label="Profilo personale"
             >
-              Profilo
-            </span>
-          </button>
-
-        </div>
+              <UserIcon
+                className={`w-5 h-5 transition-transform ${
+                  currentTab === 'profile' ? 'stroke-[2.5px] scale-110' : 'stroke-[1.8px]'
+                }`}
+              />
+              <span
+                className={`text-[10px] mt-1 tracking-tight leading-none ${
+                  currentTab === 'profile'
+                    ? 'font-black text-[#f23e2e]'
+                    : 'font-semibold text-neutral-500 dark:text-neutral-400'
+                }`}
+              >
+                Profilo
+              </span>
+            </button>
+          </div>
+        )}
       </div>
     </nav>
   );
