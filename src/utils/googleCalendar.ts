@@ -7,14 +7,13 @@
  */
 
 import { google } from 'googleapis';
-import firebaseConfig from '../../firebase-applet-config.json';
 import { MeetingEvent, User } from '../types';
 
-// Client ID & Secret da variabili d'ambiente (con fallback al Client ID del config Firebase/Google Cloud)
+// Client ID & Secret da variabili d'ambiente
 const GOOGLE_CLIENT_ID =
   process.env.GOOGLE_CLIENT_ID ||
-  firebaseConfig.oAuthClientId ||
-  '247725186208-2tpcut4ts7uf4pcr0d2e760t5auttvh4.apps.googleusercontent.com';
+  process.env.VITE_GOOGLE_CLIENT_ID ||
+  '';
 
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
 

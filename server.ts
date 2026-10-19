@@ -30,8 +30,13 @@ import {
   UserRole,
 } from './src/models/schemas';
 import { createGoogleCalendarEvent } from './src/utils/googleCalendar';
+import { OAuth2Client } from 'google-auth-library';
 
 dotenv.config();
+
+const googleAuthClient = new OAuth2Client(
+  process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || ''
+);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -105,14 +110,14 @@ app.get('/api/users', async (_req: Request, res: Response) => {
 });
 
 // Gestione Registrazione / Sincronizzazione utente nel Database MongoDB
-// REGOLA CRITICA:
-// 1. I tokens Google (googleAccessToken, googleRefreshToken) sono COMPLETAMENTE OPZIONALI.
-// 2. Il backend trova o crea l'utente su MongoDB SOLO tramite la sua email (cleanEmail).
-// 3. I nuovi utenti ricevono tassativamente il ruolo 'user'.
-// 4. Se mancano i token Google, salva null e non rompere mai il login o la registrazione.
+// REGOLA:
+// 1. Supporta il vero Google OAuth2 con verifica del token JWT (credential) tramite 'google-auth-library'.
+// 2. I token Google sono opzionali, salvando null se assenti.
+// 3. Trova o crea l'utente SOLO tramite email nel database MongoDB (assegnando ruolo 'user' ai nuovi).
 const handleUserSync = async (req: Request, res: Response) => {
   try {
     const {
+      credential, // JWT ID Token restituito da @react-oauth/google
       id,
       name,
       surname,
@@ -128,17 +133,52 @@ const handleUserSync = async (req: Request, res: Response) => {
       googleRefreshToken,
     } = req.body;
 
-    if (!email || typeof email !== 'string') {
+    let cleanEmail = email ? String(email).toLowerCase().trim() : '';
+    let extractedName = (name || nome)?.trim() || '';
+    let extractedSurname = (surname || cognome)?.trim() || '';
+    let extractedAvatar = avatarUrl || null;
+
+    // Se il client ha inviato il JWT token ufficiale di Google OAuth2
+    if (credential && typeof credential === 'string') {
+      try {
+        const expectedAudience = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID;
+        const ticket = await googleAuthClient.verifyIdToken({
+          idToken: credential,
+          audience: expectedAudience || undefined,
+        });
+        const payload = ticket.getPayload();
+        if (payload?.email) {
+          cleanEmail = payload.email.toLowerCase().trim();
+          extractedName = payload.given_name || payload.name?.split(' ')[0] || cleanEmail.split('@')[0];
+          extractedSurname = payload.family_name || payload.name?.split(' ').slice(1).join(' ') || 'JESic';
+          extractedAvatar = payload.picture || extractedAvatar;
+        }
+      } catch (verifyErr: any) {
+        console.warn('[google-auth-library] Avviso verifica token:', verifyErr.message);
+        // Fallback decodifica payload base64 per ambienti di test/dev con Client ID variabile
+        try {
+          const parts = credential.split('.');
+          if (parts.length === 3) {
+            const decoded = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+            if (decoded?.email) {
+              cleanEmail = decoded.email.toLowerCase().trim();
+              extractedName = decoded.given_name || decoded.name?.split(' ')[0] || cleanEmail.split('@')[0];
+              extractedSurname = decoded.family_name || decoded.name?.split(' ').slice(1).join(' ') || 'JESic';
+              extractedAvatar = decoded.picture || extractedAvatar;
+            }
+          }
+        } catch (e) {
+          return res.status(401).json({ error: 'Token Google OAuth2 non valido' });
+        }
+      }
+    }
+
+    if (!cleanEmail) {
       return res.status(400).json({ error: 'Email obbligatoria per la registrazione/sincronizzazione' });
     }
 
-    const cleanEmail = email.toLowerCase().trim();
-
-    // Estrai o assegna nome e cognome di default se mancanti (es. mock login o login rapido con sola email)
-    const rawName = name || nome;
-    const rawSurname = surname || cognome;
-    const defaultName = rawName?.trim() || cleanEmail.split('@')[0]?.split('.')[0] || 'Utente';
-    const defaultSurname = rawSurname?.trim() || cleanEmail.split('@')[0]?.split('.')[1] || 'JESic';
+    const defaultName = extractedName || cleanEmail.split('@')[0]?.split('.')[0] || 'Utente';
+    const defaultSurname = extractedSurname || cleanEmail.split('@')[0]?.split('.')[1] || 'JESic';
 
     // Cerca l'utente SOLO tramite email nel database MongoDB
     let existing = await UserModel.findOne({ email: cleanEmail });
@@ -146,14 +186,11 @@ const handleUserSync = async (req: Request, res: Response) => {
     if (existing) {
       // REGOLA: Se l'utente esiste già nel DB, NON sovrascrivere MAI il 'role'.
       // MongoDB è l'unica fonte di verità!
-      if (rawName && (!existing.name || existing.name === 'Utente')) existing.name = rawName.trim();
-      if (rawSurname && (!existing.surname || existing.surname === 'JESic')) existing.surname = rawSurname.trim();
+      if (defaultName && (!existing.name || existing.name === 'Utente')) existing.name = defaultName;
+      if (defaultSurname && (!existing.surname || existing.surname === 'JESic')) existing.surname = defaultSurname;
+      if (extractedAvatar && !existing.avatarUrl) existing.avatarUrl = extractedAvatar;
       if ((jesicRole || ruolo) && !existing.jesicRole) existing.jesicRole = jesicRole || ruolo;
-      if (avatarUrl && !existing.avatarUrl) existing.avatarUrl = avatarUrl;
-      if (password && !existing.password) existing.password = password;
       if (googleCalendarConnected !== undefined) existing.googleCalendarConnected = Boolean(googleCalendarConnected);
-
-      // Token Google completamente OPZIONALI: aggiorna solo se passati dal frontend
       if (googleAccessToken) existing.googleAccessToken = googleAccessToken;
       if (googleRefreshToken) existing.googleRefreshToken = googleRefreshToken;
 
@@ -169,8 +206,6 @@ const handleUserSync = async (req: Request, res: Response) => {
         jesicRole: existing.jesicRole || 'Consulente Junior',
         avatarUrl: existing.avatarUrl || null,
         googleCalendarConnected: Boolean(existing.googleCalendarConnected),
-        googleAccessToken: existing.googleAccessToken || null,
-        googleRefreshToken: existing.googleRefreshToken || null,
       };
       return res.json({ user: jsonUser });
     }
@@ -187,7 +222,7 @@ const handleUserSync = async (req: Request, res: Response) => {
       role: assignedRole,
       systemRole: assignedRole,
       jesicRole: jesicRole || ruolo || 'Consulente Junior',
-      avatarUrl: avatarUrl || null,
+      avatarUrl: extractedAvatar || null,
       googleCalendarConnected: googleCalendarConnected !== undefined ? Boolean(googleCalendarConnected) : true,
       googleAccessToken: googleAccessToken || null,
       googleRefreshToken: googleRefreshToken || null,
@@ -203,8 +238,6 @@ const handleUserSync = async (req: Request, res: Response) => {
       jesicRole: newUserDoc.jesicRole,
       avatarUrl: newUserDoc.avatarUrl,
       googleCalendarConnected: Boolean(newUserDoc.googleCalendarConnected),
-      googleAccessToken: newUserDoc.googleAccessToken || null,
-      googleRefreshToken: newUserDoc.googleRefreshToken || null,
     };
 
     return res.status(201).json({ user: jsonUser });

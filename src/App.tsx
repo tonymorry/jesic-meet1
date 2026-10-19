@@ -576,26 +576,13 @@ export default function App() {
     setCurrentTab('groups');
   };
 
-  // Accesso e Sincronizzazione con Google OAuth
-  const handleGoogleAuth = async (googleData: {
-    name: string;
-    surname: string;
-    email: string;
-    avatarUrl?: string;
-    accessToken: string;
-  }) => {
+  // Accesso e Sincronizzazione con il vero Google OAuth2 (@react-oauth/google -> backend google-auth-library)
+  const handleGoogleCredential = async (credential: string) => {
     try {
       const res = await fetch('/api/users/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: googleData.name,
-          surname: googleData.surname,
-          email: googleData.email,
-          avatarUrl: googleData.avatarUrl,
-          googleAccessToken: googleData.accessToken,
-          googleCalendarConnected: true,
-        }),
+        body: JSON.stringify({ credential }),
       });
 
       if (res.ok) {
@@ -603,33 +590,26 @@ export default function App() {
         if (data.user) {
           const authUser: User = {
             ...data.user,
-            googleAccessToken: googleData.accessToken,
             googleCalendarConnected: true,
           };
-          setUsers((prev) => [...prev.filter((u) => u.id !== authUser.id), authUser]);
+          setUsers((prev) => [
+            ...prev.filter(
+              (u) => u.id !== authUser.id && u.email.toLowerCase() !== authUser.email.toLowerCase()
+            ),
+            authUser,
+          ]);
           setCurrentUser(authUser);
           setCurrentTab('groups');
           return;
         }
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Errore durante la sincronizzazione con MongoDB');
       }
-    } catch (e) {
-      console.warn('[handleGoogleAuth error]', e);
+    } catch (e: any) {
+      console.warn('[handleGoogleCredential error]', e);
+      throw e;
     }
-
-    const fallbackUser: User = {
-      id: `user-${Date.now()}`,
-      name: googleData.name,
-      surname: googleData.surname,
-      email: googleData.email,
-      role: 'user',
-      systemRole: 'user',
-      avatarUrl: googleData.avatarUrl,
-      googleAccessToken: googleData.accessToken,
-      googleCalendarConnected: true,
-    };
-    setUsers((prev) => [...prev, fallbackUser]);
-    setCurrentUser(fallbackUser);
-    setCurrentTab('groups');
   };
 
   const handleLogout = () => {
@@ -1312,7 +1292,7 @@ export default function App() {
           registeredUsers={users}
           onLogin={handleLoginUser}
           onRegister={handleRegisterUser}
-          onGoogleAuth={handleGoogleAuth}
+          onGoogleCredential={handleGoogleCredential}
           onOpenPublicBooking={navigateToPublicBooking}
         />
       ) : (
