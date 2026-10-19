@@ -1295,12 +1295,9 @@ export default function App() {
 
   return (
     <>
-      {/* 1. ANIMAZIONE SPLASH SCREEN (Primissima cosa renderizzata in assoluto sopra il sito in background) */}
+      {/* 1. ANIMAZIONE SPLASH SCREEN (Primissima cosa renderizzata sopra il sito in background) */}
       {showSplash && (
-        <SplashScreen
-          isReady={isAuthDetermined}
-          onFinish={() => setShowSplash(false)}
-        />
+        <SplashScreen onFinish={() => setShowSplash(false)} />
       )}
 
       {/* 2. ROTTA PUBBLICA ESTERNA /prenota-call */}
