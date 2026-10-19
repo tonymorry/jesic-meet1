@@ -1,13 +1,11 @@
 /**
  * JESic Meet - Splash Screen con Animazione Mascotte Cartonata
  * 
- * Sequenza animata:
- * 1. Spunta il logo JESic al centro (pop & glow elegante).
- * 2. La mascotte spunta in basso dal lato sinistro dello schermo.
- * 3. Corre lungo il pavimento fino in basso al lato destro del logo.
- * 4. Carica il salto guardando verso l'alto.
- * 5. Balza in alto, si aggrappa al bordo superiore dello schermo.
- * 6. Tira giù tutto il sipario verso il basso con dinamismo cartoon.
+ * Sequenza dinamica:
+ * - Sfondo semi-trasparente con glassmorphism (backdrop-blur-md) per far intravedere il sito sottostante.
+ * - Nessun setTimeout fisso di 2.5s: non appena il frontend ha verificato se c'è un currentUser
+ *   nel localStorage o se il backend ha risposto (prop isReady), l'animazione conclude
+ *   immediatamente tirando giù il sipario e svelando la schermata dell'app.
  */
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -15,9 +13,10 @@ import { CartoonMascot, MascotPhase } from './CartoonMascot';
 
 interface SplashScreenProps {
   onFinish?: () => void;
+  isReady?: boolean;
 }
 
-export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
+export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish, isReady = false }) => {
   // Stato visibilità logo centrale
   const [logoVisible, setLogoVisible] = useState(false);
 
@@ -39,6 +38,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
   const [isDone, setIsDone] = useState(false);
 
   const timersRef = useRef<NodeJS.Timeout[]>([]);
+  const isExitingRef = useRef<boolean>(false);
 
   const addTimer = (cb: () => void, ms: number) => {
     const t = setTimeout(cb, ms);
@@ -46,80 +46,77 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
     return t;
   };
 
+  // 1. Ingresso logo e comparsa mascotte veloce
   useEffect(() => {
-    // 1. Spunta il logo JESic al centro (80ms)
+    // Spunta il logo JESic al centro (60ms)
     addTimer(() => {
       setLogoVisible(true);
-    }, 80);
+    }, 60);
 
-    // 2. La mascotte spunta in basso dal lato sinistro (200ms)
+    // La mascotte spunta in basso dal lato sinistro (120ms)
     addTimer(() => {
       setMascotPhase('walk');
-    }, 200);
+    }, 120);
 
-    // 3. Inizia la corsa fluida verso in basso al lato destro del logo (260ms)
+    // Inizia la corsa fluida verso il logo (180ms)
     addTimer(() => {
       setHasArrivedAtRight(true);
-    }, 260);
+    }, 180);
 
-    // Ciclo del passo corsa veloce ed energico (ogni 85ms)
+    // Ciclo del passo corsa veloce ed energico
     const runInterval = setInterval(() => {
       setWalkStep((prev) => (prev + 1) % 4);
     }, 85);
-
-    // 4. Arriva in basso a destra del logo e carica il salto (1400ms)
-    addTimer(() => {
-      setMascotPhase('anticipate');
-    }, 1400);
-
-    // 5. Salto acrobatico dal basso verso il soffitto (1750ms)
-    addTimer(() => {
-      setMascotPhase('jump');
-      setIsJumpingToCeiling(true);
-    }, 1750);
-
-    // 6. Si aggrappa con entrambe le mani al bordo superiore dello schermo (2200ms)
-    addTimer(() => {
-      setMascotPhase('grab');
-      setTopBarSag(true);
-    }, 2200);
-
-    // 7. Tira giù con tutto il peso e BUTTA TUTTO IL SIPARIO GIÙ (2700ms)
-    addTimer(() => {
-      setMascotPhase('pulldown');
-      setTimeout(() => {
-        setCurtainThrownDown(true);
-      }, 200);
-    }, 2700);
-
-    // 8. Conclusione animazione e svelamento dell'app (3500ms)
-    addTimer(() => {
-      setIsDone(true);
-      onFinish?.();
-    }, 3500);
 
     return () => {
       clearInterval(runInterval);
       timersRef.current.forEach(clearTimeout);
     };
-  }, [onFinish]);
+  }, []);
 
-  // Click o tocco rapido per saltare o accelerare immediatamente l'azione
+  // 2. Conclusione animazione NON APPENA l'app è pronta (localStorage verificato o backend risposto)
+  // Rimosso qualsiasi setTimeout fisso di 2.5s!
+  useEffect(() => {
+    if (!isReady || isExitingRef.current) return;
+    isExitingRef.current = true;
+
+    // Balza subito in alto, afferra la sbarra superiore e tira giù il sipario
+    setMascotPhase('grab');
+    setTopBarSag(true);
+    setIsJumpingToCeiling(true);
+    setHasArrivedAtRight(true);
+
+    const tPull = setTimeout(() => {
+      setMascotPhase('pulldown');
+      setCurtainThrownDown(true);
+    }, 160);
+
+    const tDone = setTimeout(() => {
+      setIsDone(true);
+      onFinish?.();
+    }, 550);
+
+    return () => {
+      clearTimeout(tPull);
+      clearTimeout(tDone);
+    };
+  }, [isReady, onFinish]);
+
+  // Click o tocco rapido per saltare istantaneamente
   const handleFastSkip = () => {
-    if (curtainThrownDown) return;
+    if (isExitingRef.current) return;
+    isExitingRef.current = true;
 
     setMascotPhase('pulldown');
     setHasArrivedAtRight(true);
     setIsJumpingToCeiling(true);
     setTopBarSag(true);
+    setCurtainThrownDown(true);
 
     setTimeout(() => {
-      setCurtainThrownDown(true);
-      setTimeout(() => {
-        setIsDone(true);
-        onFinish?.();
-      }, 600);
-    }, 150);
+      setIsDone(true);
+      onFinish?.();
+    }, 320);
   };
 
   if (isDone) {
@@ -135,19 +132,19 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
           ? 'cubic-bezier(0.55, 0.055, 0.675, 0.19)'
           : 'cubic-bezier(0.25, 1, 0.5, 1)',
       }}
-      className={`fixed inset-0 z-[99999] bg-[#121212] flex flex-col items-center justify-center select-none overflow-hidden cursor-pointer transition-transform duration-700 ${
+      className={`fixed inset-0 z-[99999] bg-[#121212]/80 backdrop-blur-md flex flex-col items-center justify-center select-none overflow-hidden cursor-pointer transition-all duration-500 ${
         curtainThrownDown
-          ? 'translate-y-full shadow-[0_-25px_60px_rgba(242,62,46,0.6)]'
-          : 'translate-y-0'
+          ? 'translate-y-full opacity-0 pointer-events-none shadow-[0_-25px_60px_rgba(242,62,46,0.6)]'
+          : 'translate-y-0 opacity-100'
       }`}
     >
-      {/* Sfondo radiale con bagliore rosso brand JESic */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(242,62,46,0.18)_0%,rgba(18,18,18,0.98)_70%)] pointer-events-none" />
+      {/* Sfondo radiale con bagliore rosso brand JESic semi-trasparente per far intravedere il sito */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(242,62,46,0.16)_0%,rgba(18,18,18,0.72)_72%)] pointer-events-none" />
 
       {/* Sbarra/bordo superiore dello schermo su cui la mascotte si aggrappa */}
       <div className="absolute top-0 left-0 right-0 z-40 pointer-events-none">
         <div
-          className={`h-2.5 bg-gradient-to-r from-neutral-800 via-[#f23e2e] to-neutral-800 transition-all duration-250 shadow-[0_4px_15px_rgba(242,62,46,0.7)] ${
+          className={`h-2.5 bg-gradient-to-r from-neutral-800 via-[#f23e2e] to-neutral-800 transition-all duration-200 shadow-[0_4px_15px_rgba(242,62,46,0.7)] ${
             topBarSag ? 'translate-y-3.5 scale-y-125 rounded-b-2xl' : 'translate-y-0'
           }`}
         />
@@ -158,7 +155,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
 
       {/* CONTENUTO CENTRALE: Logo Brand Ufficiale JESic Meet */}
       <div
-        className={`relative z-10 flex flex-col items-center text-center px-4 transition-all duration-700 ease-out ${
+        className={`relative z-10 flex flex-col items-center text-center px-4 transition-all duration-500 ease-out ${
           logoVisible
             ? 'opacity-100 scale-100 translate-y-0'
             : 'opacity-0 scale-75 translate-y-6'
@@ -188,7 +185,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
 
         {/* Barretta d'accento brand */}
         <div
-          className={`h-0.5 bg-gradient-to-r from-transparent via-[#f23e2e] to-transparent rounded-full mt-3 transition-all duration-1000 ${
+          className={`h-0.5 bg-gradient-to-r from-transparent via-[#f23e2e] to-transparent rounded-full mt-3 transition-all duration-700 ${
             logoVisible ? 'w-24 opacity-100' : 'w-0 opacity-0'
           }`}
         />
@@ -196,32 +193,26 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
 
       {/* -------------------------------------------------------------------- */}
       {/* MASCOTTE CARTONATA:                                                  */}
-      {/* 1. Spunta in basso dal lato sinistro                                 */}
-      {/* 2. Corre fino in basso al lato destro del logo                      */}
-      {/* 3. Salta verso l'alto, si aggrappa e butta tutto giù                 */}
       {/* -------------------------------------------------------------------- */}
       {mascotPhase !== 'hidden' && (
         <div
           style={{
-            // Orizzontalmente: parte fuori/in basso a sinistra (-60px) e corre fino in basso a destra del logo
             left: hasArrivedAtRight
               ? 'min(calc(50% + 115px), calc(100vw - 44px))'
               : '-60px',
-            // Verticalmente: corre in basso lungo il pavimento (24px) poi balza in alto al soffitto
             bottom: isJumpingToCeiling
-              ? 'calc(100% - 110px)' // Aggrappata al bordo superiore dello schermo
-              : '24px',              // In basso lungo il pavimento
+              ? 'calc(100% - 110px)'
+              : '24px',
             transform: 'translateX(-50%)',
             transition:
               mascotPhase === 'walk'
-                ? 'left 1.15s cubic-bezier(0.2, 0.85, 0.35, 1)'
-                : mascotPhase === 'jump'
-                ? 'bottom 0.45s cubic-bezier(0.12, 0.85, 0.32, 1)'
+                ? 'left 0.8s cubic-bezier(0.2, 0.85, 0.35, 1)'
+                : mascotPhase === 'jump' || mascotPhase === 'grab'
+                ? 'bottom 0.35s cubic-bezier(0.12, 0.85, 0.32, 1)'
                 : 'none',
           }}
           className="absolute z-50 pointer-events-none flex flex-col items-center"
         >
-          {/* Mascotte Cartonata compatta */}
           <CartoonMascot
             phase={mascotPhase}
             walkStep={walkStep}
@@ -232,8 +223,8 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
 
       {/* Suggerimento per tocco rapido */}
       <div
-        className={`absolute bottom-3 text-[10px] text-neutral-500 font-medium tracking-wide transition-opacity duration-500 ${
-          logoVisible && !curtainThrownDown ? 'opacity-60' : 'opacity-0'
+        className={`absolute bottom-3 text-[10px] text-neutral-400 font-medium tracking-wide transition-opacity duration-300 ${
+          logoVisible && !curtainThrownDown ? 'opacity-70' : 'opacity-0'
         }`}
       >
         Tocca per continuare

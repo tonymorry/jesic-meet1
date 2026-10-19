@@ -81,7 +81,7 @@ export async function createGoogleCalendarEvent(
 
   // Se non c'è nessun token disponibile, fallback trasparente per non interrompere il flusso
   if (!accessToken && !refreshToken) {
-    console.warn('[Google Calendar] Nessun token OAuth disponibile per l\'utente. Generazione Meet fallback.');
+    console.warn("Token Google assente, evento non inserito in Calendar");
     const fallbackMeet = isOnline
       ? `https://meet.google.com/jes-${Math.random().toString(36).substring(2, 6)}-${Math.random().toString(36).substring(2, 6)}`
       : undefined;

@@ -231,7 +231,10 @@ export default function App() {
           });
         }
       })
-      .catch((e) => console.log('[Sync /api/users]', e));
+      .catch((e) => console.log('[Sync /api/users]', e))
+      .finally(() => {
+        setIsAuthDetermined(true);
+      });
 
     // 2. Carica Gruppi dal Database
     fetch('/api/groups')
@@ -275,8 +278,13 @@ export default function App() {
   }, []);
 
 
-  // Stato Splash Screen iniziale a tendina (Sempre visibile al refresh/avvio)
+  // Stato Splash Screen iniziale:
+  // - showSplash: controlla la visibilità dello splash screen
+  // - isAuthDetermined: true non appena sappiamo se mostrare AuthScreen o Dashboard
   const [showSplash, setShowSplash] = useState(true);
+  const [isAuthDetermined, setIsAuthDetermined] = useState(() => {
+    return !!localStorage.getItem(STORAGE_CURRENT_USER_KEY);
+  });
 
   // Stato UI Navigazione:
   // - Fuori dal gruppo: 'groups' | 'polls' | 'profile'
@@ -528,21 +536,27 @@ export default function App() {
   };
 
   const handleLoginUser = async (user: User) => {
-    // Sincronizza immediatamente il ruolo reale dal database MongoDB
+    // Sincronizza immediatamente il profilo con MongoDB via /api/users/sync (senza dipendere dai token Google)
     try {
-      const res = await fetch('/api/users');
-      if (res.ok) {
-        const data = await res.json();
-        const matched = data.users?.find(
-          (u: User) => u.email.toLowerCase() === user.email.toLowerCase() || u.id === user.id
-        );
-        if (matched) {
+      const syncRes = await fetch('/api/users/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: user.email,
+          name: user.name,
+          surname: user.surname,
+        }),
+      });
+      if (syncRes.ok) {
+        const data = await syncRes.json();
+        if (data.user) {
           const freshUser: User = {
             ...user,
-            ...matched,
-            role: (matched.role as AppRole) || 'user',
-            systemRole: (matched.role as AppRole) || 'user',
+            ...data.user,
+            role: (data.user.role as AppRole) || 'user',
+            systemRole: (data.user.role as AppRole) || 'user',
           };
+          setUsers((prev) => [...prev.filter((u) => u.id !== freshUser.id && u.email.toLowerCase() !== freshUser.email.toLowerCase()), freshUser]);
           setCurrentUser(freshUser);
           setCurrentTab('groups');
           return;
@@ -1279,39 +1293,35 @@ export default function App() {
   // Evento selezionato nel modale
   const selectedEvent = events.find((e) => e.id === selectedEventId);
 
-  // 1. ANIMAZIONE SPLASH SCREEN (Mostrata sempre ad ogni avvio/refresh della pagina, prima di AuthScreen e Dashboard)
-  if (showSplash) {
-    return <SplashScreen onFinish={() => setShowSplash(false)} />;
-  }
-
-  // 2. ROTTA PUBBLICA ESTERNA /prenota-call
-  if (currentRoute === '/prenota-call') {
-    return (
-      <PublicBookingForm
-        onSubmitRequest={handleClientRequestSubmit}
-        onBackToApp={navigateBackToApp}
-      />
-    );
-  }
-
-  // 3. SCHERMATA LOGIN / REGISTRAZIONE
-  if (!currentUser) {
-    return (
-      <AuthScreen
-        registeredUsers={users}
-        onLogin={handleLoginUser}
-        onRegister={handleRegisterUser}
-        onGoogleAuth={handleGoogleAuth}
-        onOpenPublicBooking={navigateToPublicBooking}
-      />
-    );
-  }
-
   return (
     <>
-      <div className="min-h-screen bg-neutral-100 dark:bg-black font-['Ubuntu',sans-serif] text-neutral-900 dark:text-neutral-100 antialiased flex flex-col transition-colors selection:bg-[#f23e2e] selection:text-white">
-        
-        <div className="w-full max-w-md sm:max-w-xl md:max-w-4xl lg:max-w-6xl xl:max-w-7xl mx-auto flex-1 flex flex-col bg-white dark:bg-neutral-900 shadow-2xl min-h-screen border-x border-neutral-200/80 dark:border-neutral-800">
+      {/* 1. ANIMAZIONE SPLASH SCREEN (Primissima cosa renderizzata in assoluto sopra il sito in background) */}
+      {showSplash && (
+        <SplashScreen
+          isReady={isAuthDetermined}
+          onFinish={() => setShowSplash(false)}
+        />
+      )}
+
+      {/* 2. ROTTA PUBBLICA ESTERNA /prenota-call */}
+      {currentRoute === '/prenota-call' ? (
+        <PublicBookingForm
+          onSubmitRequest={handleClientRequestSubmit}
+          onBackToApp={navigateBackToApp}
+        />
+      ) : !currentUser ? (
+        /* 3. SCHERMATA LOGIN / REGISTRAZIONE (Intravista subito dallo sfondo semi-trasparente) */
+        <AuthScreen
+          registeredUsers={users}
+          onLogin={handleLoginUser}
+          onRegister={handleRegisterUser}
+          onGoogleAuth={handleGoogleAuth}
+          onOpenPublicBooking={navigateToPublicBooking}
+        />
+      ) : (
+        /* 4. DASHBOARD APPLICATIVA (Intravista subito dallo sfondo se utente autenticato) */
+        <div className="min-h-screen bg-neutral-100 dark:bg-black font-['Ubuntu',sans-serif] text-neutral-900 dark:text-neutral-100 antialiased flex flex-col transition-colors selection:bg-[#f23e2e] selection:text-white">
+          <div className="w-full max-w-md sm:max-w-xl md:max-w-4xl lg:max-w-6xl xl:max-w-7xl mx-auto flex-1 flex flex-col bg-white dark:bg-neutral-900 shadow-2xl min-h-screen border-x border-neutral-200/80 dark:border-neutral-800">
           
           {/* Header Superiore */}
           <TopHeader
@@ -1622,6 +1632,7 @@ export default function App() {
 
         </div>
       </div>
+      )}
     </>
   );
 }
