@@ -26,6 +26,7 @@ import {
   Check,
   Search,
   Filter,
+  Trash2,
 } from 'lucide-react';
 import { formatDateShort } from '../utils/dateUtils';
 
@@ -37,6 +38,7 @@ interface PollsHubViewProps {
   onOpenCreatePoll: () => void;
   onOpenPollDetail: (eventId: string) => void;
   onDeclinePoll?: (eventId: string) => void;
+  onDeletePoll?: (eventId: string) => void;
 }
 
 export const PollsHubView: React.FC<PollsHubViewProps> = ({
@@ -47,12 +49,14 @@ export const PollsHubView: React.FC<PollsHubViewProps> = ({
   onOpenCreatePoll,
   onOpenPollDetail,
   onDeclinePoll,
+  onDeletePoll,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'created' | 'invited'>('created');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Filtra solo sondaggi (eventType === 'poll' o senza eventType)
-  const pollEvents = events.filter((e) => e.eventType !== 'official');
+  // REGOLA: I sondaggi dei vari gruppi NON devono spuntare nella home fuori dal gruppo!
+  const pollEvents = events.filter((e) => e.eventType !== 'official' && !e.groupId);
 
   // 1. Sondaggi CREATI DALL'UTENTE
   const createdPolls = pollEvents.filter((e) => e.creatorId === currentUser.id);
@@ -323,6 +327,24 @@ export const PollsHubView: React.FC<PollsHubViewProps> = ({
 
                   {/* Azione Rapida */}
                   <div className="flex items-center gap-2">
+                    {/* Se creatore o admin: opzione Elimina */}
+                    {(isCreator || currentUser.role === 'admin') && onDeletePoll && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.confirm(`Sei sicuro di voler eliminare il sondaggio "${poll.title}"? L'eliminazione è definitiva e non comparirà più a nessun invitato.`)) {
+                            onDeletePoll(poll.id);
+                          }
+                        }}
+                        className="p-1.5 rounded-lg text-neutral-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 cursor-pointer transition-colors"
+                        title="Elimina definitivamente questo sondaggio"
+                        aria-label="Elimina sondaggio"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+
                     {/* Se invitato e non ha votato: opzione Rifiuta */}
                     {!isCreator && !hasVoted && onDeclinePoll && (
                       <button

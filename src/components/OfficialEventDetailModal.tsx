@@ -24,6 +24,7 @@ import {
   Sparkles,
   Edit3,
   CalendarCheck,
+  Trash2,
 } from 'lucide-react';
 
 interface OfficialEventDetailModalProps {
@@ -34,6 +35,7 @@ interface OfficialEventDetailModalProps {
   onParticipate: (event: MeetingEvent) => Promise<void> | void;
   onDecline: (event: MeetingEvent) => void;
   onEditEvent?: (event: MeetingEvent) => void;
+  onDeleteEvent?: (eventId: string) => void;
 }
 
 export const OfficialEventDetailModal: React.FC<OfficialEventDetailModalProps> = ({
@@ -44,6 +46,7 @@ export const OfficialEventDetailModal: React.FC<OfficialEventDetailModalProps> =
   onParticipate,
   onDecline,
   onEditEvent,
+  onDeleteEvent,
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
@@ -160,6 +163,27 @@ export const OfficialEventDetailModal: React.FC<OfficialEventDetailModalProps> =
               >
                 <Edit3 className="w-3.5 h-3.5 text-[#f23e2e]" />
                 <span className="hidden sm:inline">Modifica Evento</span>
+              </button>
+            )}
+
+            {(isCreator || currentUser.role === 'admin') && onDeleteEvent && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `Sei sicuro di voler eliminare definitivamente l'evento "${event.title}"? L'eliminazione è definitiva e non comparirà più a nessun invitato.`
+                    )
+                  ) {
+                    onClose();
+                    onDeleteEvent(event.id);
+                  }
+                }}
+                className="py-1.5 px-3 rounded-xl bg-red-50 hover:bg-red-100 dark:bg-red-950/60 dark:hover:bg-red-900/60 text-red-700 dark:text-red-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs border border-red-200/80 dark:border-red-900/50"
+                title="Elimina definitivamente questo evento per te e per tutti gli invitati"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Elimina</span>
               </button>
             )}
 

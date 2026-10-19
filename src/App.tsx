@@ -1078,6 +1078,29 @@ export default function App() {
     }).catch((e) => console.log('[API decline poll]', e));
   };
 
+  // ELIMINAZIONE SONDAGGIO / EVENTO DEFINITIVA DA MONGODB
+  // REGOLA: Se eliminato, non compare più a NESSUN invitato (cancellato da EventModel e EventResponseModel)
+  const handleDeletePoll = async (eventId: string) => {
+    // 1. Rimuovi immediatamente dallo stato locale del frontend
+    setEvents((prev) => prev.filter((e) => e.id !== eventId));
+    setResponses((prev) => prev.filter((r) => r.eventId !== eventId));
+    if (selectedEventId === eventId) {
+      setSelectedEventId(null);
+    }
+
+    // 2. Chiamata DELETE al backend per persistenza su MongoDB
+    try {
+      const res = await fetch(`/api/events/${eventId}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        await fetch(`/api/polls/${eventId}`, { method: 'DELETE' });
+      }
+    } catch (e) {
+      console.warn('[API delete poll error]', e);
+    }
+  };
+
   // CONFERMA SLOT FINALE SONDAGGIO
   const handleConfirmMeetingSlot = async (
     eventId: string,
@@ -1358,16 +1381,17 @@ export default function App() {
                   />
                 )}
 
-                {/* 2. CENTRO: "Sondaggi" (Creati da te / A cui sei invitato) */}
+                {/* 2. CENTRO: "Sondaggi" (Creati da te / A cui sei invitato fuori dai gruppi) */}
                 {currentTab === 'polls' && (
                   <PollsHubView
                     currentUser={currentUser}
-                    events={events}
+                    events={events.filter((e) => !e.groupId)}
                     allUsers={users}
                     responses={responses}
                     onOpenCreatePoll={handlePlusButtonClick}
                     onOpenPollDetail={(evtId) => setSelectedEventId(evtId)}
                     onDeclinePoll={handleDeclinePoll}
+                    onDeletePoll={handleDeletePoll}
                   />
                 )}
 
@@ -1574,7 +1598,7 @@ export default function App() {
           )}
 
           {/* Modale Dettaglio Sondaggio Disponibilità When2meet */}
-          {selectedEvent && selectedEvent.eventType === 'poll' && (
+          {selectedEvent && selectedEvent.eventType !== 'official' && (
             <EventDetailModal
               event={selectedEvent}
               currentUser={currentUser}
@@ -1590,6 +1614,7 @@ export default function App() {
                 setEventToEdit(evt);
                 setIsCreatePollModalOpen(true);
               }}
+              onDeletePoll={handleDeletePoll}
             />
           )}
 
@@ -1607,6 +1632,7 @@ export default function App() {
                 setEventToEdit(evt);
                 setIsCreateOfficialModalOpen(true);
               }}
+              onDeleteEvent={handleDeletePoll}
             />
           )}
 

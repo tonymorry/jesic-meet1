@@ -34,9 +34,12 @@ import { OAuth2Client } from 'google-auth-library';
 
 dotenv.config();
 
-const googleAuthClient = new OAuth2Client(
-  process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || ''
+const oAuth2Client = new OAuth2Client(
+  process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || '',
+  process.env.GOOGLE_CLIENT_SECRET || '',
+  'postmessage'
 );
+const googleAuthClient = oAuth2Client;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -117,7 +120,8 @@ app.get('/api/users', async (_req: Request, res: Response) => {
 const handleUserSync = async (req: Request, res: Response) => {
   try {
     const {
-      credential, // JWT ID Token restituito da @react-oauth/google
+      code, // Authorization Code restituito da useGoogleLogin (flow: 'auth-code')
+      credential, // JWT ID Token restituito da @react-oauth/google (alternativo)
       id,
       name,
       surname,
@@ -137,12 +141,61 @@ const handleUserSync = async (req: Request, res: Response) => {
     let extractedName = (name || nome)?.trim() || '';
     let extractedSurname = (surname || cognome)?.trim() || '';
     let extractedAvatar = avatarUrl || null;
+    let actualAccessToken = googleAccessToken || null;
+    let actualRefreshToken = googleRefreshToken || null;
 
-    // Se il client ha inviato il JWT token ufficiale di Google OAuth2
-    if (credential && typeof credential === 'string') {
+    // 1. Scambio dell'Authorization Code con token reali Google (flow: 'auth-code')
+    // REGOLA CRITICA: redirect_uri deve essere 'postmessage' per evitare redirect_uri_mismatch
+    if (code && typeof code === 'string') {
+      try {
+        const tokenResponse = await oAuth2Client.getToken({
+          code,
+          redirect_uri: 'postmessage',
+        });
+        const tokens = tokenResponse.tokens;
+        if (tokens.access_token) {
+          actualAccessToken = tokens.access_token;
+        }
+        if (tokens.refresh_token) {
+          actualRefreshToken = tokens.refresh_token;
+        }
+        if (tokens.id_token) {
+          try {
+            const ticket = await oAuth2Client.verifyIdToken({
+              idToken: tokens.id_token,
+              audience: process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID || undefined,
+            });
+            const payload = ticket.getPayload();
+            if (payload?.email) {
+              cleanEmail = payload.email.toLowerCase().trim();
+              extractedName = payload.given_name || payload.name?.split(' ')[0] || cleanEmail.split('@')[0];
+              extractedSurname = payload.family_name || payload.name?.split(' ').slice(1).join(' ') || 'JESic';
+              extractedAvatar = payload.picture || extractedAvatar;
+            }
+          } catch (jwtErr: any) {
+            // Decodifica di emergenza payload base64
+            const parts = tokens.id_token.split('.');
+            if (parts.length === 3) {
+              const decoded = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+              if (decoded?.email) {
+                cleanEmail = decoded.email.toLowerCase().trim();
+                extractedName = decoded.given_name || decoded.name?.split(' ')[0] || cleanEmail.split('@')[0];
+                extractedSurname = decoded.family_name || decoded.name?.split(' ').slice(1).join(' ') || 'JESic';
+                extractedAvatar = decoded.picture || extractedAvatar;
+              }
+            }
+          }
+        }
+      } catch (tokenErr: any) {
+        console.error('Errore scambio code OAuth2 Google (redirect_uri: postmessage):', tokenErr.message);
+      }
+    }
+
+    // 2. Se il client ha inviato il JWT token (credential)
+    if (!cleanEmail && credential && typeof credential === 'string') {
       try {
         const expectedAudience = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID;
-        const ticket = await googleAuthClient.verifyIdToken({
+        const ticket = await oAuth2Client.verifyIdToken({
           idToken: credential,
           audience: expectedAudience || undefined,
         });
@@ -190,9 +243,14 @@ const handleUserSync = async (req: Request, res: Response) => {
       if (defaultSurname && (!existing.surname || existing.surname === 'JESic')) existing.surname = defaultSurname;
       if (extractedAvatar && !existing.avatarUrl) existing.avatarUrl = extractedAvatar;
       if ((jesicRole || ruolo) && !existing.jesicRole) existing.jesicRole = jesicRole || ruolo;
+      if (actualAccessToken) existing.googleAccessToken = actualAccessToken;
+      if (actualRefreshToken) {
+        existing.googleRefreshToken = actualRefreshToken;
+        existing.googleCalendarConnected = true;
+      } else if (existing.googleRefreshToken) {
+        existing.googleCalendarConnected = true;
+      }
       if (googleCalendarConnected !== undefined) existing.googleCalendarConnected = Boolean(googleCalendarConnected);
-      if (googleAccessToken) existing.googleAccessToken = googleAccessToken;
-      if (googleRefreshToken) existing.googleRefreshToken = googleRefreshToken;
 
       await existing.save();
 
@@ -223,9 +281,9 @@ const handleUserSync = async (req: Request, res: Response) => {
       systemRole: assignedRole,
       jesicRole: jesicRole || ruolo || 'Consulente Junior',
       avatarUrl: extractedAvatar || null,
-      googleCalendarConnected: googleCalendarConnected !== undefined ? Boolean(googleCalendarConnected) : true,
-      googleAccessToken: googleAccessToken || null,
-      googleRefreshToken: googleRefreshToken || null,
+      googleCalendarConnected: actualRefreshToken ? true : googleCalendarConnected !== undefined ? Boolean(googleCalendarConnected) : false,
+      googleAccessToken: actualAccessToken || null,
+      googleRefreshToken: actualRefreshToken || null,
     });
 
     const jsonUser = {
@@ -877,19 +935,26 @@ app.patch('/api/events/:id', async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /api/events/:id - Eliminazione evento da MongoDB
-app.delete('/api/events/:id', async (req: Request, res: Response) => {
+// DELETE /api/events/:id & /api/polls/:id - Eliminazione definitiva sondaggio/evento da MongoDB
+const handleDeleteEventOrPoll = async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
     await EventModel.deleteOne({ $or: [{ _id: id }, { id }] });
     await EventResponseModel.deleteMany({ eventId: id });
-    return res.json({ success: true, message: 'Evento eliminato con successo da MongoDB' });
+    await ClientRequestModel.updateMany(
+      { pollEventId: id },
+      { $set: { status: 'pending', pollEventId: null } }
+    );
+    return res.json({ success: true, message: 'Sondaggio/Evento eliminato con successo da MongoDB' });
   } catch (err: any) {
     console.error('Errore cancellazione EventModel MongoDB:', err.message);
-    return res.status(500).json({ error: 'Errore eliminazione evento in MongoDB' });
+    return res.status(500).json({ error: 'Errore eliminazione sondaggio/evento in MongoDB' });
   }
-});
+};
+
+app.delete('/api/events/:id', handleDeleteEventOrPoll);
+app.delete('/api/polls/:id', handleDeleteEventOrPoll);
 
 // POST /api/events/:id/participate - Partecipazione evento ufficiale & Google Calendar
 app.post('/api/events/:id/participate', async (req: Request, res: Response) => {
