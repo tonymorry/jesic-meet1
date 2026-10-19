@@ -576,13 +576,13 @@ export default function App() {
     setCurrentTab('groups');
   };
 
-  // Accesso e Sincronizzazione con il vero Google OAuth2 (@react-oauth/google -> backend google-auth-library)
-  const handleGoogleCredential = async (credential: string) => {
+  // Accesso e Sincronizzazione con il vero Google OAuth2 (Authorization Code con permessi Google Calendar)
+  const handleGoogleAuthCode = async (code: string) => {
     try {
       const res = await fetch('/api/users/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ credential }),
+        body: JSON.stringify({ code }),
       });
 
       if (res.ok) {
@@ -607,7 +607,7 @@ export default function App() {
         throw new Error(errJson.error || 'Errore durante la sincronizzazione con MongoDB');
       }
     } catch (e: any) {
-      console.warn('[handleGoogleCredential error]', e);
+      console.warn('[handleGoogleAuthCode error]', e);
       throw e;
     }
   };
@@ -1277,7 +1277,10 @@ export default function App() {
     <>
       {/* 1. ANIMAZIONE SPLASH SCREEN (Primissima cosa renderizzata sopra il sito in background) */}
       {showSplash && (
-        <SplashScreen onFinish={() => setShowSplash(false)} />
+        <SplashScreen
+          isReady={isAuthDetermined}
+          onFinish={() => setShowSplash(false)}
+        />
       )}
 
       {/* 2. ROTTA PUBBLICA ESTERNA /prenota-call */}
@@ -1292,7 +1295,7 @@ export default function App() {
           registeredUsers={users}
           onLogin={handleLoginUser}
           onRegister={handleRegisterUser}
-          onGoogleCredential={handleGoogleCredential}
+          onGoogleAuthCode={handleGoogleAuthCode}
           onOpenPublicBooking={navigateToPublicBooking}
         />
       ) : (

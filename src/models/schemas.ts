@@ -104,7 +104,7 @@ const UserSchema: Schema<IUser> = new Schema(
     },
     googleRefreshToken: {
       type: String,
-      default: '',
+      default: null,
     },
     googleTokenExpiry: {
       type: Date,

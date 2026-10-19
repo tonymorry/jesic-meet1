@@ -18,9 +18,10 @@ import { CartoonMascot, MascotPhase } from './CartoonMascot';
 
 interface SplashScreenProps {
   onFinish?: () => void;
+  isReady?: boolean;
 }
 
-export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
+export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish, isReady = true }) => {
   // Stato visibilità logo centrale
   const [logoVisible, setLogoVisible] = useState(false);
 
@@ -135,18 +136,22 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
       onClick={handleFastSkip}
       aria-hidden="true"
       style={{
-        transitionTimingFunction: curtainThrownDown
-          ? 'cubic-bezier(0.25, 1, 0.5, 1)'
-          : 'cubic-bezier(0.25, 1, 0.5, 1)',
+        transitionTimingFunction: 'cubic-bezier(0.25, 1, 0.5, 1)',
       }}
-      className={`fixed inset-0 z-[99999] bg-[#141414] flex flex-col items-center justify-center select-none overflow-hidden cursor-pointer transition-transform duration-1000 ${
+      className={`fixed inset-0 z-[99999] flex flex-col items-center justify-center select-none overflow-hidden cursor-pointer transition-all duration-1000 ${
         curtainThrownDown
-          ? 'translate-y-full shadow-[0_-30px_70px_rgba(0,0,0,0.9)]'
-          : 'translate-y-0'
+          ? 'translate-y-full bg-[#141414]/85 backdrop-blur-xs shadow-[0_-30px_70px_rgba(0,0,0,0.95)]'
+          : 'translate-y-0 bg-[#141414]'
       }`}
     >
       {/* Sfondo radiale con bagliore rosso brand JESic */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(242,62,46,0.18)_0%,rgba(18,18,18,0.96)_70%)] pointer-events-none" />
+      <div
+        className={`absolute inset-0 pointer-events-none transition-opacity duration-1000 ${
+          curtainThrownDown
+            ? 'bg-[radial-gradient(circle_at_center,rgba(242,62,46,0.12)_0%,rgba(18,18,18,0.70)_70%)]'
+            : 'bg-[radial-gradient(circle_at_center,rgba(242,62,46,0.18)_0%,rgba(18,18,18,0.96)_70%)]'
+        }`}
+      />
 
       {/* Sbarra/bordo superiore dello schermo su cui la mascotte si aggrappa */}
       <div className="absolute top-0 left-0 right-0 z-40 pointer-events-none">
