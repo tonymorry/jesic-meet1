@@ -18,6 +18,7 @@ export interface User {
   jesicRole?: string; // Ruolo descrittivo (es. 'Presidente', 'Consulente Junior')
   avatarUrl?: string;
   googleAccessToken?: string;
+  googleRefreshToken?: string;
   googleCalendarConnected?: boolean;
 }
 

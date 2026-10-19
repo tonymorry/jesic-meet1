@@ -100,18 +100,18 @@ const UserSchema: Schema<IUser> = new Schema(
     },
     googleAccessToken: {
       type: String,
-      select: false,
+      default: '',
     },
     googleRefreshToken: {
       type: String,
-      select: false,
+      default: '',
     },
     googleTokenExpiry: {
       type: Date,
     },
     googleCalendarConnected: {
       type: Boolean,
-      default: false,
+      default: true,
     },
   },
   {

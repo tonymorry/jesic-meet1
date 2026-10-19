@@ -11,7 +11,6 @@
 import React, { useState } from 'react';
 import { MeetingEvent, User } from '../types';
 import { UserAvatar } from './UserAvatar';
-import { generateGoogleCalendarWebUrl } from '../utils/googleCalendar';
 import {
   X,
   Calendar,
@@ -392,29 +391,6 @@ export const OfficialEventDetailModal: React.FC<OfficialEventDetailModalProps> =
               <span>{myStatus === 'accepted' ? 'Partecipazione Confermata ✓' : 'Partecipa'}</span>
             </button>
           </div>
-          {/* Collegamento Rapido Google Calendar */}
-          {event.finalizedSlot && (
-            <div className="pt-1">
-              <a
-                href={generateGoogleCalendarWebUrl(
-                  event,
-                  event.finalizedSlot.date,
-                  event.finalizedSlot.startTime,
-                  event.finalizedSlot.endTime,
-                  allUsers
-                    .filter((u) => event.invitees.some((i) => i.userId === u.id))
-                    .map((u) => u.email)
-                )}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full py-2 px-3 rounded-xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
-              >
-                <Calendar className="w-3.5 h-3.5 text-[#f23e2e]" />
-                <span>Visualizza / Sincronizza su Google Calendar</span>
-                <ExternalLink className="w-3 h-3 text-neutral-400 ml-0.5" />
-              </a>
-            </div>
-          )}
 
           <p className="text-[10px] text-center text-neutral-400 dark:text-neutral-500 pt-0.5">
             Confermando la presenza, l'evento viene salvato nel tuo Calendario in-app e sincronizzato con Google Calendar.

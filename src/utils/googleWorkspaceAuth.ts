@@ -18,9 +18,13 @@ import { MeetingEvent, User } from '../types';
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 export const auth = getAuth(app);
 
-// Provider Google con scope minimo Calendar Events
+// Provider Google con scope Calendar Events e accesso offline
 const provider = new GoogleAuthProvider();
 provider.addScope('https://www.googleapis.com/auth/calendar.events');
+provider.setCustomParameters({
+  access_type: 'offline',
+  prompt: 'consent',
+});
 
 // Flag per evitare race conditions durante il popup di login
 let isSigningIn = false;

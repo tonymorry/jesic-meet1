@@ -15,7 +15,6 @@ import { MeetingEvent, User, EventResponse, SlotAnalysis, InviteeConfig } from '
 import { AvailabilityGrid } from './AvailabilityGrid';
 import { UserAvatar } from './UserAvatar';
 import { calculateBestMeetingSlots } from '../utils/matchingAlgorithm';
-import { generateGoogleCalendarWebUrl, downloadIcsFile } from '../utils/googleCalendar';
 import {
   X,
   Calendar,
@@ -428,41 +427,10 @@ export const EventDetailModal: React.FC<EventDetailModalProps> = ({
                 )}
               </div>
 
-              {/* Bottoni Calendario */}
-              <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-emerald-200/60 dark:border-emerald-800">
-                <a
-                  href={generateGoogleCalendarWebUrl(
-                    event,
-                    event.finalizedSlot.date,
-                    event.finalizedSlot.startTime,
-                    event.finalizedSlot.endTime,
-                    inviteesWithDetails.map((i) => i.user?.email || '').filter(Boolean)
-                  )}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 py-2 px-3 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-sm shadow-red-600/30"
-                >
-                  <Calendar className="w-4 h-4" />
-                  Aggiungi a Google Calendar
-                </a>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    downloadIcsFile(
-                      event,
-                      event.finalizedSlot!.date,
-                      event.finalizedSlot!.startTime,
-                      event.finalizedSlot!.endTime,
-                      creatorUser,
-                      inviteesWithDetails.map((i) => i.user!).filter(Boolean)
-                    )
-                  }
-                  className="py-2 px-3 bg-white hover:bg-neutral-50 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5"
-                >
-                  <Download className="w-4 h-4" />
-                  Scarica .ICS
-                </button>
+              {/* Stato Sincronizzazione Automatica Google Calendar & Meet */}
+              <div className="flex items-center gap-2 mt-3 pt-3 border-t border-emerald-200/60 dark:border-emerald-800 text-[11px] text-emerald-800 dark:text-emerald-300 font-semibold">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 stroke-[2.5px]" />
+                <span>Sincronizzato automaticamente su Google Calendar con conferenza Google Meet</span>
               </div>
             </div>
           )}

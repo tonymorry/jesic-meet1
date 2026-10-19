@@ -562,6 +562,62 @@ export default function App() {
     setCurrentTab('groups');
   };
 
+  // Accesso e Sincronizzazione con Google OAuth
+  const handleGoogleAuth = async (googleData: {
+    name: string;
+    surname: string;
+    email: string;
+    avatarUrl?: string;
+    accessToken: string;
+  }) => {
+    try {
+      const res = await fetch('/api/users/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: googleData.name,
+          surname: googleData.surname,
+          email: googleData.email,
+          avatarUrl: googleData.avatarUrl,
+          googleAccessToken: googleData.accessToken,
+          googleCalendarConnected: true,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.user) {
+          const authUser: User = {
+            ...data.user,
+            googleAccessToken: googleData.accessToken,
+            googleCalendarConnected: true,
+          };
+          setUsers((prev) => [...prev.filter((u) => u.id !== authUser.id), authUser]);
+          setCurrentUser(authUser);
+          setCurrentTab('groups');
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('[handleGoogleAuth error]', e);
+    }
+
+    const fallbackUser: User = {
+      id: `user-${Date.now()}`,
+      name: googleData.name,
+      surname: googleData.surname,
+      email: googleData.email,
+      role: 'user',
+      systemRole: 'user',
+      avatarUrl: googleData.avatarUrl,
+      googleAccessToken: googleData.accessToken,
+      googleCalendarConnected: true,
+    };
+    setUsers((prev) => [...prev, fallbackUser]);
+    setCurrentUser(fallbackUser);
+    setCurrentTab('groups');
+  };
+
   const handleLogout = () => {
     setCurrentUser(null);
     setActiveGroupId(null);
@@ -891,9 +947,24 @@ export default function App() {
 
     fetch('/api/events', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newMeetingEvent),
-    }).catch((e) => console.log('[API create official event sync]', e));
+      headers: {
+        'Content-Type': 'application/json',
+        ...(currentUser.googleAccessToken ? { Authorization: `Bearer ${currentUser.googleAccessToken}` } : {}),
+      },
+      body: JSON.stringify({
+        ...newMeetingEvent,
+        googleAccessToken: currentUser.googleAccessToken,
+      }),
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.event) {
+          setEvents((prev) =>
+            prev.map((e) => (e.id === newId ? { ...e, ...data.event } : e))
+          );
+        }
+      })
+      .catch((e) => console.log('[API create official event sync]', e));
   };
 
   const handleUpdateOfficialEvent = (updatedEvent: MeetingEvent) => {
@@ -1035,26 +1106,27 @@ export default function App() {
     );
 
     if (targetEvt && currentUser) {
-      const updatedEvt: MeetingEvent = {
-        ...targetEvt,
-        status: 'confirmed',
-        finalizedSlot: finalSlot,
-        meetLink: targetEvt.type === 'online' ? (targetEvt.meetLink || generatedMeet) : undefined,
-      };
-      const attendeeUsers = users.filter((u) => targetEvt.invitees.some((inv) => inv.userId === u.id));
-      autoSyncMeetingEventToCalendar(updatedEvt, finalSlot, currentUser, attendeeUsers).catch((err) =>
-        console.log('[Auto Google Calendar Sync confirmed poll]', err)
-      );
-
       fetch(`/api/events/${eventId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentUser.googleAccessToken ? { Authorization: `Bearer ${currentUser.googleAccessToken}` } : {}),
+        },
         body: JSON.stringify({
           status: 'confirmed',
           finalizedSlot: finalSlot,
-          meetLink: targetEvt.type === 'online' ? (targetEvt.meetLink || generatedMeet) : undefined,
+          googleAccessToken: currentUser.googleAccessToken,
         }),
-      }).catch((err) => console.log('[API confirm meeting slot sync]', err));
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.event) {
+            setEvents((prev) =>
+              prev.map((e) => (e.id === eventId ? { ...e, ...data.event } : e))
+            );
+          }
+        })
+        .catch((err) => console.log('[API confirm meeting slot sync]', err));
     }
   };
 
@@ -1229,6 +1301,7 @@ export default function App() {
         registeredUsers={users}
         onLogin={handleLoginUser}
         onRegister={handleRegisterUser}
+        onGoogleAuth={handleGoogleAuth}
         onOpenPublicBooking={navigateToPublicBooking}
       />
     );

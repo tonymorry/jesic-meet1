@@ -12,6 +12,7 @@
 
 import React, { useState, useRef } from 'react';
 import { AppRole, User, UserSystemRole } from '../types';
+import { googleSignIn } from '../utils/googleWorkspaceAuth';
 import {
   Mail,
   Calendar,
@@ -699,6 +700,31 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             Ogni evento viene inserito automaticamente nel Google Calendar di {currentUser.email}.
           </p>
         </div>
+
+        {!currentUser.googleAccessToken && (
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                const res = await googleSignIn();
+                if (res?.accessToken) {
+                  onUpdateUserProfile?.({
+                    googleAccessToken: res.accessToken,
+                    googleCalendarConnected: true,
+                  });
+                  setCalendarConnected(true);
+                  showNotification('Account Google collegato con successo!');
+                }
+              } catch (e: any) {
+                showNotification('Autorizzazione Google non completata.');
+              }
+            }}
+            className="w-full py-2.5 px-3 bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs"
+          >
+            <Calendar className="w-4 h-4 text-[#f23e2e]" />
+            <span>Collega Account Google Calendar</span>
+          </button>
+        )}
       </div>
 
       {/* Disconnessione */}
