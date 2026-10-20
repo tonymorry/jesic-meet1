@@ -60,7 +60,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         
         {/* Logo Brand JESic Meet */}
         <div
-          onClick={() => onSelectTab && onSelectTab('dashboard')}
+          onClick={() => onSelectTab && onSelectTab(isInsideGroup ? 'dashboard' : 'groups')}
           className="flex items-center gap-2.5 cursor-pointer group shrink-0"
         >
           <div className="w-8 h-8 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
@@ -82,7 +82,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         {onSelectTab && (
           <nav className="hidden md:flex items-center gap-1 bg-neutral-100 dark:bg-neutral-800/80 p-1 rounded-2xl border border-neutral-200/80 dark:border-neutral-700/60 shadow-2xs">
             {!isInsideGroup ? (
-              /* Piattaforma Level: 3 Tab (Gruppi - Sondaggi - Profilo) */
+              /* Piattaforma Level: Gruppi - Sondaggi - Calendario - [Richieste] - Profilo */
               <>
                 <button
                   type="button"
@@ -117,6 +117,39 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
                 <button
                   type="button"
+                  onClick={() => onSelectTab('calendar')}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    currentTab === 'calendar'
+                      ? 'bg-white dark:bg-neutral-900 text-[#f23e2e] shadow-xs font-black'
+                      : 'text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>Calendario</span>
+                </button>
+
+                {isClientAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => onSelectTab('requests')}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer relative ${
+                      currentTab === 'requests'
+                        ? 'bg-white dark:bg-neutral-900 text-[#f23e2e] shadow-xs font-black'
+                        : 'text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <Inbox className="w-3.5 h-3.5" />
+                    <span>Richieste Clienti</span>
+                    {pendingClientRequestsCount > 0 && (
+                      <span className="px-1.5 py-0.2 rounded-full bg-[#f23e2e] text-white text-[9px] font-black animate-pulse">
+                        {pendingClientRequestsCount}
+                      </span>
+                    )}
+                  </button>
+                )}
+
+                <button
+                  type="button"
                   onClick={() => onSelectTab('profile')}
                   className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                     currentTab === 'profile'
@@ -141,18 +174,18 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                   </button>
                 )}
 
-                {/* 1. Dashboard */}
+                {/* 1. Sondaggi (ex Dashboard) */}
                 <button
                   type="button"
                   onClick={() => onSelectTab('dashboard')}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                     currentTab === 'dashboard'
-                      ? 'bg-white dark:bg-neutral-900 text-[#f23e2e] shadow-xs'
+                      ? 'bg-white dark:bg-neutral-900 text-[#f23e2e] shadow-xs font-black'
                       : 'text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white'
                   }`}
                 >
-                  <Home className="w-3.5 h-3.5" />
-                  <span>Dashboard</span>
+                  <Inbox className="w-3.5 h-3.5" />
+                  <span>Sondaggi</span>
                 </button>
 
                 {/* 2. Eventi */}

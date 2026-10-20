@@ -1430,7 +1430,22 @@ export default function App() {
                   />
                 )}
 
-                {/* 3. RICHIESTE CLIENTI (Visibile e accessibile SOLO ad 'admin' e 'admin_clienti') */}
+                {/* 3. CALENDARIO (Eventi e Sondaggi fuori dai gruppi) */}
+                {currentTab === 'calendar' && (
+                  <CalendarView
+                    currentUser={currentUser}
+                    allEvents={events.filter((e) => !e.groupId)}
+                    allUsers={users}
+                    onOpenEventDetail={(evt) => setSelectedEventId(evt.id)}
+                    onEventUpdated={(updatedEvt) => {
+                      setEvents((prev) =>
+                        prev.map((e) => (e.id === updatedEvt.id ? { ...e, ...updatedEvt } : e))
+                      );
+                    }}
+                  />
+                )}
+
+                {/* 4. RICHIESTE CLIENTI (Visibile e accessibile SOLO ad 'admin' e 'admin_clienti') */}
                 {currentTab === 'requests' && isClientAdmin && (
                   <ClientRequestsDashboard
                     currentUser={currentUser}
@@ -1444,7 +1459,7 @@ export default function App() {
                   />
                 )}
 
-                {/* 4. DESTRA: "Profilo" */}
+                {/* 5. DESTRA: "Profilo" */}
                 {currentTab === 'profile' && (
                   <ProfileView
                     currentUser={currentUser}
@@ -1472,10 +1487,11 @@ export default function App() {
                   onDeleteGroup={handleDeleteGroup}
                 />
 
+                {/* 1. Sondaggi del Gruppo (ex Dashboard) */}
                 {currentTab === 'dashboard' && (
                   <Dashboard
                     currentUser={currentUser}
-                    allEvents={events.filter((e) => !e.groupId || e.groupId === activeGroup.id)}
+                    allEvents={events.filter((e) => e.groupId === activeGroup.id)}
                     allResponses={responses}
                     allUsers={users}
                     onOpenEvent={(evt) => setSelectedEventId(evt.id)}
@@ -1485,10 +1501,11 @@ export default function App() {
                   />
                 )}
 
+                {/* 2. Eventi del Gruppo */}
                 {currentTab === 'events' && (
                   <EventsFeedView
                     currentUser={currentUser}
-                    allEvents={events.filter((e) => !e.groupId || e.groupId === activeGroup.id)}
+                    allEvents={events.filter((e) => e.groupId === activeGroup.id)}
                     allUsers={users}
                     onParticipate={(evt) => handleParticipateOfficialEvent(evt.id)}
                     onDecline={(evt) => handleDeclineOfficialEvent(evt.id)}
@@ -1501,6 +1518,7 @@ export default function App() {
                   />
                 )}
 
+                {/* 3. Richieste Clienti */}
                 {currentTab === 'requests' && isClientAdmin && (
                   <ClientRequestsDashboard
                     currentUser={currentUser}
@@ -1514,10 +1532,11 @@ export default function App() {
                   />
                 )}
 
+                {/* 4. Calendario esclusivo del Gruppo */}
                 {currentTab === 'calendar' && (
                   <CalendarView
                     currentUser={currentUser}
-                    allEvents={events.filter((e) => !e.groupId || e.groupId === activeGroup.id)}
+                    allEvents={events.filter((e) => e.groupId === activeGroup.id)}
                     allUsers={users}
                     onOpenEventDetail={(evt) => setSelectedEventId(evt.id)}
                     onEventUpdated={(updatedEvt) => {
@@ -1528,6 +1547,7 @@ export default function App() {
                   />
                 )}
 
+                {/* 5. Profilo */}
                 {currentTab === 'profile' && (
                   <ProfileView
                     currentUser={currentUser}

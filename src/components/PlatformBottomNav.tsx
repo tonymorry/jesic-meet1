@@ -8,10 +8,10 @@
  */
 
 import React from 'react';
-import { Users, BarChart3, User as UserIcon } from 'lucide-react';
+import { Users, BarChart3, User as UserIcon, Calendar } from 'lucide-react';
 import { User } from '../types';
 
-export type PlatformTab = 'groups' | 'polls' | 'profile';
+export type PlatformTab = 'groups' | 'polls' | 'calendar' | 'profile';
 
 interface PlatformBottomNavProps {
   currentTab: PlatformTab;
@@ -34,7 +34,7 @@ export const PlatformBottomNav: React.FC<PlatformBottomNavProps> = ({
       className="fixed bottom-0 left-0 right-0 z-40 max-w-md mx-auto sm:max-w-xl md:max-w-2xl"
     >
       <div className="relative bg-white/95 dark:bg-[#1e1e1e]/95 backdrop-blur-md border-t border-neutral-200/90 dark:border-neutral-800 px-4 py-1.5 shadow-[0_-4px_24px_rgba(0,0,0,0.08)] dark:shadow-[0_-4px_24px_rgba(0,0,0,0.5)]">
-        <div className="grid grid-cols-3 items-center h-14">
+        <div className="grid grid-cols-4 items-center h-14">
           
           {/* 1. SINISTRA: GRUPPI */}
           <button
@@ -70,7 +70,7 @@ export const PlatformBottomNav: React.FC<PlatformBottomNavProps> = ({
             </span>
           </button>
 
-          {/* 2. CENTRO: SONDAGGI */}
+          {/* 2. CENTRO-SINISTRA: SONDAGGI */}
           <button
             type="button"
             onClick={() => onSelectTab('polls')}
@@ -82,19 +82,11 @@ export const PlatformBottomNav: React.FC<PlatformBottomNavProps> = ({
             aria-label="Sondaggi di disponibilità"
           >
             <div className="relative">
-              <div
-                className={`w-9 h-9 rounded-2xl flex items-center justify-center transition-all ${
-                  currentTab === 'polls'
-                    ? 'bg-[#f23e2e] text-white shadow-md shadow-red-500/30 -translate-y-1'
-                    : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300'
+              <BarChart3
+                className={`w-5 h-5 transition-transform ${
+                  currentTab === 'polls' ? 'stroke-[2.5px]' : 'stroke-[1.8px]'
                 }`}
-              >
-                <BarChart3
-                  className={`w-5 h-5 transition-transform ${
-                    currentTab === 'polls' ? 'stroke-[2.5px]' : 'stroke-[1.8px]'
-                  }`}
-                />
-              </div>
+              />
               {pendingInvitesCount > 0 && (
                 <span className="absolute -top-1.5 -right-1 min-w-[17px] h-4 px-1 rounded-full bg-[#f23e2e] text-white text-[9px] font-black flex items-center justify-center ring-2 ring-white dark:ring-neutral-900 shadow-xs animate-pulse">
                   {pendingInvitesCount}
@@ -112,7 +104,36 @@ export const PlatformBottomNav: React.FC<PlatformBottomNavProps> = ({
             </span>
           </button>
 
-          {/* 3. DESTRA: PROFILO */}
+          {/* 3. CENTRO-DESTRA: CALENDARIO */}
+          <button
+            type="button"
+            onClick={() => onSelectTab('calendar')}
+            className={`flex flex-col items-center justify-center py-1 transition-all active:scale-95 cursor-pointer relative ${
+              currentTab === 'calendar'
+                ? 'text-[#f23e2e]'
+                : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
+            }`}
+            aria-label="Calendario"
+          >
+            <div className="relative">
+              <Calendar
+                className={`w-5 h-5 transition-transform ${
+                  currentTab === 'calendar' ? 'stroke-[2.5px] scale-110 text-[#f23e2e]' : 'stroke-[1.8px]'
+                }`}
+              />
+            </div>
+            <span
+              className={`text-[10px] mt-1 tracking-tight leading-none ${
+                currentTab === 'calendar'
+                  ? 'font-black text-[#f23e2e]'
+                  : 'font-semibold text-neutral-500 dark:text-neutral-400'
+              }`}
+            >
+              Calendario
+            </span>
+          </button>
+
+          {/* 4. DESTRA: PROFILO */}
           <button
             type="button"
             onClick={() => onSelectTab('profile')}

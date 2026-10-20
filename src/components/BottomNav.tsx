@@ -120,7 +120,34 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               </span>
             </button>
 
-            {/* 3. "Richieste Clienti" (VISIBILE SOLO PER 'admin' e 'admin_clienti', NASCOSTA PER 'user') */}
+            {/* 3. "Calendario" (Fuori dai gruppi) */}
+            <button
+              type="button"
+              onClick={() => onSelectTab('calendar')}
+              className={`flex-1 flex flex-col items-center justify-center py-1 transition-all active:scale-95 cursor-pointer ${
+                currentTab === 'calendar'
+                  ? 'text-[#f23e2e] dark:text-[#f23e2e]'
+                  : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
+              }`}
+              aria-label="Calendario eventi fuori dai gruppi"
+            >
+              <Calendar
+                className={`w-5 h-5 transition-transform ${
+                  currentTab === 'calendar' ? 'stroke-[2.5px] scale-110' : 'stroke-[1.8px]'
+                }`}
+              />
+              <span
+                className={`text-[10px] mt-1 tracking-tight leading-none ${
+                  currentTab === 'calendar'
+                    ? 'font-black text-[#f23e2e]'
+                    : 'font-semibold text-neutral-500 dark:text-neutral-400'
+                }`}
+              >
+                Calendario
+              </span>
+            </button>
+
+            {/* 4. "Richieste Clienti" (VISIBILE SOLO PER 'admin' e 'admin_clienti', NASCOSTA PER 'user') */}
             {isClientAdmin && (
               <button
                 type="button"
@@ -156,7 +183,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               </button>
             )}
 
-            {/* 4. "Profilo" */}
+            {/* 5. "Profilo" */}
             <button
               type="button"
               onClick={() => onSelectTab('profile')}
@@ -188,7 +215,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
              CASO 2: DENTRO UN GRUPPO
              ==================================================================== */
           <div className="flex items-center justify-between h-14">
-            {/* 1. Dashboard Gruppo */}
+            {/* 1. Sondaggi Gruppo (ex Dashboard) */}
             <button
               type="button"
               onClick={() => onSelectTab('dashboard')}
@@ -197,9 +224,9 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                   ? 'text-[#f23e2e] dark:text-[#f23e2e]'
                   : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
               }`}
-              aria-label="Dashboard sondaggi gruppo"
+              aria-label="Sondaggi del gruppo"
             >
-              <Home
+              <Inbox
                 className={`w-5 h-5 transition-transform ${
                   currentTab === 'dashboard' ? 'stroke-[2.5px] scale-110' : 'stroke-[1.8px]'
                 }`}
@@ -211,7 +238,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                     : 'font-semibold text-neutral-500 dark:text-neutral-400'
                 }`}
               >
-                Dashboard
+                Sondaggi
               </span>
             </button>
 
