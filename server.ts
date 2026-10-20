@@ -992,51 +992,72 @@ app.patch('/api/events/:id', async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /api/events/:id & /api/polls/:id - Eliminazione definitiva sondaggio/evento da MongoDB e Google Calendar
+// DELETE /api/events/:id & /api/polls/:id - Eliminazione reale da Google Calendar e MongoDB
 const handleDeleteEventOrPoll = async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
-    const eventToDelete = await EventModel.findOne({ $or: [{ _id: id }, { id }] });
+    // 1. PRIMA di eliminare l'elemento dal DB, cercalo con findById (e fallback findOne)
+    let eventToDelete: any = null;
+    try {
+      eventToDelete = await EventModel.findById(id);
+    } catch {}
+    if (!eventToDelete) {
+      eventToDelete = await EventModel.findOne({ $or: [{ _id: id }, { id }] });
+    }
 
-    // Se l'evento ha un googleEventId, rimuovilo da Google Calendar prima di eliminarlo da MongoDB
-    if (eventToDelete) {
-      const targetGoogleEventId = eventToDelete.googleEventId || eventToDelete.googleCalendarEventId;
-      if (targetGoogleEventId) {
-        try {
-          const requesterId =
-            req.body?.userId ||
-            (req.query?.userId as string) ||
-            eventToDelete.creatorId;
+    if (!eventToDelete) {
+      return res.status(404).json({ error: 'Evento/Sondaggio non trovato nel database' });
+    }
 
-          const user = await UserModel.findOne({
-            $or: [
-              { _id: requesterId },
-              { id: requesterId },
-              { _id: eventToDelete.creatorId },
-              { id: eventToDelete.creatorId },
-            ],
-          });
+    // 2. Se il documento possiede un googleEventId e l'utente loggato ha un googleRefreshToken
+    const targetGoogleEventId = eventToDelete.googleEventId || eventToDelete.googleCalendarEventId;
+    if (targetGoogleEventId) {
+      try {
+        const requesterId =
+          req.body?.userId ||
+          (req.query?.userId as string) ||
+          (req.headers['x-user-id'] as string) ||
+          eventToDelete.creatorId;
 
-          const refreshToken = req.body?.googleRefreshToken || user?.googleRefreshToken;
-          if (refreshToken) {
-            await deleteGoogleCalendarEvent(refreshToken, targetGoogleEventId);
-          } else {
-            console.warn("Token Google assente, evento non cancellato da Calendar");
+        let user: any = null;
+        if (requesterId) {
+          try {
+            user = await UserModel.findById(requesterId);
+          } catch {}
+          if (!user) {
+            user = await UserModel.findOne({ $or: [{ _id: requesterId }, { id: requesterId }] });
           }
-        } catch (delCalErr: any) {
-          console.warn("Google Calendar delete warning:", delCalErr?.message || delCalErr);
         }
+
+        const refreshToken =
+          req.body?.googleRefreshToken ||
+          (req.query?.googleRefreshToken as string) ||
+          user?.googleRefreshToken;
+
+        if (refreshToken) {
+          await deleteGoogleCalendarEvent(refreshToken, targetGoogleEventId);
+          console.log(`[Google Calendar] Evento ${targetGoogleEventId} rimosso con successo.`);
+        } else {
+          console.warn("Token Google assente, evento non cancellato da Calendar");
+        }
+      } catch (delCalErr: any) {
+        console.warn("Errore eliminazione da Google Calendar (procedo con DB):", delCalErr?.message || delCalErr);
       }
     }
 
+    // 3. Solo DOPO aver avvisato Google, esegui l'eliminazione da MongoDB
     await EventModel.deleteOne({ $or: [{ _id: id }, { id }] });
     await EventResponseModel.deleteMany({ eventId: id });
     await ClientRequestModel.updateMany(
       { pollEventId: id },
       { $set: { status: 'pending', pollEventId: null } }
     );
-    return res.json({ success: true, message: 'Sondaggio/Evento eliminato con successo da MongoDB e Google Calendar' });
+
+    return res.json({
+      success: true,
+      message: 'Sondaggio/Evento eliminato con successo da Google Calendar e MongoDB',
+    });
   } catch (err: any) {
     console.error('Errore cancellazione EventModel MongoDB:', err.message);
     return res.status(500).json({ error: 'Errore eliminazione sondaggio/evento in MongoDB' });
@@ -1047,6 +1068,118 @@ app.delete('/api/events/:id', handleDeleteEventOrPoll);
 app.post('/api/events/:id/delete', handleDeleteEventOrPoll);
 app.delete('/api/polls/:id', handleDeleteEventOrPoll);
 app.post('/api/polls/:id/delete', handleDeleteEventOrPoll);
+
+// PATCH /api/polls/:id/confirmed-date - Modifica data/ora di un sondaggio confermato con allineamento Google Calendar
+const handleUpdatePollConfirmedDate = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { date, finalDate, startTime, endTime } = req.body;
+
+  const targetDate = date || finalDate;
+  if (!targetDate || !startTime || !endTime) {
+    return res.status(400).json({ error: 'Data, ora inizio e ora fine sono obbligatori' });
+  }
+
+  try {
+    let poll: any = null;
+    try {
+      poll = await EventModel.findById(id);
+    } catch {}
+    if (!poll) {
+      poll = await EventModel.findOne({ $or: [{ _id: id }, { id }] });
+    }
+
+    if (!poll) {
+      return res.status(404).json({ error: 'Sondaggio non trovato nel database' });
+    }
+
+    const startH = parseInt(startTime.split(':')[0], 10) || 9;
+    const endH = parseInt(endTime.split(':')[0], 10) || 10;
+
+    // 1. Aggiorna finalDate e finalizedSlot su MongoDB
+    const updated = await EventModel.findOneAndUpdate(
+      { $or: [{ _id: id }, { id }] },
+      {
+        $set: {
+          finalDate: targetDate,
+          dates: [targetDate],
+          startHour: startH,
+          endHour: endH,
+          finalizedSlot: {
+            date: targetDate,
+            startTime,
+            endTime,
+          },
+          status: 'confirmed',
+        },
+      },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ error: 'Errore aggiornamento su MongoDB' });
+    }
+
+    // 2. CRITICO: Sincronizzazione con Google Calendar
+    const targetGoogleEventId = updated.googleEventId || updated.googleCalendarEventId;
+    if (targetGoogleEventId) {
+      try {
+        const requesterId =
+          req.body?.userId ||
+          (req.headers['x-user-id'] as string) ||
+          updated.creatorId;
+
+        let user: any = null;
+        if (requesterId) {
+          try {
+            user = await UserModel.findById(requesterId);
+          } catch {}
+          if (!user) {
+            user = await UserModel.findOne({ $or: [{ _id: requesterId }, { id: requesterId }] });
+          }
+        }
+
+        const refreshToken =
+          req.body?.googleRefreshToken ||
+          user?.googleRefreshToken;
+
+        if (refreshToken) {
+          await updateGoogleCalendarEvent(refreshToken, targetGoogleEventId, {
+            title: updated.title,
+            description: updated.description,
+            date: targetDate,
+            startTime,
+            endTime,
+            isOnline: updated.type !== 'in_person',
+            location: updated.location,
+          });
+          console.log(`[Google Calendar] Evento ${targetGoogleEventId} aggiornato con successo a ${targetDate} ${startTime}-${endTime}`);
+        } else {
+          console.warn("Token Google assente, evento non aggiornato su Calendar");
+        }
+      } catch (calErr: any) {
+        console.warn("Errore allineamento Google Calendar:", calErr?.message || calErr);
+      }
+    }
+
+    const mapped = {
+      ...updated.toObject(),
+      id: updated._id || updated.id,
+    };
+
+    return res.json({
+      success: true,
+      message: 'Data e ora confermate aggiornate con successo e sincronizzate su Google Calendar',
+      poll: mapped,
+      event: mapped,
+    });
+  } catch (err: any) {
+    console.error('Errore update confirmed date MongoDB:', err.message);
+    return res.status(500).json({ error: 'Errore aggiornamento data confermata in MongoDB' });
+  }
+};
+
+app.patch('/api/polls/:id/confirmed-date', handleUpdatePollConfirmedDate);
+app.patch('/api/events/:id/confirmed-date', handleUpdatePollConfirmedDate);
 
 // POST /api/events/:id/participate - Partecipazione evento ufficiale & Google Calendar
 app.post('/api/events/:id/participate', async (req: Request, res: Response) => {

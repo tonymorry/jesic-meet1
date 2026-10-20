@@ -422,6 +422,7 @@ export interface IEvent {
   invitees: IInvitee[];
   participants: IParticipant[];
   finalizedSlot?: IFinalizedSlot;
+  finalDate?: string;
   groupId?: string | null;
   externalInviteEmails?: string[];
   clientRequestId?: string | null;
@@ -543,6 +544,10 @@ const EventSchema: Schema<IEvent> = new Schema(
       date: { type: String },
       startTime: { type: String },
       endTime: { type: String },
+    },
+    finalDate: {
+      type: String,
+      default: null,
     },
     groupId: {
       type: String,

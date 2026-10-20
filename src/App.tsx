@@ -1096,13 +1096,31 @@ export default function App() {
       setSelectedEventId(null);
     }
 
-    // 2. Chiamata DELETE al backend per persistenza su MongoDB
+    // 2. Chiamata DELETE al backend per eliminazione reale da Google Calendar e MongoDB
     try {
-      const res = await fetch(`/api/events/${eventId}`, {
+      const deleteHeaders = {
+        'Content-Type': 'application/json',
+        ...(currentUser?.id ? { 'x-user-id': currentUser.id } : {}),
+        ...(currentUser?.googleAccessToken ? { Authorization: `Bearer ${currentUser.googleAccessToken}` } : {}),
+      };
+      const deletePayload = JSON.stringify({
+        userId: currentUser?.id,
+        googleRefreshToken: currentUser?.googleRefreshToken,
+      });
+
+      const queryParams = `?userId=${currentUser?.id || ''}&googleRefreshToken=${encodeURIComponent(currentUser?.googleRefreshToken || '')}`;
+
+      const res = await fetch(`/api/events/${eventId}${queryParams}`, {
         method: 'DELETE',
+        headers: deleteHeaders,
+        body: deletePayload,
       });
       if (!res.ok) {
-        await fetch(`/api/polls/${eventId}`, { method: 'DELETE' });
+        await fetch(`/api/polls/${eventId}${queryParams}`, {
+          method: 'DELETE',
+          headers: deleteHeaders,
+          body: deletePayload,
+        });
       }
     } catch (e) {
       console.warn('[API delete poll error]', e);
@@ -1623,6 +1641,11 @@ export default function App() {
                 setIsCreatePollModalOpen(true);
               }}
               onDeletePoll={handleDeletePoll}
+              onEventUpdated={(updatedEvt) => {
+                setEvents((prev) =>
+                  prev.map((e) => (e.id === updatedEvt.id ? { ...e, ...updatedEvt } : e))
+                );
+              }}
             />
           )}
 

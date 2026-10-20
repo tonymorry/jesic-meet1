@@ -10,7 +10,7 @@
  * 4. Elenco Partecipanti con aggiunta/rimozione e solleciti.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MeetingEvent, User, EventResponse, SlotAnalysis, InviteeConfig } from '../types';
 import { AvailabilityGrid } from './AvailabilityGrid';
 import { UserAvatar } from './UserAvatar';
@@ -53,6 +53,7 @@ interface EventDetailModalProps {
   ) => void;
   onEditPoll?: (event: MeetingEvent) => void;
   onDeletePoll?: (eventId: string) => void;
+  onEventUpdated?: (updatedEvent: MeetingEvent) => void;
 }
 
 export const EventDetailModal: React.FC<EventDetailModalProps> = ({
@@ -67,13 +68,36 @@ export const EventDetailModal: React.FC<EventDetailModalProps> = ({
   onUpdateEventInvitees,
   onEditPoll,
   onDeletePoll,
+  onEventUpdated,
 }) => {
-  const isCreator = event.creatorId === currentUser.id;
-  const creatorUser = allUsers.find((u) => u.id === event.creatorId) || currentUser;
+  const [currentEvent, setCurrentEvent] = useState<MeetingEvent>(event);
+  const isCreator = currentEvent.creatorId === currentUser.id;
+  const creatorUser = allUsers.find((u) => u.id === currentEvent.creatorId) || currentUser;
+
+  // Sincronizza lo stato locale se l'evento passato come prop cambia
+  useEffect(() => {
+    setCurrentEvent(event);
+  }, [event]);
+
+  // Stato per la modifica data/ora di un sondaggio confermato
+  const [isEditingConfirmedDate, setIsEditingConfirmedDate] = useState(false);
+  const [isSavingConfirmedDate, setIsSavingConfirmedDate] = useState(false);
+  const [editConfirmedError, setEditConfirmedError] = useState<string | null>(null);
+
+  const initialConfirmedDate =
+    currentEvent.finalizedSlot?.date || currentEvent.finalDate || currentEvent.dates[0] || new Date().toISOString().split('T')[0];
+  const initialConfirmedStartTime =
+    currentEvent.finalizedSlot?.startTime || `${String(currentEvent.startHour || 9).padStart(2, '0')}:00`;
+  const initialConfirmedEndTime =
+    currentEvent.finalizedSlot?.endTime || `${String(currentEvent.endHour || 10).padStart(2, '0')}:00`;
+
+  const [editConfirmedDate, setEditConfirmedDate] = useState(initialConfirmedDate);
+  const [editConfirmedStartTime, setEditConfirmedStartTime] = useState(initialConfirmedStartTime);
+  const [editConfirmedEndTime, setEditConfirmedEndTime] = useState(initialConfirmedEndTime);
 
   // Risposta attuale dell'utente corrente
   const myResponse = allResponses.find(
-    (r) => r.eventId === event.id && r.userId === currentUser.id
+    (r) => r.eventId === currentEvent.id && r.userId === currentUser.id
   );
 
   const [myDraftSlots, setMyDraftSlots] = useState<string[]>(
@@ -81,6 +105,75 @@ export const EventDetailModal: React.FC<EventDetailModalProps> = ({
   );
   const [hasChanges, setHasChanges] = useState(false);
   const [notificationMsg, setNotificationMsg] = useState<string | null>(null);
+
+  // Salvataggio modifica data/ora confermata con sincronizzazione Google Calendar
+  const handleSaveConfirmedDate = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!editConfirmedDate) {
+      setEditConfirmedError('La data è obbligatoria');
+      return;
+    }
+    if (editConfirmedStartTime >= editConfirmedEndTime) {
+      setEditConfirmedError("L'ora di fine deve essere successiva all'ora di inizio");
+      return;
+    }
+
+    setEditConfirmedError(null);
+    setIsSavingConfirmedDate(true);
+
+    try {
+      const payload = {
+        date: editConfirmedDate,
+        finalDate: editConfirmedDate,
+        startTime: editConfirmedStartTime,
+        endTime: editConfirmedEndTime,
+        userId: currentUser.id,
+        googleRefreshToken: currentUser.googleRefreshToken,
+        googleAccessToken: currentUser.googleAccessToken,
+      };
+
+      const res = await fetch(`/api/polls/${currentEvent.id}/confirmed-date`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(currentUser.googleAccessToken ? { Authorization: `Bearer ${currentUser.googleAccessToken}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Errore durante la modifica della data confermata');
+      }
+
+      const resData = await res.json();
+      const updated: MeetingEvent = resData.poll || resData.event || {
+        ...currentEvent,
+        finalDate: editConfirmedDate,
+        dates: [editConfirmedDate],
+        finalizedSlot: {
+          date: editConfirmedDate,
+          startTime: editConfirmedStartTime,
+          endTime: editConfirmedEndTime,
+        },
+        status: 'confirmed',
+      };
+
+      setCurrentEvent(updated);
+      setIsEditingConfirmedDate(false);
+      setNotificationMsg('Data e orari confermati aggiornati con successo e sincronizzati su Google Calendar!');
+      setTimeout(() => setNotificationMsg(null), 4000);
+
+      if (onEventUpdated) {
+        onEventUpdated(updated);
+      }
+    } catch (err: any) {
+      console.error('Errore modifica data confermata:', err);
+      setEditConfirmedError(err.message || 'Errore durante il salvataggio');
+    } finally {
+      setIsSavingConfirmedDate(false);
+    }
+  };
 
   // Calcolo analisi di matching per l'evento
   const eventResponses = allResponses.filter((r) => r.eventId === event.id);
@@ -357,12 +450,13 @@ export const EventDetailModal: React.FC<EventDetailModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            {isCreator && onEditPoll && (
+            {/* Blocco modifica se il sondaggio è già confermato (Regola 2) */}
+            {isCreator && onEditPoll && currentEvent.status !== 'confirmed' && (
               <button
                 type="button"
                 onClick={() => {
                   onClose();
-                  onEditPoll(event);
+                  onEditPoll(currentEvent);
                 }}
                 className="py-1.5 px-3 rounded-xl bg-neutral-200/80 hover:bg-neutral-300 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
                 title="Modifica impostazioni sondaggio, orari o invitati"
@@ -372,17 +466,42 @@ export const EventDetailModal: React.FC<EventDetailModalProps> = ({
               </button>
             )}
 
+            {/* Pulsante Modifica Data/Ora Confermata per il creatore (Regola 3) */}
+            {isCreator && currentEvent.status === 'confirmed' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditConfirmedDate(
+                    currentEvent.finalizedSlot?.date || currentEvent.finalDate || currentEvent.dates[0] || ''
+                  );
+                  setEditConfirmedStartTime(
+                    currentEvent.finalizedSlot?.startTime || `${String(currentEvent.startHour || 9).padStart(2, '0')}:00`
+                  );
+                  setEditConfirmedEndTime(
+                    currentEvent.finalizedSlot?.endTime || `${String(currentEvent.endHour || 10).padStart(2, '0')}:00`
+                  );
+                  setEditConfirmedError(null);
+                  setIsEditingConfirmedDate(true);
+                }}
+                className="py-1.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                title="Modifica la data e gli orari del meeting confermato"
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Modifica Data/Ora Confermata</span>
+              </button>
+            )}
+
             {(isCreator || currentUser.role === 'admin') && onDeletePoll && (
               <button
                 type="button"
                 onClick={() => {
                   if (
                     window.confirm(
-                      `Sei sicuro di voler eliminare definitivamente il sondaggio "${event.title}"? L'eliminazione è definitiva e non comparirà più a nessun invitato.`
+                      `Sei sicuro di voler eliminare definitivamente il sondaggio "${currentEvent.title}"? L'eliminazione è definitiva e non comparirà più a nessun invitato.`
                     )
                   ) {
                     onClose();
-                    onDeletePoll(event.id);
+                    onDeletePoll(currentEvent.id);
                   }
                 }}
                 className="py-1.5 px-3 rounded-xl bg-red-50 hover:bg-red-100 dark:bg-red-950/60 dark:hover:bg-red-900/60 text-red-700 dark:text-red-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs border border-red-200/80 dark:border-red-900/50"
@@ -418,34 +537,58 @@ export const EventDetailModal: React.FC<EventDetailModalProps> = ({
         <div className="p-4 overflow-y-auto space-y-4">
           
           {/* Se l'evento è già confermato: Banner data definitiva + Calendar Links */}
-          {event.status === 'confirmed' && event.finalizedSlot && (
+          {currentEvent.status === 'confirmed' && currentEvent.finalizedSlot && !isEditingConfirmedDate && (
             <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-4">
-              <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-bold text-sm">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                <span>Meeting Confermato Definitivamente</span>
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-bold text-sm">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                  <span>Meeting Confermato Definitivamente</span>
+                </div>
+                {isCreator && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditConfirmedDate(
+                        currentEvent.finalizedSlot?.date || currentEvent.finalDate || currentEvent.dates[0] || ''
+                      );
+                      setEditConfirmedStartTime(
+                        currentEvent.finalizedSlot?.startTime || `${String(currentEvent.startHour || 9).padStart(2, '0')}:00`
+                      );
+                      setEditConfirmedEndTime(
+                        currentEvent.finalizedSlot?.endTime || `${String(currentEvent.endHour || 10).padStart(2, '0')}:00`
+                      );
+                      setEditConfirmedError(null);
+                      setIsEditingConfirmedDate(true);
+                    }}
+                    className="py-1 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                    <span>Modifica Data/Ora Confermata</span>
+                  </button>
+                )}
               </div>
               <div className="mt-2 text-xs text-neutral-700 dark:text-neutral-300 space-y-1">
                 <p className="font-semibold text-neutral-900 dark:text-white text-sm">
-                  📅 {event.finalizedSlot.date} · {event.finalizedSlot.startTime} - {event.finalizedSlot.endTime}
+                  📅 {currentEvent.finalizedSlot.date} · {currentEvent.finalizedSlot.startTime} - {currentEvent.finalizedSlot.endTime}
                 </p>
-                {event.type === 'online' && event.meetLink ? (
+                {currentEvent.type === 'online' && currentEvent.meetLink ? (
                   <p className="flex items-center gap-1.5 pt-1">
                     <Video className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
                     <span>Link Meet:</span>
                     <a
-                      href={event.meetLink}
+                      href={currentEvent.meetLink}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="font-bold text-red-600 dark:text-red-400 hover:underline flex items-center gap-0.5"
                     >
-                      {event.meetLink}
+                      {currentEvent.meetLink}
                       <ExternalLink className="w-3 h-3" />
                     </a>
                   </p>
                 ) : (
                   <p className="flex items-center gap-1.5 pt-1 text-neutral-700 dark:text-neutral-300">
                     <MapPin className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
-                    <span>Luogo: {event.location || 'Sede JESic'}</span>
+                    <span>Luogo: {currentEvent.location || 'Sede JESic'}</span>
                   </p>
                 )}
               </div>
@@ -456,6 +599,107 @@ export const EventDetailModal: React.FC<EventDetailModalProps> = ({
                 <span>Sincronizzato automaticamente su Google Calendar con conferenza Google Meet</span>
               </div>
             </div>
+          )}
+
+          {/* Form per Modifica Data/Ora Confermata (Regola 3) */}
+          {currentEvent.status === 'confirmed' && isEditingConfirmedDate && (
+            <form onSubmit={handleSaveConfirmedDate} className="bg-emerald-50/90 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 rounded-2xl p-4 space-y-3 animate-in fade-in">
+              <div className="flex items-center justify-between pb-1.5 border-b border-emerald-200 dark:border-emerald-800/60">
+                <div className="flex items-center gap-2 text-emerald-900 dark:text-emerald-200 font-bold text-xs sm:text-sm">
+                  <Edit3 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>Modifica Data e Orario del Meeting Confermato</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingConfirmedDate(false)}
+                  className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 p-1 rounded-lg cursor-pointer"
+                  aria-label="Annulla"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {editConfirmedError && (
+                <div className="p-2.5 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 text-xs text-red-600 dark:text-red-300 rounded-xl font-semibold">
+                  {editConfirmedError}
+                </div>
+              )}
+
+              {/* Campo Data */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-emerald-900 dark:text-emerald-200 block">
+                  Nuovo Giorno / Data del Meeting
+                </label>
+                <input
+                  type="date"
+                  value={editConfirmedDate}
+                  onChange={(e) => setEditConfirmedDate(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-neutral-900 border border-emerald-300 dark:border-emerald-700 text-neutral-900 dark:text-white font-semibold text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              {/* Griglia Orari: Inizio & Fine */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-emerald-900 dark:text-emerald-200 block">
+                    Ora Inizio
+                  </label>
+                  <input
+                    type="time"
+                    value={editConfirmedStartTime}
+                    onChange={(e) => setEditConfirmedStartTime(e.target.value)}
+                    required
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-neutral-900 border border-emerald-300 dark:border-emerald-700 text-neutral-900 dark:text-white font-semibold text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-emerald-900 dark:text-emerald-200 block">
+                    Ora Fine
+                  </label>
+                  <input
+                    type="time"
+                    value={editConfirmedEndTime}
+                    onChange={(e) => setEditConfirmedEndTime(e.target.value)}
+                    required
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-neutral-900 border border-emerald-300 dark:border-emerald-700 text-neutral-900 dark:text-white font-semibold text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <p className="text-[10px] text-emerald-800 dark:text-emerald-300">
+                La data e gli orari verranno salvati su MongoDB e allineati in tempo reale con l'evento Google Calendar.
+              </p>
+
+              {/* Bottoni azione */}
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  disabled={isSavingConfirmedDate}
+                  onClick={() => setIsEditingConfirmedDate(false)}
+                  className="flex-1 py-2 px-3 rounded-xl border border-neutral-300 dark:border-neutral-700 text-xs font-bold text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 cursor-pointer"
+                >
+                  Annulla
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingConfirmedDate}
+                  className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                >
+                  {isSavingConfirmedDate ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Sincronizzazione Google...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-3.5 h-3.5 stroke-[3px]" />
+                      <span>Salva e Sincronizza</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           )}
 
           {/* Descrizione evento */}
