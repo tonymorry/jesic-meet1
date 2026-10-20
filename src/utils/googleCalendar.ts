@@ -186,13 +186,31 @@ export interface UpdateGoogleCalendarEventData {
  * Aggiorna data, ora o dettagli di un evento già esistente su Google Calendar.
  */
 export async function updateGoogleCalendarEvent(
-  refreshToken: string | undefined,
+  refreshTokenOrTokens:
+    | string
+    | {
+        refreshToken?: string;
+        accessToken?: string;
+        googleRefreshToken?: string;
+        googleAccessToken?: string;
+      }
+    | undefined,
   googleEventId: string,
   eventData: UpdateGoogleCalendarEventData
 ): Promise<{ success: boolean; eventId?: string; data?: any; error?: string }> {
-  if (!refreshToken) {
+  let refreshToken: string | undefined;
+  let accessToken: string | undefined;
+
+  if (typeof refreshTokenOrTokens === 'string') {
+    refreshToken = refreshTokenOrTokens;
+  } else if (refreshTokenOrTokens) {
+    refreshToken = refreshTokenOrTokens.refreshToken || refreshTokenOrTokens.googleRefreshToken;
+    accessToken = refreshTokenOrTokens.accessToken || refreshTokenOrTokens.googleAccessToken;
+  }
+
+  if (!refreshToken && !accessToken) {
     console.warn("Token Google assente, evento non aggiornato su Calendar");
-    return { success: false, error: 'Google Refresh Token non presente' };
+    return { success: false, error: 'Google Token non presente' };
   }
 
   if (!googleEventId) {
@@ -202,6 +220,12 @@ export async function updateGoogleCalendarEvent(
 
   try {
     const oauth2Client = getOAuth2Client(refreshToken);
+    if (accessToken) {
+      oauth2Client.setCredentials({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      });
+    }
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
     const patchBody: any = {};
@@ -237,11 +261,22 @@ export async function updateGoogleCalendarEvent(
       patchBody.location = eventData.isOnline ? 'Google Meet' : eventData.location || 'Sede JESic';
     }
 
-    const response = await calendar.events.patch({
-      calendarId: 'primary',
-      eventId: googleEventId,
-      requestBody: patchBody,
-    });
+    let response: any;
+    try {
+      response = await calendar.events.patch({
+        calendarId: 'primary',
+        eventId: googleEventId,
+        sendUpdates: 'all',
+        requestBody: patchBody,
+      });
+    } catch (patchErr: any) {
+      console.warn("Patch con sendUpdates:'all' non riuscito, ritento senza sendUpdates:", patchErr?.message);
+      response = await calendar.events.patch({
+        calendarId: 'primary',
+        eventId: googleEventId,
+        requestBody: patchBody,
+      });
+    }
 
     return {
       success: true,

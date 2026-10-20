@@ -443,7 +443,7 @@ export const EventDetailModal: React.FC<EventDetailModalProps> = ({
         <div className="p-4 overflow-y-auto space-y-4">
           
           {/* Se l'evento è già confermato: Banner data definitiva + Calendar Links */}
-          {currentEvent.status === 'confirmed' && currentEvent.finalizedSlot && !isEditingConfirmedDate && (
+          {currentEvent.status === 'confirmed' && !isEditingConfirmedDate && (
             <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-4">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-bold text-sm">
@@ -463,7 +463,7 @@ export const EventDetailModal: React.FC<EventDetailModalProps> = ({
               </div>
               <div className="mt-2 text-xs text-neutral-700 dark:text-neutral-300 space-y-1">
                 <p className="font-semibold text-neutral-900 dark:text-white text-sm">
-                  📅 {currentEvent.finalizedSlot.date} · {currentEvent.finalizedSlot.startTime} - {currentEvent.finalizedSlot.endTime}
+                  📅 {currentEvent.finalizedSlot?.date || (typeof (currentEvent.finalDate as any) === 'object' ? (currentEvent.finalDate as any)?.date : currentEvent.finalDate) || currentEvent.dates?.[0]} · {currentEvent.finalizedSlot?.startTime || (typeof (currentEvent.finalDate as any) === 'object' ? (currentEvent.finalDate as any)?.startTime : null) || `${String(currentEvent.startHour || 9).padStart(2, '0')}:00`} - {currentEvent.finalizedSlot?.endTime || (typeof (currentEvent.finalDate as any) === 'object' ? (currentEvent.finalDate as any)?.endTime : null) || `${String(currentEvent.endHour || 10).padStart(2, '0')}:00`}
                 </p>
                 {currentEvent.type === 'online' && currentEvent.meetLink ? (
                   <p className="flex items-center gap-1.5 pt-1">

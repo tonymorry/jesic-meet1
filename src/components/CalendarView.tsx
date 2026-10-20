@@ -26,13 +26,16 @@ import {
   CheckCircle2,
   CalendarDays,
   CalendarRange,
+  Edit3,
 } from 'lucide-react';
+import { EditConfirmedPollModal } from './EditConfirmedPollModal';
 
 interface CalendarViewProps {
   currentUser: User;
   allEvents: MeetingEvent[];
   allUsers: User[];
   onOpenEventDetail?: (event: MeetingEvent) => void;
+  onEventUpdated?: (updatedEvent: MeetingEvent) => void;
 }
 
 export const CalendarView: React.FC<CalendarViewProps> = ({
@@ -40,9 +43,11 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   allEvents,
   allUsers,
   onOpenEventDetail,
+  onEventUpdated,
 }) => {
   // Modalità visualizzazione: 'month' (mensile) o 'week' (settimanale)
   const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
+  const [pollToEditConfirmed, setPollToEditConfirmed] = useState<MeetingEvent | null>(null);
 
   // Mese/Anno o Data corrente selezionata
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
@@ -108,10 +113,31 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const startDayIndex = (firstDayOfMonth.getDay() + 6) % 7;
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
 
+  const getEventDate = (evt: MeetingEvent): string => {
+    if (evt.finalizedSlot?.date) return evt.finalizedSlot.date;
+    if (typeof evt.finalDate === 'object' && (evt.finalDate as any)?.date) return String((evt.finalDate as any).date);
+    if (typeof evt.finalDate === 'string' && evt.finalDate) return evt.finalDate;
+    return evt.dates?.[0] || '';
+  };
+
+  const getEventStartTime = (evt: MeetingEvent): string => {
+    if (evt.finalizedSlot?.startTime) return evt.finalizedSlot.startTime;
+    if (typeof evt.finalDate === 'object' && (evt.finalDate as any)?.startTime) return String((evt.finalDate as any).startTime);
+    if (evt.startHour !== undefined && evt.startHour !== null) return `${String(evt.startHour).padStart(2, '0')}:00`;
+    return '09:00';
+  };
+
+  const getEventEndTime = (evt: MeetingEvent): string => {
+    if (evt.finalizedSlot?.endTime) return evt.finalizedSlot.endTime;
+    if (typeof evt.finalDate === 'object' && (evt.finalDate as any)?.endTime) return String((evt.finalDate as any).endTime);
+    if (evt.endHour !== undefined && evt.endHour !== null) return `${String(evt.endHour).padStart(2, '0')}:00`;
+    return '10:00';
+  };
+
   // Mappa di eventi per data 'YYYY-MM-DD'
   const eventsByDate = new Map<string, MeetingEvent[]>();
   visibleEvents.forEach((evt) => {
-    const dateKey = evt.finalizedSlot?.date || evt.dates[0];
+    const dateKey = getEventDate(evt);
     if (dateKey) {
       const list = eventsByDate.get(dateKey) || [];
       list.push(evt);
@@ -586,8 +612,26 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               </div>
             </div>
 
+            {/* Azioni Modifica per il creatore / admin */}
+            {(selectedCalendarEvent.creatorId === currentUser.id || currentUser.role === 'admin') && (
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const evtToEdit = selectedCalendarEvent;
+                    setSelectedCalendarEvent(null);
+                    setPollToEditConfirmed(evtToEdit);
+                  }}
+                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-emerald-600/20 active:scale-95 transition-all"
+                >
+                  <Edit3 className="w-4 h-4" />
+                  <span>Modifica Data e Orario</span>
+                </button>
+              </div>
+            )}
+
             {/* Chiudi */}
-            <div className="pt-2">
+            <div className="pt-1">
               <button
                 type="button"
                 onClick={() => setSelectedCalendarEvent(null)}
@@ -599,6 +643,21 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
           </div>
         </div>
+      )}
+
+      {/* Modale Modifica Data e Orario Sondaggio Confermato */}
+      {pollToEditConfirmed && (
+        <EditConfirmedPollModal
+          poll={pollToEditConfirmed}
+          currentUser={currentUser}
+          onClose={() => setPollToEditConfirmed(null)}
+          onSuccess={(updatedPoll) => {
+            if (onEventUpdated) {
+              onEventUpdated(updatedPoll);
+            }
+            setPollToEditConfirmed(null);
+          }}
+        />
       )}
 
     </div>

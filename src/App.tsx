@@ -1520,6 +1520,11 @@ export default function App() {
                     allEvents={events.filter((e) => !e.groupId || e.groupId === activeGroup.id)}
                     allUsers={users}
                     onOpenEventDetail={(evt) => setSelectedEventId(evt.id)}
+                    onEventUpdated={(updatedEvt) => {
+                      setEvents((prev) =>
+                        prev.map((e) => (e.id === updatedEvt.id ? { ...e, ...updatedEvt } : e))
+                      );
+                    }}
                   />
                 )}
 
