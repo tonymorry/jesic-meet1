@@ -63,12 +63,19 @@ export const EditConfirmedPollModal: React.FC<EditConfirmedPollModalProps> = ({
     return '10:00';
   };
 
-  // Stati locali controllati garantiti come stringhe (mai undefined)
+  // Stati locali controllati garantiti come stringhe
   const [editDate, setEditDate] = useState<string>(getInitialDate());
   const [startTime, setStartTime] = useState<string>(getInitialStartTime());
   const [endTime, setEndTime] = useState<string>(getInitialEndTime());
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Chiudi SOLO se il click è avvenuto direttamente sullo sfondo oscurato
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,7 +97,7 @@ export const EditConfirmedPollModal: React.FC<EditConfirmedPollModalProps> = ({
     setIsSubmitting(true);
 
     try {
-      // Oggetto strutturato con finalDate { date, startTime, endTime } come da specifica
+      // Struttura finalDate con date, startTime, endTime
       const payload = {
         finalDate: {
           date: editDate,
@@ -140,7 +147,7 @@ export const EditConfirmedPollModal: React.FC<EditConfirmedPollModalProps> = ({
         status: 'confirmed',
       };
 
-      // Aggiorna la UI locale ed esci dal modale
+      // Aggiorna lo stato UI locale e chiudi
       onSuccess(updatedPoll);
       onClose();
     } catch (err: any) {
@@ -155,15 +162,16 @@ export const EditConfirmedPollModal: React.FC<EditConfirmedPollModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
-      onClick={onClose}
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/75 overflow-y-auto"
+      onClick={handleBackdropClick}
     >
       <div
-        className="bg-white dark:bg-neutral-900 w-full max-w-lg rounded-3xl shadow-2xl border border-neutral-200 dark:border-neutral-800 overflow-hidden text-neutral-900 dark:text-neutral-100 flex flex-col"
+        className="relative z-10 w-full max-w-lg bg-white dark:bg-neutral-900 rounded-3xl shadow-2xl border border-neutral-200 dark:border-neutral-800 text-neutral-900 dark:text-neutral-100 flex flex-col my-auto"
         onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
       >
         {/* Intestazione */}
-        <div className="p-5 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between gap-3 bg-neutral-50/70 dark:bg-neutral-800/50">
+        <div className="p-5 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between gap-3 bg-neutral-50/70 dark:bg-neutral-800/50 rounded-t-3xl">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
               <Calendar className="w-5 h-5" />
@@ -188,67 +196,85 @@ export const EditConfirmedPollModal: React.FC<EditConfirmedPollModalProps> = ({
           </button>
         </div>
 
-        {/* Form */}
+        {/* Form con gestione submit e preventDefault immediato */}
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           {errorMessage && (
-            <div className="p-3 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 text-xs text-red-600 dark:text-red-300 rounded-2xl flex items-start gap-2 animate-in fade-in">
+            <div className="p-3 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 text-xs text-red-600 dark:text-red-300 rounded-2xl flex items-start gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>{errorMessage}</span>
             </div>
           )}
 
-          {/* 1. Data */}
+          {/* 1. Input Data - Componente controllato standard senza overlay */}
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5">
+            <label
+              htmlFor="edit-confirmed-date"
+              className="text-xs font-bold text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5"
+            >
               <Calendar className="w-4 h-4 text-[#f23e2e]" />
               <span>Data del Meeting</span>
             </label>
             <input
+              id="edit-confirmed-date"
+              name="editDate"
               type="date"
               value={editDate}
               onChange={(e) => setEditDate(e.target.value)}
               required
-              className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs sm:text-sm font-semibold text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+              style={{ colorScheme: 'light dark' }}
+              className="w-full px-3.5 py-2.5 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs sm:text-sm font-semibold text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all cursor-pointer"
             />
           </div>
 
-          {/* 2 & 3. Orario di Inizio e Orario di Fine */}
+          {/* 2 & 3. Input Orari Inizio e Fine - Componenti controllati standard */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5">
+              <label
+                htmlFor="edit-confirmed-start-time"
+                className="text-xs font-bold text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5"
+              >
                 <Clock className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                 <span>Ora Inizio</span>
               </label>
               <input
+                id="edit-confirmed-start-time"
+                name="startTime"
                 type="time"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
                 required
-                className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs sm:text-sm font-semibold text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono transition-all"
+                style={{ colorScheme: 'light dark' }}
+                className="w-full px-3.5 py-2.5 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs sm:text-sm font-semibold text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono transition-all cursor-pointer"
               />
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5">
+              <label
+                htmlFor="edit-confirmed-end-time"
+                className="text-xs font-bold text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5"
+              >
                 <Clock className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                 <span>Ora Fine</span>
               </label>
               <input
+                id="edit-confirmed-end-time"
+                name="endTime"
                 type="time"
                 value={endTime}
                 onChange={(e) => setEndTime(e.target.value)}
                 required
-                className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs sm:text-sm font-semibold text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono transition-all"
+                style={{ colorScheme: 'light dark' }}
+                className="w-full px-3.5 py-2.5 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs sm:text-sm font-semibold text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono transition-all cursor-pointer"
               />
             </div>
           </div>
 
-          {/* Info Badge Google Calendar */}
+          {/* Badge Informativo Google Calendar */}
           <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-2xl p-3 text-[11px] text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
             <RefreshCw className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <span>
               La nuova data e gli orari verranno salvati nel database e sincronizzati in tempo reale
-              sul calendario di Google e nel meeting associato.
+              su Google Calendar.
             </span>
           </div>
 
