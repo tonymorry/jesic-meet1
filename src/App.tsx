@@ -1418,6 +1418,15 @@ export default function App() {
                     onOpenPollDetail={(evtId) => setSelectedEventId(evtId)}
                     onDeclinePoll={handleDeclinePoll}
                     onDeletePoll={handleDeletePoll}
+                    onEventUpdated={(updatedEvt) => {
+                      setEvents((prev) =>
+                        prev.map((e) => (e.id === updatedEvt.id ? { ...e, ...updatedEvt } : e))
+                      );
+                    }}
+                    onEditPoll={(evt) => {
+                      setEventToEdit(evt);
+                      setIsCreatePollModalOpen(true);
+                    }}
                   />
                 )}
 

@@ -27,8 +27,10 @@ import {
   Search,
   Filter,
   Trash2,
+  Edit3,
 } from 'lucide-react';
 import { formatDateShort } from '../utils/dateUtils';
+import { EditConfirmedPollModal } from './EditConfirmedPollModal';
 
 interface PollsHubViewProps {
   currentUser: User;
@@ -39,6 +41,8 @@ interface PollsHubViewProps {
   onOpenPollDetail: (eventId: string) => void;
   onDeclinePoll?: (eventId: string) => void;
   onDeletePoll?: (eventId: string) => void;
+  onEventUpdated?: (updatedEvent: MeetingEvent) => void;
+  onEditPoll?: (event: MeetingEvent) => void;
 }
 
 export const PollsHubView: React.FC<PollsHubViewProps> = ({
@@ -50,9 +54,12 @@ export const PollsHubView: React.FC<PollsHubViewProps> = ({
   onOpenPollDetail,
   onDeclinePoll,
   onDeletePoll,
+  onEventUpdated,
+  onEditPoll,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'created' | 'invited'>('created');
   const [searchQuery, setSearchQuery] = useState('');
+  const [pollToEditConfirmed, setPollToEditConfirmed] = useState<MeetingEvent | null>(null);
 
   // Filtra solo sondaggi (eventType === 'poll' o senza eventType)
   // REGOLA: I sondaggi dei vari gruppi NON devono spuntare nella home fuori dal gruppo!
@@ -308,25 +315,70 @@ export const PollsHubView: React.FC<PollsHubViewProps> = ({
                       </div>
                     )}
 
-                    {/* Date Proposte */}
-                    <div className="flex items-center gap-1 text-[11px] font-medium text-neutral-500">
-                      <Calendar className="w-3.5 h-3.5 text-[#f23e2e]" />
-                      <span>
-                        {poll.dates.length === 1
-                          ? formatDateShort(poll.dates[0])
-                          : `${poll.dates.length} date proposte`}
-                      </span>
-                    </div>
+                    {/* Date Proposte o Data Confermata */}
+                    {poll.status === 'confirmed' && (poll.finalizedSlot?.date || (typeof (poll.finalDate as any) === 'object' && (poll.finalDate as any)?.date) || (typeof poll.finalDate === 'string' && poll.finalDate)) ? (
+                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-200/60 dark:border-emerald-800/60">
+                        <Calendar className="w-3.5 h-3.5" />
+                        <span>
+                          {poll.finalizedSlot?.date || (typeof (poll.finalDate as any) === 'object' ? (poll.finalDate as any)?.date : poll.finalDate)}
+                          {poll.finalizedSlot?.startTime && poll.finalizedSlot?.endTime
+                            ? ` (${poll.finalizedSlot.startTime} - ${poll.finalizedSlot.endTime})`
+                            : ''}
+                        </span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-1 text-[11px] font-medium text-neutral-500">
+                          <Calendar className="w-3.5 h-3.5 text-[#f23e2e]" />
+                          <span>
+                            {poll.dates.length === 1
+                              ? formatDateShort(poll.dates[0])
+                              : `${poll.dates.length} date proposte`}
+                          </span>
+                        </div>
 
-                    {/* Fascia Oraria */}
-                    <div className="flex items-center gap-1 text-[11px] font-medium text-neutral-500">
-                      <Clock className="w-3.5 h-3.5 text-neutral-400" />
-                      <span>{poll.startHour}:00 - {poll.endHour}:00</span>
-                    </div>
+                        {/* Fascia Oraria */}
+                        <div className="flex items-center gap-1 text-[11px] font-medium text-neutral-500">
+                          <Clock className="w-3.5 h-3.5 text-neutral-400" />
+                          <span>{poll.startHour}:00 - {poll.endHour}:00</span>
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   {/* Azione Rapida */}
                   <div className="flex items-center gap-2">
+                    {/* Pulsante Modifica per il creatore: Modifica Data/Ora per confermati, o Modifica base per non confermati */}
+                    {isCreator && (
+                      poll.status === 'confirmed' ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPollToEditConfirmed(poll);
+                          }}
+                          className="px-2.5 py-1 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border border-emerald-200/80 dark:border-emerald-800/60 shadow-2xs hover:scale-105 active:scale-95"
+                          title="Modifica Data e Orario del meeting confermato"
+                        >
+                          <Edit3 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                          <span>Modifica Data/Ora</span>
+                        </button>
+                      ) : onEditPoll ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onEditPoll(poll);
+                          }}
+                          className="px-2.5 py-1 rounded-xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs hover:scale-105 active:scale-95"
+                          title="Modifica sondaggio"
+                        >
+                          <Edit3 className="w-3.5 h-3.5 text-[#f23e2e]" />
+                          <span>Modifica</span>
+                        </button>
+                      ) : null
+                    )}
+
                     {/* Se creatore o admin: opzione Elimina */}
                     {(isCreator || currentUser.role === 'admin') && onDeletePoll && (
                       <button
@@ -360,7 +412,15 @@ export const PollsHubView: React.FC<PollsHubViewProps> = ({
                     )}
 
                     <div className="flex items-center gap-1 text-xs font-bold text-[#f23e2e] group-hover:translate-x-0.5 transition-transform">
-                      <span>{isCreator ? 'Gestisci orari' : hasVoted ? 'Vedi risultati' : 'Compila When2meet'}</span>
+                      <span>
+                        {poll.status === 'confirmed'
+                          ? 'Dettagli meeting'
+                          : isCreator
+                          ? 'Gestisci orari'
+                          : hasVoted
+                          ? 'Vedi risultati'
+                          : 'Compila When2meet'}
+                      </span>
                       <ArrowRight className="w-3.5 h-3.5 stroke-[2.5px]" />
                     </div>
                   </div>
@@ -385,6 +445,21 @@ export const PollsHubView: React.FC<PollsHubViewProps> = ({
             );
           })}
         </div>
+      )}
+
+      {/* Modale Modifica Data e Orario Sondaggio Confermato */}
+      {pollToEditConfirmed && (
+        <EditConfirmedPollModal
+          poll={pollToEditConfirmed}
+          currentUser={currentUser}
+          onClose={() => setPollToEditConfirmed(null)}
+          onSuccess={(updatedPoll) => {
+            if (onEventUpdated) {
+              onEventUpdated(updatedPoll);
+            }
+            setPollToEditConfirmed(null);
+          }}
+        />
       )}
     </div>
   );

@@ -109,7 +109,7 @@ export interface MeetingEvent {
   pollDeadline?: string; // ISO datetime
   status: EventStatus;
   finalizedSlot?: FinalizedSlot;
-  finalDate?: string;
+  finalDate?: string | { date: string; startTime: string; endTime: string };
   invitees: InviteeConfig[];
   participants?: ParticipantResponse[]; // Risposte per eventi associativi ('accepted', 'declined', 'pending')
   createdAt: string;
