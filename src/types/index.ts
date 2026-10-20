@@ -104,6 +104,8 @@ export interface MeetingEvent {
   type: EventMeetingType;
   location?: string;
   meetLink?: string;
+  googleEventId?: string;
+  googleCalendarEventId?: string;
   pollDeadline?: string; // ISO datetime
   status: EventStatus;
   finalizedSlot?: FinalizedSlot;

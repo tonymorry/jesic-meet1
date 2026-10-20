@@ -968,8 +968,16 @@ export default function App() {
 
     fetch(`/api/events/${updatedEvent.id}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updatedEvent),
+      headers: {
+        'Content-Type': 'application/json',
+        ...(currentUser?.googleAccessToken ? { Authorization: `Bearer ${currentUser.googleAccessToken}` } : {}),
+      },
+      body: JSON.stringify({
+        ...updatedEvent,
+        userId: currentUser?.id,
+        googleRefreshToken: currentUser?.googleRefreshToken,
+        googleAccessToken: currentUser?.googleAccessToken,
+      }),
     }).catch((e) => console.log('[API update official event sync]', e));
   };
 
@@ -1628,9 +1636,14 @@ export default function App() {
               onParticipate={(evt) => handleParticipateOfficialEvent(evt.id)}
               onDecline={(evt) => handleDeclineOfficialEvent(evt.id)}
               onEditEvent={(evt) => {
-                setSelectedEventId(null);
-                setEventToEdit(evt);
-                setIsCreateOfficialModalOpen(true);
+                setEvents((prev) =>
+                  prev.map((e) => (e.id === evt.id ? { ...e, ...evt } : e))
+                );
+              }}
+              onEventUpdated={(updatedEvt) => {
+                setEvents((prev) =>
+                  prev.map((e) => (e.id === updatedEvt.id ? { ...e, ...updatedEvt } : e))
+                );
               }}
               onDeleteEvent={handleDeletePoll}
             />

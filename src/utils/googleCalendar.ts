@@ -172,6 +172,127 @@ export async function createGoogleCalendarEvent(
   }
 }
 
+export interface UpdateGoogleCalendarEventData {
+  title?: string;
+  description?: string;
+  date?: string; // "YYYY-MM-DD"
+  startTime?: string; // "HH:mm"
+  endTime?: string; // "HH:mm"
+  isOnline?: boolean;
+  location?: string;
+}
+
+/**
+ * Aggiorna data, ora o dettagli di un evento già esistente su Google Calendar.
+ */
+export async function updateGoogleCalendarEvent(
+  refreshToken: string | undefined,
+  googleEventId: string,
+  eventData: UpdateGoogleCalendarEventData
+): Promise<{ success: boolean; eventId?: string; data?: any; error?: string }> {
+  if (!refreshToken) {
+    console.warn("Token Google assente, evento non aggiornato su Calendar");
+    return { success: false, error: 'Google Refresh Token non presente' };
+  }
+
+  if (!googleEventId) {
+    console.warn("googleEventId assente, impossibile aggiornare su Calendar");
+    return { success: false, error: 'googleEventId non presente' };
+  }
+
+  try {
+    const oauth2Client = getOAuth2Client(refreshToken);
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+
+    const patchBody: any = {};
+
+    if (eventData.title) {
+      patchBody.summary = eventData.title.startsWith('[JESic]')
+        ? eventData.title
+        : `[JESic] ${eventData.title}`;
+    }
+
+    if (eventData.description !== undefined) {
+      patchBody.description = [
+        eventData.description,
+        '',
+        'Organizzato tramite JESic Meet (Junior Enterprise Sicilia)',
+      ]
+        .filter(Boolean)
+        .join('\n');
+    }
+
+    if (eventData.date && eventData.startTime && eventData.endTime) {
+      patchBody.start = {
+        dateTime: new Date(`${eventData.date}T${eventData.startTime}:00`).toISOString(),
+        timeZone: 'Europe/Rome',
+      };
+      patchBody.end = {
+        dateTime: new Date(`${eventData.date}T${eventData.endTime}:00`).toISOString(),
+        timeZone: 'Europe/Rome',
+      };
+    }
+
+    if (eventData.location !== undefined || eventData.isOnline !== undefined) {
+      patchBody.location = eventData.isOnline ? 'Google Meet' : eventData.location || 'Sede JESic';
+    }
+
+    const response = await calendar.events.patch({
+      calendarId: 'primary',
+      eventId: googleEventId,
+      requestBody: patchBody,
+    });
+
+    return {
+      success: true,
+      eventId: response.data.id || googleEventId,
+      data: response.data,
+    };
+  } catch (err: any) {
+    console.error('Errore aggiornamento evento Google Calendar:', err.message || err);
+    return {
+      success: false,
+      error: err.message || 'Errore chiamata Google Calendar patch API',
+    };
+  }
+}
+
+/**
+ * Elimina definitivamente un evento da Google Calendar tramite googleEventId.
+ */
+export async function deleteGoogleCalendarEvent(
+  refreshToken: string | undefined,
+  googleEventId: string
+): Promise<{ success: boolean; error?: string }> {
+  if (!refreshToken) {
+    console.warn("Token Google assente, evento non cancellato da Calendar");
+    return { success: false, error: 'Google Refresh Token non presente' };
+  }
+
+  if (!googleEventId) {
+    console.warn("googleEventId assente, impossibile cancellare da Calendar");
+    return { success: false, error: 'googleEventId non presente' };
+  }
+
+  try {
+    const oauth2Client = getOAuth2Client(refreshToken);
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+
+    await calendar.events.delete({
+      calendarId: 'primary',
+      eventId: googleEventId,
+    });
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('Errore cancellazione evento Google Calendar:', err.message || err);
+    return {
+      success: false,
+      error: err.message || 'Errore chiamata Google Calendar delete API',
+    };
+  }
+}
+
 export const GOOGLE_CALENDAR_BACKEND_CODE = `
 import { google } from 'googleapis';
 
@@ -211,5 +332,25 @@ export async function createGoogleCalendarEvent(params) {
     eventId: res.data.id,
     meetLink: res.data.hangoutLink
   };
+}
+
+export async function updateGoogleCalendarEvent(refreshToken, googleEventId, eventData) {
+  oauth2Client.setCredentials({ refresh_token: refreshToken });
+  const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+  return calendar.events.patch({
+    calendarId: 'primary',
+    eventId: googleEventId,
+    requestBody: {
+      summary: eventData.title ? '[JESic] ' + eventData.title : undefined,
+      start: eventData.date ? { dateTime: new Date(eventData.date + 'T' + eventData.startTime + ':00').toISOString(), timeZone: 'Europe/Rome' } : undefined,
+      end: eventData.date ? { dateTime: new Date(eventData.date + 'T' + eventData.endTime + ':00').toISOString(), timeZone: 'Europe/Rome' } : undefined,
+    }
+  });
+}
+
+export async function deleteGoogleCalendarEvent(refreshToken, googleEventId) {
+  oauth2Client.setCredentials({ refresh_token: refreshToken });
+  const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+  return calendar.events.delete({ calendarId: 'primary', eventId: googleEventId });
 }
 `;

@@ -416,6 +416,7 @@ export interface IEvent {
   location?: string;
   meetLink?: string;
   googleCalendarEventId?: string;
+  googleEventId?: string;
   pollDeadline?: string;
   status: 'voting' | 'ready' | 'confirmed';
   invitees: IInvitee[];
@@ -514,6 +515,10 @@ const EventSchema: Schema<IEvent> = new Schema(
       default: '',
     },
     googleCalendarEventId: {
+      type: String,
+      default: null,
+    },
+    googleEventId: {
       type: String,
       default: null,
     },
