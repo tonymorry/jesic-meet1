@@ -1074,96 +1074,121 @@ const handleUpdatePollConfirmedDate = async (req: Request, res: Response) => {
   const { id } = req.params;
   const { date, finalDate, startTime, endTime } = req.body;
 
-  const targetDate = date || finalDate;
-  if (!targetDate || !startTime || !endTime) {
+  const targetDate = typeof finalDate === 'object' && finalDate?.date ? finalDate.date : (date || finalDate);
+  const targetStartTime = typeof finalDate === 'object' && finalDate?.startTime ? finalDate.startTime : (startTime || '09:00');
+  const targetEndTime = typeof finalDate === 'object' && finalDate?.endTime ? finalDate.endTime : (endTime || '10:00');
+
+  if (!targetDate) {
     return res.status(400).json({ error: 'Data, ora inizio e ora fine sono obbligatori' });
   }
 
   try {
-    let poll: any = null;
+    let existingPoll: any = null;
     try {
-      poll = await EventModel.findById(id);
+      existingPoll = await PollModel.findById(id);
     } catch {}
-    if (!poll) {
-      poll = await EventModel.findOne({ $or: [{ _id: id }, { id }] });
+    if (!existingPoll) {
+      existingPoll = await PollModel.findOne({ $or: [{ _id: id }, { id }] });
     }
 
-    if (!poll) {
+    if (!existingPoll) {
       return res.status(404).json({ error: 'Sondaggio non trovato nel database' });
     }
 
-    const startH = parseInt(startTime.split(':')[0], 10) || 9;
-    const endH = parseInt(endTime.split(':')[0], 10) || 10;
+    const startH = parseInt(targetStartTime.split(':')[0], 10) || 9;
+    const endH = parseInt(targetEndTime.split(':')[0], 10) || 10;
 
-    // 1. Aggiorna finalDate e finalizedSlot su MongoDB
-    const updated = await EventModel.findOneAndUpdate(
+    const finalDateObj = {
+      date: targetDate,
+      startTime: targetStartTime,
+      endTime: targetEndTime,
+    };
+
+    const targetGoogleEventId = existingPoll.googleEventId || existingPoll.googleCalendarEventId || null;
+
+    // 1. Aggiorna il documento PollModel nel database
+    const updatedPoll = await PollModel.findOneAndUpdate(
       { $or: [{ _id: id }, { id }] },
       {
         $set: {
-          finalDate: targetDate,
+          finalDate: finalDateObj,
           dates: [targetDate],
           startHour: startH,
           endHour: endH,
-          finalizedSlot: {
-            date: targetDate,
-            startTime,
-            endTime,
-          },
+          finalizedSlot: finalDateObj,
           status: 'confirmed',
+          ...(targetGoogleEventId ? { googleEventId: targetGoogleEventId, googleCalendarEventId: targetGoogleEventId } : {}),
         },
       },
       { new: true }
     );
 
-    if (!updated) {
-      return res.status(404).json({ error: 'Errore aggiornamento su MongoDB' });
+    if (!updatedPoll) {
+      return res.status(404).json({ error: 'Errore aggiornamento sondaggio su MongoDB' });
     }
 
-    // 2. CRITICO: Sincronizzazione con Google Calendar
-    const targetGoogleEventId = updated.googleEventId || updated.googleCalendarEventId;
-    if (targetGoogleEventId) {
+    const poll: any = updatedPoll;
+    if (targetGoogleEventId && !poll.googleEventId) {
+      poll.googleEventId = targetGoogleEventId;
+    }
+
+    // 2. Controlla se l'utente loggato ha un googleRefreshToken e se il sondaggio aggiornato possiede un googleEventId
+    const requesterId =
+      req.body?.userId ||
+      (req.headers['x-user-id'] as string) ||
+      poll.creatorId;
+
+    let user: any = null;
+    if (requesterId) {
       try {
-        const requesterId =
-          req.body?.userId ||
-          (req.headers['x-user-id'] as string) ||
-          updated.creatorId;
+        user = await UserModel.findById(requesterId);
+      } catch {}
+      if (!user) {
+        user = await UserModel.findOne({ $or: [{ _id: requesterId }, { id: requesterId }] });
+      }
+    }
 
-        let user: any = null;
-        if (requesterId) {
-          try {
-            user = await UserModel.findById(requesterId);
-          } catch {}
-          if (!user) {
-            user = await UserModel.findOne({ $or: [{ _id: requesterId }, { id: requesterId }] });
-          }
-        }
+    if (!user) {
+      user = { id: requesterId, googleRefreshToken: req.body?.googleRefreshToken };
+    } else if (!user.googleRefreshToken && req.body?.googleRefreshToken) {
+      user.googleRefreshToken = req.body.googleRefreshToken;
+    }
 
-        const refreshToken =
-          req.body?.googleRefreshToken ||
-          user?.googleRefreshToken;
+    // 3. Se sì, estrai i dati aggiornati (finalDate.date, finalDate.startTime, finalDate.endTime, e title)
+    //    e chiama la funzione updateGoogleCalendarEvent(user.googleRefreshToken, poll.googleEventId, { ... })
+    if (user?.googleRefreshToken && poll.googleEventId) {
+      // 4. Gestisci eventuali errori con un blocco try...catch per non far fallire l'intera richiesta
+      try {
+        const finalDateData =
+          typeof poll.finalDate === 'object' && poll.finalDate !== null
+            ? poll.finalDate
+            : finalDateObj;
 
-        if (refreshToken) {
-          await updateGoogleCalendarEvent(refreshToken, targetGoogleEventId, {
-            title: updated.title,
-            description: updated.description,
-            date: targetDate,
-            startTime,
-            endTime,
-            isOnline: updated.type !== 'in_person',
-            location: updated.location,
-          });
-          console.log(`[Google Calendar] Evento ${targetGoogleEventId} aggiornato con successo a ${targetDate} ${startTime}-${endTime}`);
-        } else {
-          console.warn("Token Google assente, evento non aggiornato su Calendar");
-        }
+        await updateGoogleCalendarEvent(user.googleRefreshToken, poll.googleEventId, {
+          title: poll.title,
+          description: poll.description,
+          date: finalDateData.date,
+          startTime: finalDateData.startTime,
+          endTime: finalDateData.endTime,
+          isOnline: poll.type !== 'in_person',
+          location: poll.location,
+        });
+        console.log(`[Google Calendar] Evento ${poll.googleEventId} aggiornato con successo a ${finalDateData.date} ${finalDateData.startTime}-${finalDateData.endTime}`);
       } catch (calErr: any) {
-        console.warn("Errore allineamento Google Calendar:", calErr?.message || calErr);
+        console.warn("Errore allineamento Google Calendar per sondaggio confermato:", calErr?.message || calErr);
+      }
+    } else {
+      if (!user?.googleRefreshToken) {
+        console.warn("Token Google assente per l'utente, Google Calendar non aggiornato");
+      }
+      if (!poll.googleEventId) {
+        console.warn("googleEventId assente nel sondaggio, nessun evento Calendar da aggiornare");
       }
     }
 
     const mapped = {
-      ...updated.toObject(),
-      id: updated._id || updated.id,
+      ...poll.toObject(),
+      id: poll._id || poll.id,
     };
 
     return res.json({

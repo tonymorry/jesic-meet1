@@ -546,7 +546,7 @@ const EventSchema: Schema<IEvent> = new Schema(
       endTime: { type: String },
     },
     finalDate: {
-      type: String,
+      type: Schema.Types.Mixed,
       default: null,
     },
     groupId: {
