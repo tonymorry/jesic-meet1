@@ -328,24 +328,34 @@ export default function App() {
     setIsDarkMode((prev) => !prev);
   };
 
-  // Gerarchia Esatta dei 3 Ruoli: 'user' (Livello 1) < 'admin' (Livello 2) < 'admin_clienti' (Livello 3)
-  const isAdmin = currentUser?.role === 'admin';
-  const isAdminClienti = currentUser?.role === 'admin_clienti';
+  // Ruolo dell'utente all'interno del gruppo specifico (RBAC per Gruppo)
+  // 1. Fuori dai gruppi (Home generale): tutti quanti sono semplicemente utenti normali.
+  // 2. I ruoli speciali (admin e admin_clienti) sono assegnati SPECIFICAMENTE all'interno di ogni singolo gruppo.
+  // 3. I poteri speciali si attivano solo quando l'utente entra nel gruppo in cui possiede quel ruolo.
+  // 4. Di conseguenza, il modulo B2B è separato: gestibile solo da chi è admin o admin_clienti di quel gruppo.
+  const activeGroupMembership = activeGroup?.members?.find((m) => m.userId === currentUser?.id);
+  const isGroupCreator = Boolean(activeGroup && activeGroup.creatorId === currentUser?.id);
+  const currentGroupRole = activeGroup
+    ? (activeGroupMembership?.role || (isGroupCreator ? 'admin' : 'member'))
+    : 'member';
 
-  // Livello 2 & 3: Creazione Eventi Ufficiali e Gestione Ruoli
-  const canCreateOfficialEvents = isAdmin || isAdminClienti;
-  const canManageRoles = isAdmin || isAdminClienti;
+  const isGroupAdmin = isInsideGroup && (isGroupCreator || currentGroupRole === 'admin');
+  const isGroupAdminClienti = isInsideGroup && currentGroupRole === 'admin_clienti';
 
-  // Livello 3 (Esclusivo): Visibilità e accesso alla tab "Richieste Clienti"
-  const isClientAdmin = isAdminClienti; // Sbloccato SOLO per 'admin_clienti'
-  const canAccessClientRequests = isClientAdmin;
+  // Gerarchia Ruoli nel Gruppo:
+  // 1. Membro Semplice: entra nel gruppo e può creare solo i "sondaggi"
+  // 2. Admin: membro + può creare gli eventi (sondaggi ed eventi ufficiali associativi)
+  // 3. Admin Clienti: admin + form per il b2b e richieste clienti (riservato esclusivamente a questo ruolo)
+  const canCreateOfficialEvents = isInsideGroup && (isGroupAdmin || isGroupAdminClienti);
+  const canAccessGroupClientRequests = isInsideGroup && isGroupAdminClienti;
+  const isClientAdmin = canAccessGroupClientRequests;
 
-  // Protezione Rotta Richieste: visibile e accessibile SOLO ad 'admin_clienti'. Bloccata per 'user' e 'admin'.
+  // Protezione Rotta Richieste: accessibile SOLO all'interno del gruppo e per admin_clienti del gruppo
   useEffect(() => {
-    if (currentTab === 'requests' && !canAccessClientRequests) {
+    if (currentTab === 'requests' && !canAccessGroupClientRequests) {
       setCurrentTab(isInsideGroup ? 'dashboard' : 'groups');
     }
-  }, [currentTab, canAccessClientRequests, isInsideGroup]);
+  }, [currentTab, canAccessGroupClientRequests, isInsideGroup]);
 
   // Supporto invito automatico tramite URL parametro ?join=CODE
   useEffect(() => {
@@ -882,6 +892,35 @@ export default function App() {
     }
   };
 
+  const handleUpdateMemberRole = async (
+    memberId: string,
+    newRole: 'member' | 'admin' | 'admin_clienti'
+  ) => {
+    if (!currentUser || !activeGroup) return;
+
+    const updatedMembers = activeGroup.members.map((m) =>
+      m.userId === memberId ? { ...m, role: newRole } : m
+    );
+    const updatedGroup: Group = { ...activeGroup, members: updatedMembers };
+    setGroups((prev) => prev.map((g) => (g.id === activeGroup.id ? updatedGroup : g)));
+
+    try {
+      const res = await fetch(`/api/groups/${activeGroup.id}/members/${memberId}/role`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: newRole, requesterId: currentUser.id }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.group) {
+          setGroups((prev) => prev.map((g) => (g.id === activeGroup.id ? data.group : g)));
+        }
+      }
+    } catch (e) {
+      console.warn('[API update member role error]', e);
+    }
+  };
+
   // LOGICA DEL BOTTONE "+"
   // REQUISITO 1: Nella Home iniziale (quando l'utente è fuori dai gruppi),
   // si possono creare ESCLUSIVAMENTE Sondaggi. La creazione Eventi è riservata allo spazio di un Gruppo.
@@ -1371,7 +1410,9 @@ export default function App() {
     return !myPart || myPart.status === 'pending';
   }).length;
 
-  const pendingClientRequestsCount = clientRequests.filter((r) => r.status === 'pending').length;
+  const pendingClientRequestsCount = isInsideGroup && activeGroup
+    ? clientRequests.filter((r) => r.groupId === activeGroup.id && r.status === 'pending').length
+    : 0;
 
   // Evento selezionato nel modale
   const selectedEvent = events.find((e) => e.id === selectedEventId);
@@ -1386,9 +1427,11 @@ export default function App() {
         />
       )}
 
-      {/* 2. ROTTA PUBBLICA ESTERNA /prenota-call */}
+      {/* 2. ROTTA PUBBLICA ESTERNA /prenota-call (Form univoco per ogni gruppo) */}
       {currentRoute === '/prenota-call' ? (
         <PublicBookingForm
+          groups={groups}
+          initialGroupId={activeGroup?.id || null}
           onSubmitRequest={handleClientRequestSubmit}
           onBackToApp={navigateBackToApp}
         />
@@ -1424,18 +1467,21 @@ export default function App() {
             onBackToGroups={handleBackToGroups}
           />
 
-          {/* Banner scorrevole rapido per aprire o testare la rotta esterna /prenota-call (Admin e Admin Clienti) */}
-          {isClientAdmin && (
+          {/* Banner scorrevole rapido per aprire o testare la rotta esterna /prenota-call (Visibile SOLO all'interno del gruppo per Admin e Admin Clienti di questo gruppo) */}
+          {isInsideGroup && isClientAdmin && activeGroup && (
             <div className="bg-neutral-900 text-neutral-300 px-4 sm:px-6 py-2 text-[11px] border-b border-neutral-800 flex items-center justify-between">
               <span className="truncate">
-                🔗 Link pubblico clienti: <code className="text-[#f23e2e] font-mono font-bold">/prenota-call</code>
+                🔗 Link B2B {activeGroup.name}: <code className="text-[#f23e2e] font-mono font-bold">/prenota-call?groupId={activeGroup.id}</code>
               </span>
               <button
                 type="button"
-                onClick={navigateToPublicBooking}
+                onClick={() => {
+                  window.history.pushState({}, '', `/prenota-call?groupId=${activeGroup.id}`);
+                  setCurrentRoute('/prenota-call');
+                }}
                 className="text-[#f23e2e] hover:underline font-black shrink-0 ml-2 cursor-pointer"
               >
-                Apri Form Esterno &rarr;
+                Apri Form Gruppo &rarr;
               </button>
             </div>
           )}
@@ -1500,25 +1546,13 @@ export default function App() {
                   />
                 )}
 
-                {/* 4. RICHIESTE CLIENTI (Visibile e accessibile SOLO ad 'admin' e 'admin_clienti') */}
-                {currentTab === 'requests' && isClientAdmin && (
-                  <ClientRequestsDashboard
-                    currentUser={currentUser}
-                    requests={clientRequests}
-                    allEvents={events}
-                    allUsers={users}
-                    onConvertToPoll={handleConvertToPoll}
-                    onConfirmFinalEvent={handleConfirmFinalClientEvent}
-                    onOpenPublicBooking={navigateToPublicBooking}
-                    onOpenEventDetail={(evtId) => setSelectedEventId(evtId)}
-                  />
-                )}
-
-                {/* 5. DESTRA: "Profilo" */}
+                {/* 4. DESTRA: "Profilo" (Home Generale) */}
                 {currentTab === 'profile' && (
                   <ProfileView
                     currentUser={currentUser}
                     allUsers={users}
+                    groups={groups}
+                    activeGroup={null}
                     onLogout={handleLogout}
                     onUpdateUserRole={handleUpdateUserRole}
                     onUpdateUserProfile={handleUpdateUserProfile}
@@ -1552,7 +1586,8 @@ export default function App() {
                     onOpenEvent={(evt) => setSelectedEventId(evt.id)}
                     onOpenCreateModal={handlePlusButtonClick}
                     onNavigateToRequests={() => setCurrentTab('requests')}
-                    pendingClientRequestsCount={clientRequests.filter((r) => r.status === 'pending').length}
+                    isGroupClientAdmin={isClientAdmin}
+                    pendingClientRequestsCount={clientRequests.filter((r) => r.groupId === activeGroup.id && r.status === 'pending').length}
                   />
                 )}
 
@@ -1573,13 +1608,14 @@ export default function App() {
                   />
                 )}
 
-                {/* 3. Richieste Clienti */}
+                {/* 3. Richieste Clienti (Esclusivo per Admin o Admin Clienti di questo gruppo specifico) */}
                 {currentTab === 'requests' && isClientAdmin && (
                   <ClientRequestsDashboard
                     currentUser={currentUser}
-                    requests={clientRequests}
+                    requests={clientRequests.filter((r) => r.groupId === activeGroup.id)}
                     allEvents={events}
                     allUsers={users}
+                    activeGroup={activeGroup}
                     onConvertToPoll={handleConvertToPoll}
                     onConfirmFinalEvent={handleConfirmFinalClientEvent}
                     onOpenPublicBooking={navigateToPublicBooking}
@@ -1587,11 +1623,12 @@ export default function App() {
                   />
                 )}
 
-                {/* 4. Calendario esclusivo del Gruppo */}
+                {/* 4. Calendario associato esclusivo del Gruppo (include eventi del gruppo e call B2B confermate) */}
                 {currentTab === 'calendar' && (
                   <CalendarView
                     currentUser={currentUser}
                     allEvents={events.filter((e) => e.groupId === activeGroup.id)}
+                    clientRequests={clientRequests.filter((r) => r.groupId === activeGroup.id)}
                     allUsers={users}
                     onOpenEventDetail={(evt) => setSelectedEventId(evt.id)}
                     onEventUpdated={(updatedEvt) => {
@@ -1602,11 +1639,13 @@ export default function App() {
                   />
                 )}
 
-                {/* 5. Profilo */}
+                {/* 5. Profilo (Dentro il Gruppo) */}
                 {currentTab === 'profile' && (
                   <ProfileView
                     currentUser={currentUser}
                     allUsers={users}
+                    groups={groups}
+                    activeGroup={activeGroup}
                     onLogout={handleLogout}
                     onUpdateUserRole={handleUpdateUserRole}
                     onUpdateUserProfile={handleUpdateUserProfile}
@@ -1658,6 +1697,7 @@ export default function App() {
                 return true;
               }}
               onRemoveMember={handleRemoveMemberFromGroup}
+              onUpdateMemberRole={handleUpdateMemberRole}
             />
           )}
 

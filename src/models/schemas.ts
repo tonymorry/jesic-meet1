@@ -158,7 +158,7 @@ export const User: Model<IUser> = UserModel;
    ========================================================================== */
 export interface IGroupMember {
   userId: string;
-  role: 'admin' | 'member';
+  role: 'member' | 'admin' | 'admin_clienti';
   joinedAt: string;
 }
 
@@ -180,7 +180,7 @@ export interface IGroup {
 const GroupMemberSubSchema = new Schema<IGroupMember>(
   {
     userId: { type: String, required: true },
-    role: { type: String, enum: ['admin', 'member'], default: 'member' },
+    role: { type: String, enum: ['member', 'admin', 'admin_clienti'], default: 'member' },
     joinedAt: { type: String, default: () => new Date().toISOString() },
   },
   { _id: false }
@@ -275,6 +275,7 @@ export interface IClientSlotPreference {
 export interface IClientRequest {
   _id?: string;
   id?: string;
+  groupId?: string | null;
   companyName: string;
   contactEmail: string;
   description: string;
@@ -307,6 +308,11 @@ const ClientRequestSchema: Schema<IClientRequest> = new Schema(
     _id: {
       type: String,
       default: () => `req-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    },
+    groupId: {
+      type: String,
+      default: null,
+      index: true,
     },
     companyName: {
       type: String,

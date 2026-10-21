@@ -34,7 +34,7 @@ import {
   Copy,
   Check,
 } from 'lucide-react';
-import { ClientRequest, MeetingEvent, User } from '../types';
+import { ClientRequest, Group, MeetingEvent, User } from '../types';
 import {
   generateClientConfirmationEmailHtml,
   EmailTemplateData,
@@ -45,6 +45,7 @@ interface ClientRequestsDashboardProps {
   requests: ClientRequest[];
   allEvents: MeetingEvent[];
   allUsers: User[];
+  activeGroup?: Group;
   onConvertToPoll: (request: ClientRequest) => void;
   onConfirmFinalEvent: (
     request: ClientRequest,
@@ -60,6 +61,7 @@ export const ClientRequestsDashboard: React.FC<ClientRequestsDashboardProps> = (
   requests,
   allEvents,
   allUsers,
+  activeGroup,
   onConvertToPoll,
   onConfirmFinalEvent,
   onOpenPublicBooking,
@@ -141,7 +143,9 @@ export const ClientRequestsDashboard: React.FC<ClientRequestsDashboardProps> = (
 
   const handleCopyPublicLink = () => {
     const origin = window.location.origin;
-    const link = `${origin}/prenota-call`;
+    const link = activeGroup
+      ? `${origin}/prenota-call?groupId=${activeGroup.id}`
+      : `${origin}/prenota-call`;
     navigator.clipboard?.writeText(link);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
@@ -150,7 +154,7 @@ export const ClientRequestsDashboard: React.FC<ClientRequestsDashboardProps> = (
   return (
     <div className="flex flex-col gap-5 pb-8 max-w-md mx-auto sm:max-w-xl md:max-w-4xl lg:max-w-6xl xl:max-w-7xl px-4 sm:px-6 pt-2">
       
-      {/* Banner Esclusivo Admin Clienti */}
+      {/* Banner Esclusivo Admin Clienti del Gruppo */}
       <div className="bg-gradient-to-r from-red-950/80 via-neutral-900 to-neutral-900 border border-red-800/60 rounded-3xl p-5 shadow-sm space-y-3">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
@@ -159,10 +163,10 @@ export const ClientRequestsDashboard: React.FC<ClientRequestsDashboardProps> = (
             </span>
             <div>
               <span className="text-[10px] font-black uppercase tracking-widest text-[#f23e2e]">
-                Area Riservata B2B
+                Area Riservata B2B {activeGroup ? `• ${activeGroup.name}` : ''}
               </span>
               <h1 className="text-xl font-black text-white tracking-tight">
-                Richieste Clienti Esterne
+                {activeGroup ? `Richieste Clienti - ${activeGroup.name}` : 'Richieste Clienti Esterne'}
               </h1>
             </div>
           </div>
@@ -171,11 +175,11 @@ export const ClientRequestsDashboard: React.FC<ClientRequestsDashboardProps> = (
             <button
               type="button"
               onClick={handleCopyPublicLink}
-              title="Copia link pubblico per i clienti (/prenota-call)"
+              title={activeGroup ? `Copia link B2B per ${activeGroup.name}` : 'Copia link pubblico (/prenota-call)'}
               className="py-1.5 px-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
             >
               {copiedLink ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copiedLink ? 'Copiato!' : 'Copia Link Form'}</span>
+              <span>{copiedLink ? 'Copiato!' : activeGroup ? 'Copia Link B2B Gruppo' : 'Copia Link Form'}</span>
             </button>
 
             <button

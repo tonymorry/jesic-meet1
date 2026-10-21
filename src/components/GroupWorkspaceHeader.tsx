@@ -20,6 +20,7 @@ import {
   Trash2,
   X,
   AlertTriangle,
+  Link2,
 } from 'lucide-react';
 
 export interface GroupWorkspaceHeaderProps {
@@ -42,6 +43,7 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
   onDeleteGroup,
 }) => {
   const [copied, setCopied] = useState(false);
+  const [copiedB2b, setCopiedB2b] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [newName, setNewName] = useState(activeGroup.name);
   const [isSavingName, setIsSavingName] = useState(false);
@@ -54,7 +56,13 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const isCreator = activeGroup.creatorId === currentUser.id || currentUser.role === 'admin';
+  const userMembership = activeGroup.members?.find((m) => m.userId === currentUser.id);
+  const isGroupCreator = activeGroup.creatorId === currentUser.id;
+  const currentGroupRole = userMembership?.role || (isGroupCreator ? 'admin' : 'member');
+  const isGroupAdmin = isGroupCreator || currentGroupRole === 'admin';
+  const isGroupAdminClienti = currentGroupRole === 'admin_clienti';
+  const canManageGroup = isGroupAdmin || isGroupAdminClienti;
+  const isCreator = isGroupAdmin;
 
   const handleSaveName = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -154,8 +162,23 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
                         <Edit2 className="w-3.5 h-3.5" />
                       </button>
                     )}
-                    <span className="text-[9px] font-black uppercase tracking-wider bg-red-100 dark:bg-red-950/60 text-[#f23e2e] px-2 py-0.5 rounded-full shrink-0">
-                      {isCreator ? 'Creatore' : 'Gruppo'}
+                    {/* Badge Ruolo dell'Utente in questo Gruppo */}
+                    <span
+                      className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1 ${
+                        isGroupAdmin
+                          ? 'bg-red-100 dark:bg-red-950/60 text-[#f23e2e] border border-red-200/60 dark:border-red-900/40'
+                          : isGroupAdminClienti
+                          ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200/60 dark:border-amber-900/40'
+                          : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400'
+                      }`}
+                    >
+                      {isGroupCreator
+                        ? '👑 Creatore'
+                        : isGroupAdmin
+                        ? '⚡ Admin Gruppo'
+                        : isGroupAdminClienti
+                        ? '🏢 Admin Clienti Gruppo'
+                        : '👤 Membro'}
                     </span>
                     <span
                       className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1 border ${
@@ -169,14 +192,32 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
                   </div>
                 )}
                 <p className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">
-                  Spazio di lavoro condiviso del gruppo
+                  Spazio di lavoro condiviso del gruppo &bull; {activeGroup.members.length} {activeGroup.members.length === 1 ? 'membro' : 'membri'}
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Azioni Gruppo: Codice Univoco & Membri & Elimina Gruppo */}
-          <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+          {/* Azioni Gruppo: Codice Univoco & Link B2B & Membri & Elimina Gruppo */}
+          <div className="flex items-center gap-2 self-end sm:self-center shrink-0 flex-wrap">
+            {/* Link B2B Univoco del Gruppo (visibile ESCLUSIVAMENTE ad admin_clienti di questo gruppo) */}
+            {isGroupAdminClienti && (
+              <button
+                type="button"
+                onClick={() => {
+                  const link = `${window.location.origin}/prenota-call?groupId=${activeGroup.id}`;
+                  navigator.clipboard.writeText(link);
+                  setCopiedB2b(true);
+                  setTimeout(() => setCopiedB2b(false), 2000);
+                }}
+                title={`Copia il link di prenotazione B2B univoco per ${activeGroup.name} (Riservato Admin Clienti)`}
+                className="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95 border border-amber-200 dark:border-amber-800/60"
+              >
+                {copiedB2b ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Link2 className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />}
+                <span className="hidden sm:inline">{copiedB2b ? 'Copiato!' : 'Link Form B2B'}</span>
+              </button>
+            )}
+
             {/* Codice Gruppo con Copia */}
             <div className="flex items-center gap-1 bg-neutral-100 dark:bg-neutral-800/80 px-2.5 py-1.5 rounded-xl border border-neutral-200 dark:border-neutral-700">
               <span className="text-[10px] text-neutral-400 font-semibold">Codice:</span>

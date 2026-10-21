@@ -10,7 +10,7 @@
  */
 
 import React, { useState } from 'react';
-import { MeetingEvent, User } from '../types';
+import { MeetingEvent, User, ClientRequest } from '../types';
 import { isEventPassed } from '../utils/dateUtils';
 import {
   Calendar as CalendarIcon,
@@ -27,6 +27,7 @@ import {
   CalendarDays,
   CalendarRange,
   Edit3,
+  Briefcase,
 } from 'lucide-react';
 import { EditConfirmedPollModal } from './EditConfirmedPollModal';
 
@@ -34,6 +35,7 @@ interface CalendarViewProps {
   currentUser: User;
   allEvents: MeetingEvent[];
   allUsers: User[];
+  clientRequests?: ClientRequest[];
   onOpenEventDetail?: (event: MeetingEvent) => void;
   onEventUpdated?: (updatedEvent: MeetingEvent) => void;
 }
@@ -42,6 +44,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   currentUser,
   allEvents,
   allUsers,
+  clientRequests = [],
   onOpenEventDetail,
   onEventUpdated,
 }) => {
@@ -53,23 +56,54 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [selectedCalendarEvent, setSelectedCalendarEvent] = useState<MeetingEvent | null>(null);
 
+  // Mappa richieste B2B confermate del gruppo come eventi del calendario associato
+  const b2bEvents: MeetingEvent[] = clientRequests
+    .filter((r) => r.status === 'confirmed' && r.finalizedSlot)
+    .map((r) => ({
+      id: `b2b-${r.id}`,
+      title: `🤝 Call B2B: ${r.companyName}`,
+      description: `Call B2B con ${r.companyName} (${r.contactEmail})\nRichiesta: ${r.description}`,
+      creatorId: currentUser.id,
+      eventType: 'official' as const,
+      dates: [r.finalizedSlot!.date],
+      startHour: parseInt(r.finalizedSlot!.startTime.split(':')[0], 10) || 9,
+      endHour: parseInt(r.finalizedSlot!.endTime.split(':')[0], 10) || 10,
+      slotIntervalMinutes: 60,
+      type: 'online' as const,
+      meetLink: r.meetLink || undefined,
+      status: 'confirmed' as const,
+      finalizedSlot: r.finalizedSlot,
+      invitees: [],
+      participants: [{ userId: currentUser.id, status: 'accepted' as const }],
+      createdAt: r.createdAt || new Date().toISOString(),
+      clientRequestId: r.id,
+      clientInfo: {
+        companyName: r.companyName,
+        contactEmail: r.contactEmail,
+      },
+    }));
+
   // FILTRO FONDAMENTALE SPECIFICA:
-  // Mostra SOLTANTO gli eventi di JESic:
+  // Mostra SOLTANTO gli eventi di JESic + Eventi B2B del gruppo:
   // A) Riunioni da sondaggio confermate ('poll' && status === 'confirmed' && utente tra gli invitati o creatore)
   // B) Eventi Associativi accettati ('official' && status === 'confirmed' && participant status === 'accepted')
-  const visibleEvents = allEvents.filter((e) => {
-    if (e.eventType === 'official') {
-      // Deve aver accettato premendo "Partecipa" (o essere il creatore)
-      if (e.creatorId === currentUser.id) return true;
-      const participant = e.participants?.find((p) => p.userId === currentUser.id);
-      return participant?.status === 'accepted';
-    } else {
-      // Sondaggio confermato
-      if (e.status !== 'confirmed') return false;
-      const isInvited = e.invitees.some((i) => i.userId === currentUser.id);
-      return isInvited || e.creatorId === currentUser.id;
-    }
-  });
+  // C) Call B2B confermate del gruppo
+  const visibleEvents = [
+    ...allEvents.filter((e) => {
+      if (e.eventType === 'official') {
+        // Deve aver accettato premendo "Partecipa" (o essere il creatore)
+        if (e.creatorId === currentUser.id) return true;
+        const participant = e.participants?.find((p) => p.userId === currentUser.id);
+        return participant?.status === 'accepted';
+      } else {
+        // Sondaggio confermato
+        if (e.status !== 'confirmed') return false;
+        const isInvited = e.invitees.some((i) => i.userId === currentUser.id);
+        return isInvited || e.creatorId === currentUser.id;
+      }
+    }),
+    ...b2bEvents,
+  ];
 
   // Mese visualizzato
   const currentYear = currentDate.getFullYear();

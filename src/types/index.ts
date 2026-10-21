@@ -22,9 +22,11 @@ export interface User {
   googleCalendarConnected?: boolean;
 }
 
+export type GroupMemberRole = 'member' | 'admin' | 'admin_clienti';
+
 export interface GroupMember {
   userId: string;
-  role: 'admin' | 'member';
+  role: GroupMemberRole;
   joinedAt: string;
 }
 
@@ -79,6 +81,7 @@ export type ClientRequestStatus = 'pending' | 'converted_to_poll' | 'confirmed' 
 
 export interface ClientRequest {
   id: string;
+  groupId?: string | null;
   companyName: string;
   contactEmail: string;
   description: string;

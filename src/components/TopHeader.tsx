@@ -146,25 +146,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                   <span>Calendario</span>
                 </button>
 
-                {isClientAdmin && (
-                  <button
-                    type="button"
-                    onClick={() => onSelectTab('requests')}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer relative ${
-                      currentTab === 'requests'
-                        ? 'bg-white dark:bg-neutral-900 text-[#f23e2e] shadow-xs font-black'
-                        : 'text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white'
-                    }`}
-                  >
-                    <Inbox className="w-3.5 h-3.5" />
-                    <span>Richieste Clienti</span>
-                    {pendingClientRequestsCount > 0 && (
-                      <span className="px-1.5 py-0.2 rounded-full bg-[#f23e2e] text-white text-[9px] font-black animate-pulse">
-                        {pendingClientRequestsCount}
-                      </span>
-                    )}
-                  </button>
-                )}
+
 
                 <button
                   type="button"
@@ -320,40 +302,16 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200 block truncate max-w-[120px]">
                 {currentUser.name} {currentUser.surname}
               </span>
-              <span
-                className={`inline-block text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-full ${
-                  currentUser.role === 'admin_clienti'
-                    ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-400 border border-amber-300/50 dark:border-amber-800/50'
-                    : currentUser.role === 'admin'
-                    ? 'bg-red-100 dark:bg-red-950/80 text-[#f23e2e] border border-red-300/50 dark:border-red-800/50'
-                    : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300'
-                }`}
-              >
-                {currentUser.role === 'admin_clienti'
-                  ? 'Admin Clienti'
-                  : currentUser.role === 'admin'
-                  ? 'Admin'
-                  : 'Utente'}
+              <span className="inline-block text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-full bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300">
+                {currentUser.jesicRole || 'Utente'}
               </span>
             </div>
             <div className="sm:hidden flex flex-col items-start leading-tight">
               <span className="text-xs font-semibold text-neutral-800 dark:text-neutral-200 max-w-[80px] truncate">
                 {currentUser.name}
               </span>
-              <span
-                className={`text-[8px] font-black uppercase tracking-wider px-1 py-0.2 rounded-md ${
-                  currentUser.role === 'admin_clienti'
-                    ? 'bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-400'
-                    : currentUser.role === 'admin'
-                    ? 'bg-red-100 dark:bg-red-950/80 text-[#f23e2e]'
-                    : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300'
-                }`}
-              >
-                {currentUser.role === 'admin_clienti'
-                  ? 'Admin Clienti'
-                  : currentUser.role === 'admin'
-                  ? 'Admin'
-                  : 'Utente'}
+              <span className="text-[8px] font-black uppercase tracking-wider px-1 py-0.2 rounded-md bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300">
+                {currentUser.jesicRole || 'Utente'}
               </span>
             </div>
           </button>

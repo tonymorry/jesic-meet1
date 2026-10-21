@@ -147,41 +147,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               </span>
             </button>
 
-            {/* 4. "Richieste Clienti" (VISIBILE SOLO PER 'admin' e 'admin_clienti', NASCOSTA PER 'user') */}
-            {isClientAdmin && (
-              <button
-                type="button"
-                onClick={() => onSelectTab('requests')}
-                className={`flex-1 flex flex-col items-center justify-center py-1 transition-all active:scale-95 relative cursor-pointer ${
-                  currentTab === 'requests'
-                    ? 'text-[#f23e2e] dark:text-[#f23e2e]'
-                    : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
-                }`}
-                aria-label="Richieste Clienti B2B"
-              >
-                <div className="relative">
-                  <Briefcase
-                    className={`w-5 h-5 transition-transform ${
-                      currentTab === 'requests' ? 'stroke-[2.5px] scale-110' : 'stroke-[1.8px]'
-                    }`}
-                  />
-                  {pendingClientRequestsCount > 0 && (
-                    <span className="absolute -top-1 -right-2.5 min-w-[16px] h-4 px-1 rounded-full bg-[#f23e2e] text-white text-[9px] font-black flex items-center justify-center ring-2 ring-white dark:ring-neutral-900 shadow-xs animate-pulse">
-                      {pendingClientRequestsCount}
-                    </span>
-                  )}
-                </div>
-                <span
-                  className={`text-[10px] mt-1 tracking-tight leading-none ${
-                    currentTab === 'requests'
-                      ? 'font-black text-[#f23e2e]'
-                      : 'font-semibold text-neutral-500 dark:text-neutral-400'
-                  }`}
-                >
-                  Richieste
-                </span>
-              </button>
-            )}
+
 
             {/* 5. "Profilo" */}
             <button

@@ -71,7 +71,7 @@ export function getGoogleCalendarClient(userAccessToken: string) {
  */
 clientRequestsRouter.post('/', async (req: Request, res: Response) => {
   try {
-    const { companyName, contactEmail, description, preferredSlots } = req.body;
+    const { companyName, contactEmail, description, preferredSlots, groupId } = req.body;
 
     // Validazioni server-side
     if (!companyName || typeof companyName !== 'string' || companyName.trim().length < 2) {
@@ -100,6 +100,7 @@ clientRequestsRouter.post('/', async (req: Request, res: Response) => {
       contactEmail: contactEmail.trim().toLowerCase(),
       description: description.trim(),
       preferredSlots,
+      groupId: groupId || null,
       status: 'pending',
     });
 
@@ -154,7 +155,12 @@ clientRequestsRouter.post('/', async (req: Request, res: Response) => {
  */
 clientRequestsRouter.get('/', async (req: Request, res: Response) => {
   try {
-    const requests = await ClientRequest.find().sort({ createdAt: -1 });
+    const { groupId } = req.query;
+    const filter: any = {};
+    if (groupId) {
+      filter.groupId = groupId;
+    }
+    const requests = await ClientRequest.find(filter).sort({ createdAt: -1 });
     return res.json({ success: true, count: requests.length, requests });
   } catch (error: any) {
     return res.status(500).json({ error: error.message });

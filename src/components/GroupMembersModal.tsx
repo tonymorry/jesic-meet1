@@ -29,6 +29,7 @@ export interface GroupMembersModalProps {
   onClose: () => void;
   onAddMemberEmail?: (email: string) => Promise<boolean>;
   onRemoveMember?: (memberId: string) => Promise<boolean | void>;
+  onUpdateMemberRole?: (memberId: string, newRole: 'member' | 'admin' | 'admin_clienti') => Promise<void> | void;
 }
 
 export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
@@ -38,12 +39,14 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
   onClose,
   onAddMemberEmail,
   onRemoveMember,
+  onUpdateMemberRole,
 }) => {
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [inviteEmailInput, setInviteEmailInput] = useState('');
   const [inviteMsg, setInviteMsg] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [updatingRoleId, setUpdatingRoleId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const handleCopyCode = () => {
@@ -70,7 +73,8 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
     }
   };
 
-  const isCreator = group.creatorId === currentUser.id || currentUser.role === 'admin';
+  const myMembership = group.members.find((m) => m.userId === currentUser.id);
+  const isCreator = group.creatorId === currentUser.id || myMembership?.role === 'admin';
 
   const handleRemoveMemberClick = async (memberId: string, memberName: string) => {
     if (!onRemoveMember) return;
@@ -171,6 +175,27 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
           </div>
         </div>
 
+        {/* Guida Gerarchia Ruoli */}
+        <div className="p-3 bg-red-50/70 dark:bg-red-950/30 border border-red-200/60 dark:border-red-900/40 rounded-2xl space-y-1.5 text-xs">
+          <p className="font-bold text-neutral-900 dark:text-white flex items-center gap-1.5 text-[11px]">
+            <span>🛡️</span> Gerarchia Ruoli nel Gruppo:
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 text-[10px]">
+            <div className="p-1.5 rounded-xl bg-white/80 dark:bg-neutral-800/80 border border-neutral-200/60 dark:border-neutral-700/60">
+              <span className="font-black text-neutral-800 dark:text-neutral-200 block">1. Membro Semplice</span>
+              <span className="text-neutral-500 dark:text-neutral-400">Entra nel gruppo, crea SOLO sondaggi</span>
+            </div>
+            <div className="p-1.5 rounded-xl bg-white/80 dark:bg-neutral-800/80 border border-neutral-200/60 dark:border-neutral-700/60">
+              <span className="font-black text-[#f23e2e] block">2. Admin</span>
+              <span className="text-neutral-500 dark:text-neutral-400">Membro + crea eventi ufficiali</span>
+            </div>
+            <div className="p-1.5 rounded-xl bg-white/80 dark:bg-neutral-800/80 border border-neutral-200/60 dark:border-neutral-700/60">
+              <span className="font-black text-amber-600 dark:text-amber-400 block">3. Admin Clienti</span>
+              <span className="text-neutral-500 dark:text-neutral-400">Admin + form B2B & richieste</span>
+            </div>
+          </div>
+        </div>
+
         {/* Lista Membri */}
         <div className="flex-1 overflow-y-auto space-y-2 pr-1">
           <div className="flex items-center justify-between">
@@ -179,7 +204,7 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
             </p>
             {isCreator && (
               <span className="text-[10px] font-semibold text-neutral-400">
-                Clicca "X" per espellere
+                Puoi modificare ruoli o espellere
               </span>
             )}
           </div>
@@ -189,16 +214,18 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
               const user = allUsers.find((u) => u.id === membership.userId);
               const isMe = membership.userId === currentUser.id;
               const isGroupCreator = group.creatorId === membership.userId;
-              const isGroupAdmin = membership.role === 'admin' || isGroupCreator;
+              const isGroupAdmin = isGroupCreator || membership.role === 'admin';
+              const isGroupAdminClienti = membership.role === 'admin_clienti';
               const canExpel = isCreator && !isMe && !isGroupCreator;
+              const canChangeRole = isCreator && !isGroupCreator && onUpdateMemberRole;
               const memberName = user ? `${user.name} ${user.surname}` : 'Utente Membro';
 
               return (
                 <div
                   key={membership.userId}
-                  className="p-2.5 rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-800/60 flex items-center justify-between gap-2.5"
+                  className="p-2.5 rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-800/60 flex items-center justify-between gap-2.5 flex-wrap sm:flex-nowrap"
                 >
-                  <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
                     {user ? (
                       <UserAvatar user={user} size="sm" />
                     ) : (
@@ -220,17 +247,51 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    <span
-                      className={`text-[9px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full shrink-0 ${
-                        isGroupCreator
-                          ? 'bg-red-100 dark:bg-red-950/60 text-[#f23e2e] border border-red-200/60 dark:border-red-900/40'
-                          : isGroupAdmin
-                          ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400'
-                          : 'bg-neutral-100 dark:bg-neutral-700/60 text-neutral-600 dark:text-neutral-300'
-                      }`}
-                    >
-                      {isGroupCreator ? 'Creatore' : isGroupAdmin ? 'Admin Gruppo' : 'Membro'}
-                    </span>
+                    {/* Selezionatore Ruolo interattivo per il creatore, altrimenti badge fisso */}
+                    {canChangeRole ? (
+                      <select
+                        value={membership.role}
+                        disabled={updatingRoleId === membership.userId}
+                        onChange={async (e) => {
+                          const newRole = e.target.value as 'member' | 'admin' | 'admin_clienti';
+                          setUpdatingRoleId(membership.userId);
+                          try {
+                            await onUpdateMemberRole(membership.userId, newRole);
+                          } catch (err: any) {
+                            setErrorMsg(err?.message || 'Errore aggiornamento ruolo');
+                            setTimeout(() => setErrorMsg(null), 3000);
+                          } finally {
+                            setUpdatingRoleId(null);
+                          }
+                        }}
+                        aria-label={`Ruolo di ${memberName}`}
+                        className={`text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-xl cursor-pointer border outline-hidden transition-all ${
+                          membership.role === 'admin'
+                            ? 'bg-red-50 dark:bg-red-950/60 text-[#f23e2e] border-red-300 dark:border-red-800'
+                            : membership.role === 'admin_clienti'
+                            ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-800'
+                            : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-300 dark:border-neutral-700'
+                        }`}
+                      >
+                        <option value="member">👤 Membro (Solo Sondaggi)</option>
+                        <option value="admin">⚡ Admin (+ Eventi Ufficiali)</option>
+                        <option value="admin_clienti">🏢 Admin Clienti (+ Form B2B & Richieste)</option>
+                      </select>
+                    ) : (
+                      <span
+                        className={`text-[9px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full shrink-0 ${
+                          isGroupCreator
+                            ? 'bg-red-100 dark:bg-red-950/60 text-[#f23e2e] border border-red-200/60 dark:border-red-900/40'
+                            : isGroupAdmin
+                            ? 'bg-red-100 dark:bg-red-950/60 text-[#f23e2e]'
+                            : isGroupAdminClienti
+                            ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400'
+                            : 'bg-neutral-100 dark:bg-neutral-700/60 text-neutral-600 dark:text-neutral-300'
+                        }`}
+                      >
+                        {isGroupCreator ? '👑 Creatore' : isGroupAdmin ? '⚡ Admin' : isGroupAdminClienti ? '🏢 Admin Clienti' : '👤 Membro'}
+                      </span>
+                    )}
 
                     {/* Iconcina a forma di "X" per espellere il membro (visibile solo al creatore) */}
                     {canExpel && onRemoveMember && (

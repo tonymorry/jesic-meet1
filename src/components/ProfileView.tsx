@@ -11,7 +11,7 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { AppRole, User, UserSystemRole } from '../types';
+import { AppRole, User, UserSystemRole, Group } from '../types';
 import {
   Mail,
   Calendar,
@@ -29,6 +29,7 @@ import {
   Image as ImageIcon,
   Crop,
   X,
+  Users,
 } from 'lucide-react';
 import { ImageCropModal } from './ImageCropModal';
 import { UserAvatar } from './UserAvatar';
@@ -36,6 +37,8 @@ import { UserAvatar } from './UserAvatar';
 interface ProfileViewProps {
   currentUser: User;
   allUsers?: User[];
+  groups?: Group[];
+  activeGroup?: Group | null;
   onLogout: () => void;
   onUpdateUserRole?: (targetUserId: string, newRole: AppRole) => void;
   onUpdateUserProfile?: (updates: Partial<User>) => void;
@@ -144,6 +147,8 @@ const PRESET_AVATARS: PresetAvatar[] = [
 export const ProfileView: React.FC<ProfileViewProps> = ({
   currentUser,
   allUsers = [],
+  groups = [],
+  activeGroup = null,
   onLogout,
   onUpdateUserRole,
   onUpdateUserProfile,
@@ -158,10 +163,17 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const [cropImageSource, setCropImageSource] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const effectiveRole: AppRole =
-    currentUser.role ||
-    ((currentUser.systemRole as unknown as string) === 'client_admin' ? 'admin_clienti' : (currentUser.systemRole as AppRole)) ||
-    'user';
+
+  // Calcolo dei gruppi a cui appartiene l'utente e dei rispettivi ruoli
+  const userGroups = groups.filter(
+    (g) => g.creatorId === currentUser.id || g.members?.some((m) => m.userId === currentUser.id)
+  );
+
+  // Ruolo nel gruppo attivo se ci troviamo dentro un gruppo
+  const activeGroupMembership = activeGroup?.members?.find((m) => m.userId === currentUser.id);
+  const activeGroupRole = activeGroup
+    ? (activeGroupMembership?.role || (activeGroup.creatorId === currentUser.id ? 'admin' : 'member'))
+    : null;
   const currentSystemRole = currentUser.systemRole || 'user';
 
   const showNotification = (msg: string) => {
@@ -275,30 +287,39 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           {/* Dati Anagrafici e Ruoli */}
           <div className="space-y-1.5 flex-1 min-w-0 text-center sm:text-left">
             <div className="flex items-center justify-center sm:justify-start gap-1.5 flex-wrap">
-              <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 ${
-                effectiveRole === 'admin'
-                  ? 'bg-red-100 dark:bg-red-950/60 text-[#f23e2e] border border-red-200 dark:border-red-900/40 shadow-xs'
-                  : effectiveRole === 'admin_clienti'
-                  ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900/40 shadow-xs'
-                  : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200'
-              }`}>
-                {effectiveRole === 'admin' ? (
-                  <>
-                    <ShieldCheck className="w-3 h-3 text-[#f23e2e]" />
-                    <span>⚡ Admin</span>
-                  </>
-                ) : effectiveRole === 'admin_clienti' ? (
-                  <>
-                    <ShieldCheck className="w-3 h-3 text-amber-600" />
-                    <span>🏢 Admin Clienti</span>
-                  </>
-                ) : (
-                  <>
-                    <Award className="w-3 h-3" />
-                    <span>👤 Utente Normale</span>
-                  </>
-                )}
-              </span>
+              {activeGroup ? (
+                <span
+                  className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 ${
+                    activeGroupRole === 'admin'
+                      ? 'bg-red-100 dark:bg-red-950/60 text-[#f23e2e] border border-red-200 dark:border-red-900/40 shadow-xs'
+                      : activeGroupRole === 'admin_clienti'
+                      ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900/40 shadow-xs'
+                      : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200'
+                  }`}
+                >
+                  {activeGroupRole === 'admin' ? (
+                    <>
+                      <ShieldCheck className="w-3 h-3 text-[#f23e2e]" />
+                      <span>⚡ Admin ({activeGroup.name})</span>
+                    </>
+                  ) : activeGroupRole === 'admin_clienti' ? (
+                    <>
+                      <ShieldCheck className="w-3 h-3 text-amber-600" />
+                      <span>🏢 Admin Clienti ({activeGroup.name})</span>
+                    </>
+                  ) : (
+                    <>
+                      <Award className="w-3 h-3 text-neutral-500" />
+                      <span>👤 Membro ({activeGroup.name})</span>
+                    </>
+                  )}
+                </span>
+              ) : (
+                <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 bg-neutral-200 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200">
+                  <Award className="w-3 h-3 text-[#f23e2e]" />
+                  <span>👤 Utente Normale</span>
+                </span>
+              )}
             </div>
 
             {/* Nome Utente con anteprima immagine profilo accanto */}
@@ -537,7 +558,100 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
         </div>
       </div>
 
+      {/* Scheda Informativa "I tuoi Ruoli nei Gruppi" (Read-only, gestiti dal DB) */}
+      <div className="bg-white dark:bg-neutral-900 rounded-3xl p-5 border border-neutral-200/90 dark:border-neutral-800 shadow-xs space-y-3.5 transition-colors">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-red-50 dark:bg-red-950/50 text-[#f23e2e] flex items-center justify-center shadow-xs">
+              <Users className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-xs font-bold text-neutral-900 dark:text-white uppercase tracking-wider">
+                I Tuoi Ruoli nei Gruppi
+              </h3>
+              <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
+                I ruoli speciali (Admin, Admin Clienti) sono specifici per gruppo e gestiti nel database
+              </p>
+            </div>
+          </div>
+          <span className="text-xs font-bold text-neutral-400">
+            {userGroups.length} {userGroups.length === 1 ? 'gruppo' : 'gruppi'}
+          </span>
+        </div>
 
+        {/* Guida Gerarchia Permessi nei Gruppi */}
+        <div className="p-3 bg-neutral-100/80 dark:bg-neutral-800/60 rounded-2xl border border-neutral-200/80 dark:border-neutral-700/60 text-[11px] space-y-1">
+          <p className="font-bold text-neutral-800 dark:text-neutral-200 flex items-center gap-1">
+            <span>🛡️</span> Gerarchia ruoli e permessi nei gruppi:
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 pt-0.5 text-[10px]">
+            <div className="p-1.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700">
+              <span className="font-bold text-neutral-800 dark:text-neutral-200 block">1. Membro Semplice</span>
+              <span className="text-neutral-500">Può creare solo i sondaggi</span>
+            </div>
+            <div className="p-1.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700">
+              <span className="font-bold text-[#f23e2e] block">2. Admin</span>
+              <span className="text-neutral-500">Membro + crea eventi</span>
+            </div>
+            <div className="p-1.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700">
+              <span className="font-bold text-amber-600 dark:text-amber-400 block">3. Admin Clienti</span>
+              <span className="text-neutral-500">Admin + form B2B & richieste clienti</span>
+            </div>
+          </div>
+        </div>
+
+        {userGroups.length === 0 ? (
+          <p className="text-xs text-neutral-400 italic p-3 bg-neutral-50 dark:bg-neutral-800/50 rounded-2xl">
+            Non fai ancora parte di alcun gruppo di lavoro. Cerca un gruppo nella Home o unisciti tramite codice.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {userGroups.map((grp) => {
+              const mem = grp.members?.find((m) => m.userId === currentUser.id);
+              const isCreator = grp.creatorId === currentUser.id;
+              const role = mem?.role || (isCreator ? 'admin' : 'member');
+              const isAdmin = isCreator || role === 'admin';
+              const isAdminClienti = role === 'admin_clienti';
+
+              return (
+                <div
+                  key={grp.id}
+                  className="p-3 rounded-2xl bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200/80 dark:border-neutral-800 flex items-center justify-between gap-2"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-lg p-1 bg-white dark:bg-neutral-700 rounded-lg shadow-2xs shrink-0">
+                      {grp.avatar || '👥'}
+                    </span>
+                    <span className="text-xs font-bold text-neutral-900 dark:text-white truncate">
+                      {grp.name}
+                    </span>
+                  </div>
+
+                  <span
+                    className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 ${
+                      isCreator
+                        ? 'bg-red-100 dark:bg-red-950/60 text-[#f23e2e] border border-red-200/60 dark:border-red-900/40'
+                        : isAdmin
+                        ? 'bg-red-100 dark:bg-red-950/60 text-[#f23e2e]'
+                        : isAdminClienti
+                        ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400'
+                        : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300'
+                    }`}
+                  >
+                    {isCreator
+                      ? '👑 Creatore (Admin)'
+                      : isAdmin
+                      ? '⚡ Admin'
+                      : isAdminClienti
+                      ? '🏢 Admin Clienti'
+                      : '👤 Membro'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* Sincronizzazione Google Calendar (Sempre Collegato) */}
       <div className="bg-white dark:bg-neutral-900 rounded-3xl p-5 border border-neutral-200/90 dark:border-neutral-800 shadow-xs space-y-3.5 transition-colors">

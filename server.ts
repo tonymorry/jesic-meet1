@@ -593,6 +593,31 @@ app.post('/api/groups/:id/join-public', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/groups/:id - Dettagli del gruppo per form B2B o anteprima esterna
+app.get('/api/groups/:id', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const group = await GroupModel.findOne({ $or: [{ _id: id }, { id }] }).lean();
+    if (!group) {
+      return res.status(404).json({ error: 'Gruppo non trovato nel database' });
+    }
+    return res.json({
+      group: {
+        id: group._id || group.id,
+        name: group.name,
+        description: group.description,
+        code: group.code,
+        avatar: group.avatar,
+        isPublic: group.isPublic ?? false,
+        membersCount: group.members?.length || 0,
+      },
+    });
+  } catch (err: any) {
+    console.error('Errore lettura singolo gruppo:', err.message);
+    return res.status(500).json({ error: 'Errore durante la lettura del gruppo' });
+  }
+});
+
 // PATCH /api/groups/:id - Modifica nome, dettagli o visibilità del gruppo (Creatore o Admin)
 app.patch('/api/groups/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
@@ -605,9 +630,9 @@ app.patch('/api/groups/:id', async (req: Request, res: Response) => {
     }
 
     if (userId && group.creatorId !== userId) {
-      const user = await UserModel.findOne({ $or: [{ _id: userId }, { id: userId }] });
-      if (!user || (user.role !== 'admin' && user.role !== 'admin_clienti')) {
-        return res.status(403).json({ error: 'Solo il creatore del gruppo o un admin può modificare il gruppo' });
+      const member = group.members.find((m: any) => m.userId === userId);
+      if (!member || (member.role !== 'admin' && member.role !== 'admin_clienti')) {
+        return res.status(403).json({ error: 'Solo il creatore del gruppo o un admin di questo gruppo può modificare il gruppo' });
       }
     }
 
@@ -638,7 +663,7 @@ app.patch('/api/groups/:id', async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /api/groups/:id - Elimina l'intero gruppo (Creatore o Admin)
+// DELETE /api/groups/:id - Elimina l'intero gruppo (Creatore o Admin del Gruppo)
 app.delete('/api/groups/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const userId = (req.body?.userId || req.query?.userId) as string | undefined;
@@ -650,9 +675,9 @@ app.delete('/api/groups/:id', async (req: Request, res: Response) => {
     }
 
     if (userId && group.creatorId !== userId) {
-      const user = await UserModel.findOne({ $or: [{ _id: userId }, { id: userId }] });
-      if (!user || (user.role !== 'admin' && user.role !== 'admin_clienti')) {
-        return res.status(403).json({ error: 'Solo il creatore del gruppo o un admin può eliminare il gruppo' });
+      const member = group.members.find((m: any) => m.userId === userId);
+      if (!member || (member.role !== 'admin' && member.role !== 'admin_clienti')) {
+        return res.status(403).json({ error: 'Solo il creatore del gruppo o un admin di questo gruppo può eliminare il gruppo' });
       }
     }
 
@@ -664,7 +689,7 @@ app.delete('/api/groups/:id', async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /api/groups/:id/members/:memberId - Espelli membro dal gruppo (Creatore o Admin)
+// DELETE /api/groups/:id/members/:memberId - Espelli membro dal gruppo (Creatore o Admin del Gruppo)
 const handleRemoveMemberFromGroup = async (req: Request, res: Response) => {
   const { id, memberId } = req.params;
   const requesterId = (req.body?.requesterId || req.query?.requesterId) as string | undefined;
@@ -680,9 +705,9 @@ const handleRemoveMemberFromGroup = async (req: Request, res: Response) => {
     }
 
     if (requesterId && group.creatorId !== requesterId) {
-      const user = await UserModel.findOne({ $or: [{ _id: requesterId }, { id: requesterId }] });
-      if (!user || (user.role !== 'admin' && user.role !== 'admin_clienti')) {
-        return res.status(403).json({ error: 'Solo il creatore del gruppo o un admin può espellere membri' });
+      const member = group.members.find((m: any) => m.userId === requesterId);
+      if (!member || (member.role !== 'admin' && member.role !== 'admin_clienti')) {
+        return res.status(403).json({ error: 'Solo il creatore del gruppo o un admin di questo gruppo può espellere membri' });
       }
     }
 
@@ -711,6 +736,64 @@ const handleRemoveMemberFromGroup = async (req: Request, res: Response) => {
 
 app.delete('/api/groups/:id/members/:memberId', handleRemoveMemberFromGroup);
 app.post('/api/groups/:id/members/:memberId/remove', handleRemoveMemberFromGroup);
+
+// PATCH /api/groups/:id/members/:memberId/role - Modifica ruolo membro (Gerarchia: 'member' | 'admin' | 'admin_clienti')
+const handleUpdateGroupMemberRole = async (req: Request, res: Response) => {
+  const { id, memberId } = req.params;
+  const { role, requesterId } = req.body;
+
+  const validRoles = ['member', 'admin', 'admin_clienti'];
+  if (!validRoles.includes(role)) {
+    return res.status(400).json({ error: "Il ruolo deve essere 'member', 'admin' o 'admin_clienti'" });
+  }
+
+  try {
+    const group = await GroupModel.findOne({ $or: [{ _id: id }, { id }] });
+    if (!group) {
+      return res.status(404).json({ error: 'Gruppo non trovato nel database' });
+    }
+
+    if (memberId === group.creatorId) {
+      return res.status(400).json({ error: 'Non puoi modificare il ruolo del creatore del gruppo' });
+    }
+
+    if (requesterId && group.creatorId !== requesterId) {
+      const requesterMember = group.members.find((m: any) => m.userId === requesterId);
+      if (!requesterMember || (requesterMember.role !== 'admin' && requesterMember.role !== 'admin_clienti')) {
+        return res.status(403).json({ error: 'Solo il creatore o un admin del gruppo può aggiornare i ruoli' });
+      }
+    }
+
+    const memberIndex = group.members.findIndex((m: any) => m.userId === memberId);
+    if (memberIndex === -1) {
+      return res.status(404).json({ error: 'Membro non trovato nel gruppo' });
+    }
+
+    group.members[memberIndex].role = role;
+    await group.save();
+
+    const mappedGroup = {
+      id: group._id || group.id,
+      name: group.name,
+      description: group.description,
+      code: group.code,
+      inviteLink: group.inviteLink,
+      creatorId: group.creatorId,
+      members: group.members,
+      avatar: group.avatar,
+      createdAt: group.createdAt,
+      updatedAt: group.updatedAt,
+    };
+
+    return res.json({ success: true, message: 'Ruolo del membro aggiornato con successo', group: mappedGroup });
+  } catch (err: any) {
+    console.error('Errore aggiornamento ruolo membro GroupModel MongoDB:', err.message);
+    return res.status(500).json({ error: 'Errore aggiornamento ruolo membro in MongoDB' });
+  }
+};
+
+app.patch('/api/groups/:id/members/:memberId/role', handleUpdateGroupMemberRole);
+app.post('/api/groups/:id/members/:memberId/role', handleUpdateGroupMemberRole);
 
 /* ==========================================================================
    4. EVENTS & POLLS API (EventModel / PollModel / OfficialEventModel)
@@ -749,6 +832,23 @@ app.post('/api/events', async (req: Request, res: Response) => {
   const eventData = req.body;
   if (!eventData.title || !eventData.creatorId) {
     return res.status(400).json({ error: 'Titolo e creatore sono obbligatori' });
+  }
+
+  // Verifica permessi ruolo per eventi ufficiali nel gruppo (solo admin e admin_clienti del gruppo specifico)
+  if (eventData.eventType === 'official' && eventData.groupId) {
+    try {
+      const group = (await GroupModel.findOne({ $or: [{ _id: eventData.groupId }, { id: eventData.groupId }] } as any)) as any;
+      if (group) {
+        const isCreator = group.creatorId === eventData.creatorId;
+        const member = group.members?.find((m: any) => m.userId === eventData.creatorId);
+        const hasRole = member && (member.role === 'admin' || member.role === 'admin_clienti');
+        if (!isCreator && !hasRole) {
+          return res.status(403).json({ error: 'Solo admin o admin_clienti di questo gruppo possono creare eventi ufficiali' });
+        }
+      }
+    } catch (err: any) {
+      console.error('Errore verifica permessi gruppo:', err.message);
+    }
   }
 
   const generatedId = eventData.id || `evt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
@@ -1495,13 +1595,38 @@ app.post('/api/responses', async (req: Request, res: Response) => {
    6. CLIENT REQUESTS API (ClientRequestModel B2B)
    ========================================================================== */
 
-// GET /api/client-requests - Lista richieste clienti da MongoDB
-app.get('/api/client-requests', async (_req: Request, res: Response) => {
+// GET /api/client-requests - Lista richieste clienti da MongoDB (filtrabili per groupId e riservate ESCLUSIVAMENTE ad admin_clienti)
+app.get('/api/client-requests', async (req: Request, res: Response) => {
+  const { groupId, userId } = req.query;
   try {
-    const requests = await ClientRequestModel.find().sort({ createdAt: -1 }).lean();
+    let filter: any = {};
+    if (groupId) {
+      filter.groupId = groupId;
+      // Riservato ESCLUSIVAMENTE ad 'admin_clienti' del gruppo
+      if (userId && typeof userId === 'string') {
+        const group = (await GroupModel.findOne({ $or: [{ _id: groupId }, { id: groupId }] } as any)) as any;
+        if (group) {
+          const member = group.members?.find((m: any) => m.userId === userId);
+          const isAdminClienti = member && member.role === 'admin_clienti';
+          if (!isAdminClienti) {
+            return res.status(403).json({ error: 'Accesso negato: la gestione delle richieste clienti e del B2B è riservata esclusivamente ad admin_clienti' });
+          }
+        }
+      }
+    } else if (userId && typeof userId === 'string') {
+      // Se non è specificato groupId ma c'è userId, ritorna le richieste dei soli gruppi in cui l'utente ha ruolo 'admin_clienti'
+      const authorizedGroups: any[] = await GroupModel.find({
+        members: { $elemMatch: { userId, role: 'admin_clienti' } },
+      } as any).select('_id id');
+      const groupIds = authorizedGroups.map((g: any) => g._id || g.id);
+      filter.groupId = { $in: groupIds };
+    }
+
+    const requests = await ClientRequestModel.find(filter).sort({ createdAt: -1 }).lean();
     const mapped = requests.map((r: any) => ({
       ...r,
       id: r._id || r.id,
+      groupId: r.groupId || null,
     }));
     return res.json({ requests: mapped });
   } catch (err: any) {
@@ -1510,7 +1635,7 @@ app.get('/api/client-requests', async (_req: Request, res: Response) => {
   }
 });
 
-// POST /api/client-requests - Invia nuova richiesta da cliente in MongoDB
+// POST /api/client-requests - Invia nuova richiesta da cliente in MongoDB (collegata al gruppo)
 app.post('/api/client-requests', async (req: Request, res: Response) => {
   const reqData = req.body;
   if (!reqData.companyName || !reqData.contactEmail) {
@@ -1523,6 +1648,7 @@ app.post('/api/client-requests', async (req: Request, res: Response) => {
     const created = await ClientRequestModel.create({
       ...reqData,
       _id: genId,
+      groupId: reqData.groupId || null,
       status: reqData.status || 'pending',
     });
 
@@ -1530,6 +1656,7 @@ app.post('/api/client-requests', async (req: Request, res: Response) => {
       request: {
         ...created.toObject(),
         id: created._id || created.id,
+        groupId: created.groupId || null,
       },
     });
   } catch (err: any) {
@@ -1538,12 +1665,29 @@ app.post('/api/client-requests', async (req: Request, res: Response) => {
   }
 });
 
-// PATCH /api/client-requests/:id - Aggiorna richiesta cliente in MongoDB
+// PATCH /api/client-requests/:id - Aggiorna richiesta cliente in MongoDB (Riservato ESCLUSIVAMENTE ad admin_clienti del gruppo)
 app.patch('/api/client-requests/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const updates = req.body;
+  const userId = req.body.userId || req.query.userId;
 
   try {
+    const existing = await ClientRequestModel.findOne({ $or: [{ _id: id }, { id }] });
+    if (!existing) {
+      return res.status(404).json({ error: 'Richiesta non trovata nel database' });
+    }
+
+    if (userId && existing.groupId) {
+      const group = (await GroupModel.findOne({ $or: [{ _id: existing.groupId }, { id: existing.groupId }] } as any)) as any;
+      if (group) {
+        const member = group.members?.find((m: any) => m.userId === userId);
+        const isAdminClienti = member && member.role === 'admin_clienti';
+        if (!isAdminClienti) {
+          return res.status(403).json({ error: 'Accesso negato: solo admin_clienti del gruppo associato può gestire le richieste clienti' });
+        }
+      }
+    }
+
     const updated = await ClientRequestModel.findOneAndUpdate(
       { $or: [{ _id: id }, { id }] },
       { $set: updates },
@@ -1559,14 +1703,30 @@ app.patch('/api/client-requests/:id', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/client-requests/:id/confirm-final - Chiusura e conferma call con cliente in MongoDB
+// POST /api/client-requests/:id/confirm-final - Chiusura e conferma call con cliente in MongoDB (Riservato ESCLUSIVAMENTE ad admin_clienti del gruppo)
 app.post('/api/client-requests/:id/confirm-final', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { finalizedDate, finalizedStartTime, finalizedEndTime, meetLink } = req.body;
-
-  const generatedMeet = meetLink || `https://meet.google.com/jes-${Math.random().toString(36).substring(2, 6)}-call`;
+  const { finalizedDate, finalizedStartTime, finalizedEndTime, meetLink, userId } = req.body;
 
   try {
+    const existing = await ClientRequestModel.findOne({ $or: [{ _id: id }, { id }] });
+    if (!existing) {
+      return res.status(404).json({ error: 'Richiesta non trovata nel database' });
+    }
+
+    if (userId && existing.groupId) {
+      const group = (await GroupModel.findOne({ $or: [{ _id: existing.groupId }, { id: existing.groupId }] } as any)) as any;
+      if (group) {
+        const member = group.members?.find((m: any) => m.userId === userId);
+        const isAdminClienti = member && member.role === 'admin_clienti';
+        if (!isAdminClienti) {
+          return res.status(403).json({ error: 'Accesso negato: solo admin_clienti del gruppo associato può confermare la call cliente' });
+        }
+      }
+    }
+
+    const generatedMeet = meetLink || `https://meet.google.com/jes-${Math.random().toString(36).substring(2, 6)}-call`;
+
     const updated = await ClientRequestModel.findOneAndUpdate(
       { $or: [{ _id: id }, { id }] },
       {

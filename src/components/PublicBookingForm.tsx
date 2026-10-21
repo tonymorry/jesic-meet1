@@ -23,11 +23,13 @@ import {
   ArrowLeft,
   Check,
 } from 'lucide-react';
-import { ClientSlotPreference, ClientRequest } from '../types';
+import { ClientSlotPreference, ClientRequest, Group } from '../types';
 
 interface PublicBookingFormProps {
   onBackToApp?: () => void;
   onSubmitRequest: (request: Omit<ClientRequest, 'id' | 'createdAt' | 'updatedAt'>) => Promise<boolean> | boolean;
+  initialGroupId?: string | null;
+  groups?: Group[];
 }
 
 // Orari standard per le call esterne B2B JESic:
@@ -107,7 +109,46 @@ export function getClientAvailableDays(): {
 export const PublicBookingForm: React.FC<PublicBookingFormProps> = ({
   onBackToApp,
   onSubmitRequest,
+  initialGroupId,
+  groups = [],
 }) => {
+  // Riconoscimento del gruppo associato dal parametro URL (?groupId= o ?group=) o dalle props
+  const [targetGroupId, setTargetGroupId] = useState<string | null>(() => {
+    if (initialGroupId) return initialGroupId;
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('groupId') || params.get('group') || null;
+    }
+    return null;
+  });
+
+  const [selectedGroup, setSelectedGroup] = useState<Group | null>(() => {
+    if (!targetGroupId) return null;
+    return groups.find((g) => g.id === targetGroupId) || null;
+  });
+
+  // Se il gruppo non è ancora presente in `groups`, prova a caricarlo tramite /api/groups/:id
+  React.useEffect(() => {
+    if (targetGroupId) {
+      const match = groups.find((g) => g.id === targetGroupId);
+      if (match) {
+        setSelectedGroup(match);
+      } else {
+        fetch(`/api/groups/${targetGroupId}`)
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (data?.group) {
+              setSelectedGroup(data.group);
+            }
+          })
+          .catch(() => {});
+      }
+    } else if (groups.length > 0 && !selectedGroup) {
+      setSelectedGroup(groups[0]);
+      setTargetGroupId(groups[0].id);
+    }
+  }, [targetGroupId, groups]);
+
   // Campi anagrafici essenziali
   const [companyName, setCompanyName] = useState('');
   const [contactEmail, setContactEmail] = useState('');
@@ -191,6 +232,7 @@ export const PublicBookingForm: React.FC<PublicBookingFormProps> = ({
     setIsSubmitting(true);
     try {
       const success = await onSubmitRequest({
+        groupId: targetGroupId || selectedGroup?.id || null,
         companyName: companyName.trim(),
         contactEmail: contactEmail.trim().toLowerCase(),
         description: description.trim(),
@@ -313,18 +355,65 @@ export const PublicBookingForm: React.FC<PublicBookingFormProps> = ({
       {/* Contenuto Principale Form (Ottimizzato per Mobile e Desktop / PC) */}
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
         
-        {/* Titolo e istruzioni istituzionali */}
-        <div className="space-y-1">
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-950/60 border border-red-800/60 text-[#f23e2e] text-[10px] font-bold uppercase tracking-wider mb-1">
-            Modulo di Contatto B2B
+        {/* Banner Gruppo Associato (Form Univoco per Gruppo) */}
+        {selectedGroup ? (
+          <div className="bg-gradient-to-r from-red-950/70 via-neutral-900 to-neutral-900 border border-red-800/60 rounded-3xl p-4 sm:p-5 flex items-center gap-3.5 shadow-sm">
+            <span className="text-3xl p-2.5 bg-neutral-800/90 rounded-2xl border border-neutral-700/80 shrink-0">
+              {selectedGroup.avatar || '👥'}
+            </span>
+            <div className="min-w-0 flex-1">
+              <span className="text-[10px] font-black uppercase tracking-widest text-[#f23e2e] block">
+                Modulo di Prenotazione B2B &bull; {selectedGroup.name}
+              </span>
+              <h1 className="text-lg sm:text-2xl font-black text-white tracking-tight truncate">
+                Prenota una Call con il team di {selectedGroup.name}
+              </h1>
+              {selectedGroup.description && (
+                <p className="text-xs text-neutral-400 mt-0.5 line-clamp-2">
+                  {selectedGroup.description}
+                </p>
+              )}
+            </div>
           </div>
-          <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-            Fissa un appuntamento con il nostro team
-          </h1>
-          <p className="text-xs sm:text-sm text-neutral-400 leading-relaxed max-w-2xl">
-            Seleziona sulla griglia tra le 2 e le 3 preferenze orarie. Verificheremo le disponibilità del team e ti invieremo la conferma ufficiale via email con il link Google Meet.
-          </p>
-        </div>
+        ) : (
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-950/60 border border-red-800/60 text-[#f23e2e] text-[10px] font-bold uppercase tracking-wider mb-1">
+              Modulo di Contatto B2B
+            </div>
+            <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+              Fissa un appuntamento con il nostro team
+            </h1>
+            <p className="text-xs sm:text-sm text-neutral-400 leading-relaxed max-w-2xl">
+              Seleziona sulla griglia tra le 2 e le 3 preferenze orarie. Verificheremo le disponibilità del team e ti invieremo la conferma ufficiale via email con il link Google Meet.
+            </p>
+          </div>
+        )}
+
+        {/* Selettore rapido del gruppo se accessibile senza link diretto e sono presenti più gruppi */}
+        {!targetGroupId && groups && groups.length > 1 && (
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+            <label className="text-xs font-bold text-neutral-300 shrink-0">
+              Seleziona Gruppo di lavoro destinatario:
+            </label>
+            <select
+              value={selectedGroup?.id || ''}
+              onChange={(e) => {
+                const found = groups.find((g) => g.id === e.target.value);
+                if (found) {
+                  setSelectedGroup(found);
+                  setTargetGroupId(found.id);
+                }
+              }}
+              className="bg-neutral-800 border border-neutral-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#f23e2e] cursor-pointer flex-1"
+            >
+              {groups.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.avatar ? `${g.avatar} ` : ''}{g.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Banner Errore */}
         {errorMessage && (

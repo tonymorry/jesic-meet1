@@ -113,7 +113,7 @@ export const CreateActionChoiceModal: React.FC<CreateActionChoiceModalProps> = (
         </div>
 
         <p className="text-[10px] text-center text-neutral-400 dark:text-neutral-500 pt-1">
-          Accesso consentito a: {currentUser.name} ({currentUser.role === 'admin_clienti' ? 'Admin Clienti' : currentUser.role === 'admin' ? 'Admin' : 'Utente'})
+          Creazione eventi ufficiali abilitata per Admin e Admin Clienti del gruppo.
         </p>
 
       </div>
