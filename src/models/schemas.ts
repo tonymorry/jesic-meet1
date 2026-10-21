@@ -20,6 +20,11 @@ export type UserSystemRole = UserRole;
 /* ==========================================================================
    2. USER SCHEMA & MODEL
    ========================================================================== */
+export interface IUserGroupMembership {
+  groupId: string;
+  role: 'member' | 'admin' | 'admin_clienti';
+}
+
 export interface IUser {
   _id?: string;
   id?: string;
@@ -29,10 +34,7 @@ export interface IUser {
   cognome?: string;
   email: string;
   password?: string;
-  role: UserRole;
-  systemRole?: UserRole;
-  ruolo?: string;
-  jesicRole?: string;
+  groupMemberships: IUserGroupMembership[];
   avatarUrl?: string | null;
   googleAccessToken?: string;
   googleRefreshToken?: string;
@@ -41,6 +43,21 @@ export interface IUser {
   createdAt?: Date;
   updatedAt?: Date;
 }
+
+const UserGroupMembershipSchema = new Schema<IUserGroupMembership>(
+  {
+    groupId: {
+      type: String,
+      required: true,
+    },
+    role: {
+      type: String,
+      enum: ['member', 'admin', 'admin_clienti'],
+      default: 'member',
+    },
+  },
+  { _id: false }
+);
 
 const UserSchema: Schema<IUser> = new Schema(
   {
@@ -74,25 +91,9 @@ const UserSchema: Schema<IUser> = new Schema(
       type: String,
       default: '',
     },
-    role: {
-      type: String,
-      enum: ['user', 'admin_clienti', 'admin'],
-      default: 'user',
-      index: true,
-    },
-    systemRole: {
-      type: String,
-      enum: ['user', 'admin_clienti', 'admin'],
-      default: 'user',
-      index: true,
-    },
-    ruolo: {
-      type: String,
-      default: 'Consulente Junior',
-    },
-    jesicRole: {
-      type: String,
-      default: 'Consulente Junior',
+    groupMemberships: {
+      type: [UserGroupMembershipSchema],
+      default: [],
     },
     avatarUrl: {
       type: String,
@@ -147,7 +148,7 @@ UserSchema.pre('save', function (this: any) {
   if (this.surname && !this.cognome) this.cognome = this.surname;
   if (this.nome && !this.name) this.name = this.nome;
   if (this.cognome && !this.surname) this.surname = this.cognome;
-  if (this.role && !this.systemRole) this.systemRole = this.role;
+  if (!this.groupMemberships) this.groupMemberships = [];
 });
 
 export const UserModel: Model<IUser> = mongoose.models.User || mongoose.model<IUser>('User', UserSchema);

@@ -21,6 +21,7 @@ import { createServer as createViteServer } from 'vite';
 
 import {
   UserModel,
+  User,
   GroupModel,
   EventModel,
   PollModel,
@@ -101,11 +102,9 @@ app.get('/api/users', async (_req: Request, res: Response) => {
       name: u.name || u.nome,
       surname: u.surname || u.cognome,
       email: u.email,
-      role: (u.role as UserRole) || 'user',
-      systemRole: (u.role as UserRole) || 'user',
-      jesicRole: u.jesicRole || u.ruolo || 'Consulente Junior',
       avatarUrl: u.avatarUrl || null,
       googleCalendarConnected: Boolean(u.googleCalendarConnected),
+      groupMemberships: u.groupMemberships || [],
       createdAt: u.createdAt,
       updatedAt: u.updatedAt,
     }));
@@ -241,12 +240,9 @@ const handleUserSync = async (req: Request, res: Response) => {
     let existing = await UserModel.findOne({ email: cleanEmail });
 
     if (existing) {
-      // REGOLA: Se l'utente esiste già nel DB, NON sovrascrivere MAI il 'role'.
-      // MongoDB è l'unica fonte di verità!
       if (defaultName && (!existing.name || existing.name === 'Utente')) existing.name = defaultName;
       if (defaultSurname && (!existing.surname || existing.surname === 'JESic')) existing.surname = defaultSurname;
       if (extractedAvatar && !existing.avatarUrl) existing.avatarUrl = extractedAvatar;
-      if ((jesicRole || ruolo) && !existing.jesicRole) existing.jesicRole = jesicRole || ruolo;
       if (actualAccessToken) existing.googleAccessToken = actualAccessToken;
       if (actualRefreshToken) {
         existing.googleRefreshToken = actualRefreshToken;
@@ -255,6 +251,9 @@ const handleUserSync = async (req: Request, res: Response) => {
         existing.googleCalendarConnected = true;
       }
       if (googleCalendarConnected !== undefined) existing.googleCalendarConnected = Boolean(googleCalendarConnected);
+      if (!existing.groupMemberships) {
+        existing.groupMemberships = [];
+      }
 
       await existing.save();
 
@@ -263,43 +262,35 @@ const handleUserSync = async (req: Request, res: Response) => {
         name: existing.name,
         surname: existing.surname,
         email: existing.email,
-        role: existing.role || 'user',
-        systemRole: existing.role || 'user',
-        jesicRole: existing.jesicRole || 'Consulente Junior',
         avatarUrl: existing.avatarUrl || null,
         googleCalendarConnected: Boolean(existing.googleCalendarConnected),
+        groupMemberships: existing.groupMemberships || [],
       };
       return res.json({ user: jsonUser });
     }
 
-    // REGOLA: Di base TUTTI i nuovi utenti nascono SEMPRE e solo con 'role: user' (Utente Normale).
-    const assignedRole: UserRole = 'user';
-
-    const newUserDoc = await UserModel.create({
+    // REGOLA: Il nuovo utente deve essere creato SOLO con nome, cognome, email, avatarUrl, credenziali Google e un array groupMemberships: [] vuoto di default.
+    const newUserDoc = new User({
       _id: id || `user-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       name: defaultName,
       surname: defaultSurname,
       email: cleanEmail,
-      password: password || '',
-      role: assignedRole,
-      systemRole: assignedRole,
-      jesicRole: jesicRole || ruolo || 'Consulente Junior',
       avatarUrl: extractedAvatar || null,
       googleCalendarConnected: actualRefreshToken ? true : googleCalendarConnected !== undefined ? Boolean(googleCalendarConnected) : false,
       googleAccessToken: actualAccessToken || null,
       googleRefreshToken: actualRefreshToken || null,
+      groupMemberships: [],
     });
+    await newUserDoc.save();
 
     const jsonUser = {
       id: newUserDoc._id || newUserDoc.id,
       name: newUserDoc.name,
       surname: newUserDoc.surname,
       email: newUserDoc.email,
-      role: newUserDoc.role || 'user',
-      systemRole: newUserDoc.role || 'user',
-      jesicRole: newUserDoc.jesicRole,
       avatarUrl: newUserDoc.avatarUrl,
       googleCalendarConnected: Boolean(newUserDoc.googleCalendarConnected),
+      groupMemberships: newUserDoc.groupMemberships || [],
     };
 
     return res.status(201).json({ user: jsonUser });

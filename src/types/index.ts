@@ -7,15 +7,21 @@ export type UserRole = 'user' | 'admin_clienti' | 'admin';
 export type AppRole = UserRole;
 export type UserSystemRole = UserRole;
 
+export interface UserGroupMembership {
+  groupId: string;
+  role: GroupMemberRole;
+}
+
 export interface User {
   id: string;
   name: string;
   surname: string;
   email: string;
   password?: string;
-  role: UserRole; // 'user' (Utente Normale) | 'admin_clienti' (Admin Clienti) | 'admin' (Super Admin)
-  systemRole?: UserRole; // compatibilità
-  jesicRole?: string; // Ruolo descrittivo (es. 'Presidente', 'Consulente Junior')
+  groupMemberships?: UserGroupMembership[];
+  role?: UserRole; // compatibilità opzionale
+  systemRole?: UserRole;
+  jesicRole?: string;
   avatarUrl?: string;
   googleAccessToken?: string;
   googleRefreshToken?: string;
