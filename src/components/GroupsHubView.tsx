@@ -1,11 +1,14 @@
 /**
- * JESic Meet - GroupsHubView (Tab "Gruppi" a sinistra della Home)
+ * JESic Meet - GroupsHubView (Tab "Gruppi" / Home Principale dei Gruppi)
  * 
- * Consente di:
- * 1. Visualizzare tutti i gruppi a cui l'utente partecipa
- * 2. Creare un nuovo gruppo con codice univoco e link di invito
- * 3. Entrare in un gruppo esistente inserendo il codice o il link
- * 4. Selezionare un gruppo per entrare nel suo spazio di lavoro completo
+ * Regole e Requisiti:
+ * 1. Di base nella Home si vedono ESCLUSIVAMENTE i gruppi in cui l'utente è dentro.
+ * 2. Barra di ricerca per cercare gruppi per nome:
+ *    - Quando si cerca, compaiono TUTTI i gruppi (sia pubblici che privati) che corrispondono al nome.
+ *    - Nei gruppi PUBBLICI chiunque conosca il nome può entrare con 1 click ("Unisciti al Gruppo").
+ *    - Nei gruppi PRIVATI compare l'indicazione che è privato e il tasto per inserire il codice univoco.
+ * 3. Il creatore del gruppo può scegliere in fase di creazione se il gruppo è Pubblico o Privato.
+ * 4. La logica del codice univoco e del link di invito rimane al 100% invariata e pienamente funzionante.
  */
 
 import React, { useState } from 'react';
@@ -23,6 +26,10 @@ import {
   Sparkles,
   X,
   Search,
+  Globe,
+  Lock,
+  UserCheck,
+  ExternalLink,
 } from 'lucide-react';
 
 interface GroupsHubViewProps {
@@ -30,8 +37,9 @@ interface GroupsHubViewProps {
   groups: Group[];
   allUsers: User[];
   onSelectGroup: (group: Group) => void;
-  onCreateGroup: (name: string, description: string, avatar?: string) => void;
+  onCreateGroup: (name: string, description: string, avatar?: string, isPublic?: boolean) => void;
   onJoinGroup: (codeOrLink: string) => Promise<{ success: boolean; message: string; group?: Group }>;
+  onJoinPublicGroup?: (group: Group) => Promise<{ success: boolean; message: string; group?: Group }>;
 }
 
 const PRESET_ICONS = ['👥', '🚀', '💡', '💻', '📊', '🎯', '⚡', '🏢', '🔥', '🎓'];
@@ -43,6 +51,7 @@ export const GroupsHubView: React.FC<GroupsHubViewProps> = ({
   onSelectGroup,
   onCreateGroup,
   onJoinGroup,
+  onJoinPublicGroup,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -52,25 +61,31 @@ export const GroupsHubView: React.FC<GroupsHubViewProps> = ({
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupDesc, setNewGroupDesc] = useState('');
   const [selectedIcon, setSelectedIcon] = useState('👥');
+  const [isPublicGroup, setIsPublicGroup] = useState(false); // Default: Privato
 
   // Form Entra con Codice
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [joinError, setJoinError] = useState<string | null>(null);
   const [isJoining, setIsJoining] = useState(false);
 
-  // Copia feedback
+  // Stato per adesione a gruppo pubblico
+  const [joiningGroupId, setJoiningGroupId] = useState<string | null>(null);
+
+  // Feedback copia
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
 
-  // Filtro gruppi dell'utente corrente
-  const userGroups = groups.filter((g) =>
+  // 1. Gruppi in cui l'utente corrente è membro (mostrati DI BASE quando la ricerca è vuota)
+  const myJoinedGroups = groups.filter((g) =>
     g.members.some((m) => m.userId === currentUser.id)
   );
 
-  const filteredGroups = userGroups.filter((g) =>
-    g.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (g.description || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    g.code.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // 2. Risultati della ricerca per nome (spuntano sia pubblici che privati)
+  const isSearching = searchQuery.trim().length > 0;
+  const searchResults = isSearching
+    ? groups.filter((g) =>
+        g.name.toLowerCase().includes(searchQuery.trim().toLowerCase())
+      )
+    : [];
 
   const handleCopyCode = (e: React.MouseEvent, group: Group) => {
     e.stopPropagation();
@@ -90,10 +105,11 @@ export const GroupsHubView: React.FC<GroupsHubViewProps> = ({
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newGroupName.trim()) return;
-    onCreateGroup(newGroupName.trim(), newGroupDesc.trim(), selectedIcon);
+    onCreateGroup(newGroupName.trim(), newGroupDesc.trim(), selectedIcon, isPublicGroup);
     setNewGroupName('');
     setNewGroupDesc('');
     setSelectedIcon('👥');
+    setIsPublicGroup(false);
     setIsCreateModalOpen(false);
   };
 
@@ -112,15 +128,30 @@ export const GroupsHubView: React.FC<GroupsHubViewProps> = ({
         setJoinError(res.message);
       }
     } catch {
-      setJoinError('Si è verificato un errore durante l\'adesione al gruppo.');
+      setJoinError("Si è verificato un errore durante l'adesione al gruppo.");
     } finally {
       setIsJoining(false);
     }
   };
 
+  const handleJoinPublic = async (e: React.MouseEvent, group: Group) => {
+    e.stopPropagation();
+    setJoiningGroupId(group.id);
+    try {
+      if (onJoinPublicGroup) {
+        await onJoinPublicGroup(group);
+      } else {
+        // Fallback tramite onJoinGroup con codice
+        await onJoinGroup(group.code);
+      }
+    } finally {
+      setJoiningGroupId(null);
+    }
+  };
+
   return (
     <div className="space-y-4 pb-24 animate-in fade-in">
-      {/* Header Sezione Gruppi */}
+      {/* Header Sezione Gruppi con Azioni Rapide */}
       <div className="bg-white dark:bg-neutral-900 rounded-3xl p-5 sm:p-6 border border-neutral-200/90 dark:border-neutral-800 shadow-xs space-y-4 transition-colors">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
@@ -131,7 +162,7 @@ export const GroupsHubView: React.FC<GroupsHubViewProps> = ({
               </h1>
             </div>
             <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
-              Entra in un gruppo per accedere al suo spazio di lavoro, calendario e sondaggi dedicati.
+              Accedi allo spazio dedicato dei tuoi team, o cerca altri gruppi pubblici e privati per nome.
             </p>
           </div>
 
@@ -139,7 +170,11 @@ export const GroupsHubView: React.FC<GroupsHubViewProps> = ({
           <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
-              onClick={() => setIsJoinModalOpen(true)}
+              onClick={() => {
+                setJoinCodeInput('');
+                setJoinError(null);
+                setIsJoinModalOpen(true);
+              }}
               className="px-3.5 py-2.5 rounded-2xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
             >
               <KeyRound className="w-4 h-4 text-[#f23e2e]" />
@@ -148,7 +183,12 @@ export const GroupsHubView: React.FC<GroupsHubViewProps> = ({
 
             <button
               type="button"
-              onClick={() => setIsCreateModalOpen(true)}
+              onClick={() => {
+                setNewGroupName('');
+                setNewGroupDesc('');
+                setIsPublicGroup(false);
+                setIsCreateModalOpen(true);
+              }}
               className="px-4 py-2.5 rounded-2xl bg-[#f23e2e] hover:bg-red-600 text-white text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-red-600/25 active:scale-95"
             >
               <Plus className="w-4 h-4 stroke-[3px]" />
@@ -157,170 +197,445 @@ export const GroupsHubView: React.FC<GroupsHubViewProps> = ({
           </div>
         </div>
 
-        {/* Barra di ricerca se ci sono gruppi */}
-        {userGroups.length > 2 && (
-          <div className="relative">
-            <Search className="w-4 h-4 absolute left-3.5 top-3 text-neutral-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cerca gruppo per nome, descrizione o codice..."
-              className="w-full pl-10 pr-3.5 py-2 bg-neutral-50 dark:bg-neutral-800/80 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500/20"
-            />
-          </div>
-        )}
+        {/* BARRA DI RICERCA SEMPRE VISIBILE IN HOME (Cerca gruppi per nome) */}
+        <div className="relative pt-1">
+          <Search className="w-4 h-4 absolute left-3.5 top-4 text-neutral-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Cerca gruppi per nome (sia pubblici che privati)..."
+            className="w-full pl-10 pr-9 py-2.5 bg-neutral-50 dark:bg-neutral-800/80 border border-neutral-200 dark:border-neutral-700 rounded-2xl text-xs text-neutral-900 dark:text-white placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-[#f23e2e] transition-all"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-3 p-1 rounded-full text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-neutral-200 dark:hover:bg-neutral-700 cursor-pointer transition-colors"
+              title="Cancella ricerca"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Lista Gruppi */}
-      {filteredGroups.length === 0 ? (
-        <div className="bg-white dark:bg-neutral-900 rounded-3xl p-8 border border-neutral-200/90 dark:border-neutral-800 shadow-xs text-center space-y-4">
-          <div className="w-16 h-16 rounded-3xl bg-red-50 dark:bg-red-950/40 text-[#f23e2e] mx-auto flex items-center justify-center text-3xl">
-            👥
-          </div>
-          <div className="space-y-1">
-            <h3 className="text-sm font-bold text-neutral-900 dark:text-white">
-              {searchQuery ? 'Nessun gruppo corrisponde alla ricerca' : 'Non fai ancora parte di nessun gruppo'}
-            </h3>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400 max-w-sm mx-auto">
-              Crea subito il tuo team o chiedi a un collega il codice univoco del gruppo per iniziare a collaborare.
-            </p>
-          </div>
-          <div className="flex items-center justify-center gap-2 pt-2">
+      {/* CASO 1: MODALITÀ RICERCA ATTIVA */}
+      {isSearching ? (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between px-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-neutral-900 dark:text-white">
+                Risultati per &ldquo;{searchQuery}&rdquo;
+              </span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-neutral-200 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300">
+                {searchResults.length} {searchResults.length === 1 ? 'gruppo trovato' : 'gruppi trovati'}
+              </span>
+            </div>
             <button
               type="button"
-              onClick={() => setIsCreateModalOpen(true)}
-              className="px-4 py-2 bg-[#f23e2e] text-white rounded-xl text-xs font-bold hover:bg-red-600 cursor-pointer shadow-sm"
+              onClick={() => setSearchQuery('')}
+              className="text-xs text-[#f23e2e] hover:underline font-bold cursor-pointer"
             >
-              Crea il Tuo Primo Gruppo
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsJoinModalOpen(true)}
-              className="px-4 py-2 bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 rounded-xl text-xs font-bold hover:bg-neutral-200 dark:hover:bg-neutral-700 cursor-pointer"
-            >
-              Inserisci Codice
+              Torna ai tuoi gruppi
             </button>
           </div>
+
+          {searchResults.length === 0 ? (
+            <div className="bg-white dark:bg-neutral-900 rounded-3xl p-8 border border-neutral-200/90 dark:border-neutral-800 shadow-xs text-center space-y-4">
+              <div className="w-14 h-14 rounded-2xl bg-neutral-100 dark:bg-neutral-800 text-neutral-400 mx-auto flex items-center justify-center text-2xl">
+                🔍
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-neutral-900 dark:text-white">
+                  Nessun gruppo corrisponde a &ldquo;{searchQuery}&rdquo;
+                </h3>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400 max-w-sm mx-auto">
+                  Assicurati di aver digitato il nome corretto oppure crea subito un nuovo gruppo con questo nome.
+                </p>
+              </div>
+              <div className="flex items-center justify-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewGroupName(searchQuery);
+                    setIsCreateModalOpen(true);
+                  }}
+                  className="px-4 py-2 bg-[#f23e2e] text-white rounded-xl text-xs font-bold hover:bg-red-600 cursor-pointer shadow-sm flex items-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Crea Gruppo &ldquo;{searchQuery}&rdquo;</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="px-4 py-2 bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 rounded-xl text-xs font-bold hover:bg-neutral-200 dark:hover:bg-neutral-700 cursor-pointer"
+                >
+                  Cancella ricerca
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              {searchResults.map((group) => {
+                const isMember = group.members.some((m) => m.userId === currentUser.id);
+                const isCreator = group.creatorId === currentUser.id;
+                const isPublic = group.isPublic === true;
+                const memberUsers = allUsers.filter((u) =>
+                  group.members.some((m) => m.userId === u.id)
+                );
+
+                return (
+                  <div
+                    key={group.id}
+                    onClick={() => {
+                      if (isMember) {
+                        onSelectGroup(group);
+                      }
+                    }}
+                    className={`bg-white dark:bg-neutral-900 rounded-3xl p-5 border transition-all flex flex-col justify-between space-y-4 shadow-xs ${
+                      isMember
+                        ? 'border-neutral-200/90 dark:border-neutral-800 hover:border-red-500/50 hover:shadow-md cursor-pointer group'
+                        : isPublic
+                        ? 'border-emerald-200/80 dark:border-emerald-900/40 hover:border-emerald-500/60'
+                        : 'border-neutral-200/90 dark:border-neutral-800'
+                    }`}
+                  >
+                    <div className="space-y-3">
+                      {/* Top Header Card con Avatar, Nome e Badge Visibilità */}
+                      <div className="flex items-start justify-between gap-2.5">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-12 h-12 rounded-2xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200/80 dark:border-neutral-700/80 flex items-center justify-center text-2xl shadow-xs shrink-0">
+                            {group.avatar || '👥'}
+                          </div>
+                          <div className="min-w-0">
+                            <h3 className="text-sm font-black text-neutral-900 dark:text-white truncate">
+                              {group.name}
+                            </h3>
+                            <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
+                              {group.members.length} {group.members.length === 1 ? 'membro' : 'membri'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Badge Pubblico / Privato */}
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <span
+                            className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full flex items-center gap-1 border ${
+                              isPublic
+                                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border-emerald-300/80 dark:border-emerald-800/60'
+                                : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
+                            }`}
+                          >
+                            {isPublic ? (
+                              <>
+                                <Globe className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                                <span>Pubblico</span>
+                              </>
+                            ) : (
+                              <>
+                                <Lock className="w-3 h-3 text-neutral-400" />
+                                <span>Privato</span>
+                              </>
+                            )}
+                          </span>
+
+                          {isMember && (
+                            <span className="text-[8px] font-black uppercase tracking-wider bg-red-100 dark:bg-red-950/60 text-[#f23e2e] px-1.5 py-0.2 rounded-md">
+                              {isCreator ? 'Creatore' : 'Membro'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Descrizione */}
+                      {group.description && (
+                        <p className="text-xs text-neutral-600 dark:text-neutral-300 line-clamp-2 leading-relaxed">
+                          {group.description}
+                        </p>
+                      )}
+
+                      {/* Membri Avatars preview */}
+                      <div className="flex items-center gap-2 pt-0.5">
+                        <div className="flex -space-x-1.5 overflow-hidden">
+                          {memberUsers.slice(0, 4).map((u) => (
+                            <div key={u.id} className="ring-2 ring-white dark:ring-neutral-900 rounded-full">
+                              <UserAvatar user={u} size="sm" />
+                            </div>
+                          ))}
+                        </div>
+                        {memberUsers.length > 4 && (
+                          <span className="text-[10px] font-bold text-neutral-400">
+                            +{memberUsers.length - 4} altri
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Azioni del risultato di ricerca */}
+                    <div className="pt-3 border-t border-neutral-100 dark:border-neutral-800 flex items-center justify-between gap-2">
+                      {isMember ? (
+                        <>
+                          {/* Se sei già membro */}
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-mono font-bold bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 px-2 py-1 rounded-lg border border-neutral-200 dark:border-neutral-700">
+                              {group.code}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => handleCopyCode(e, group)}
+                              title="Copia codice univoco"
+                              className="p-1 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 cursor-pointer"
+                            >
+                              {copiedCodeId === `code-${group.id}` ? (
+                                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                              ) : (
+                                <Copy className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => onSelectGroup(group)}
+                            className="flex items-center gap-1 text-xs font-bold text-[#f23e2e] hover:text-red-700 cursor-pointer"
+                          >
+                            <span>Entra nello spazio</span>
+                            <ArrowRight className="w-3.5 h-3.5 stroke-[2.5px]" />
+                          </button>
+                        </>
+                      ) : isPublic ? (
+                        <>
+                          {/* Non membro ma gruppo PUBBLICO: Entra direttamente! */}
+                          <span className="text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold flex items-center gap-1 truncate">
+                            <Globe className="w-3.5 h-3.5 shrink-0" />
+                            <span className="truncate">Accesso libero</span>
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={(e) => handleJoinPublic(e, group)}
+                            disabled={joiningGroupId === group.id}
+                            className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
+                          >
+                            {joiningGroupId === group.id ? (
+                              <span className="animate-spin inline-block w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full" />
+                            ) : (
+                              <>
+                                <span>Unisciti al Gruppo</span>
+                                <ArrowRight className="w-3.5 h-3.5" />
+                              </>
+                            )}
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          {/* Non membro e gruppo PRIVATO: Richiede codice */}
+                          <span className="text-[11px] text-neutral-500 dark:text-neutral-400 flex items-center gap-1 truncate">
+                            <Lock className="w-3.5 h-3.5 shrink-0" />
+                            <span className="truncate">Serve codice d&apos;invito</span>
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setJoinCodeInput('');
+                              setJoinError(null);
+                              setIsJoinModalOpen(true);
+                            }}
+                            className="px-3.5 py-1.5 rounded-xl bg-neutral-900 hover:bg-black dark:bg-neutral-800 dark:hover:bg-neutral-700 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                          >
+                            <KeyRound className="w-3.5 h-3.5 text-[#f23e2e]" />
+                            <span>Inserisci Codice</span>
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-          {filteredGroups.map((group) => {
-            const isCreator = group.creatorId === currentUser.id;
-            const myMembership = group.members.find((m) => m.userId === currentUser.id);
-            const isGroupAdmin = isCreator || myMembership?.role === 'admin';
-
-            // Membri popolati
-            const memberUsers = allUsers.filter((u) =>
-              group.members.some((m) => m.userId === u.id)
-            );
-
-            return (
-              <div
-                key={group.id}
-                onClick={() => onSelectGroup(group)}
-                className="bg-white dark:bg-neutral-900 rounded-3xl p-5 border border-neutral-200/90 dark:border-neutral-800 hover:border-red-500/50 dark:hover:border-red-500/50 shadow-xs hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between space-y-4"
-              >
-                <div className="space-y-3">
-                  {/* Riga Superiore: Avatar + Titolo + Badge Ruolo */}
-                  <div className="flex items-start justify-between gap-2.5">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-2xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200/80 dark:border-neutral-700/80 flex items-center justify-center text-2xl shadow-xs group-hover:scale-105 transition-transform">
-                        {group.avatar || '👥'}
-                      </div>
-                      <div>
-                        <h3 className="text-sm font-black text-neutral-900 dark:text-white group-hover:text-[#f23e2e] transition-colors leading-tight">
-                          {group.name}
-                        </h3>
-                        <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
-                          {group.members.length} {group.members.length === 1 ? 'membro' : 'membri'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <span
-                      className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                        isGroupAdmin
-                          ? 'bg-red-100 dark:bg-red-950/60 text-[#f23e2e] border border-red-200/60 dark:border-red-900/40'
-                          : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400'
-                      }`}
-                    >
-                      {isCreator ? 'Creatore' : isGroupAdmin ? 'Admin' : 'Membro'}
-                    </span>
-                  </div>
-
-                  {/* Descrizione */}
-                  {group.description && (
-                    <p className="text-xs text-neutral-600 dark:text-neutral-300 line-clamp-2 leading-relaxed">
-                      {group.description}
-                    </p>
-                  )}
-
-                  {/* Membri Avatars preview */}
-                  <div className="flex items-center gap-2 pt-1">
-                    <div className="flex -space-x-1.5 overflow-hidden">
-                      {memberUsers.slice(0, 5).map((u) => (
-                        <div key={u.id} className="ring-2 ring-white dark:ring-neutral-900 rounded-full">
-                          <UserAvatar user={u} size="sm" />
-                        </div>
-                      ))}
-                    </div>
-                    {memberUsers.length > 5 && (
-                      <span className="text-[10px] font-bold text-neutral-400">
-                        +{memberUsers.length - 5} altri
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Footer Card: Codice Univoco & Tasto Entra */}
-                <div className="pt-3 border-t border-neutral-100 dark:border-neutral-800 flex items-center justify-between gap-2">
-                  {/* Codice Gruppo */}
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-mono font-bold bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 px-2 py-1 rounded-lg border border-neutral-200 dark:border-neutral-700">
-                      {group.code}
-                    </span>
-
-                    <button
-                      type="button"
-                      onClick={(e) => handleCopyCode(e, group)}
-                      title="Copia codice univoco"
-                      className="p-1 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 cursor-pointer transition-colors"
-                    >
-                      {copiedCodeId === `code-${group.id}` ? (
-                        <Check className="w-3.5 h-3.5 text-emerald-600" />
-                      ) : (
-                        <Copy className="w-3.5 h-3.5" />
-                      )}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={(e) => handleCopyLink(e, group)}
-                      title="Copia link d'invito"
-                      className="p-1 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 cursor-pointer transition-colors"
-                    >
-                      {copiedCodeId === `link-${group.id}` ? (
-                        <Check className="w-3.5 h-3.5 text-emerald-600" />
-                      ) : (
-                        <Share2 className="w-3.5 h-3.5" />
-                      )}
-                    </button>
-                  </div>
-
-                  {/* Pulsante Entra nel Gruppo */}
-                  <div className="flex items-center gap-1 text-xs font-bold text-[#f23e2e] group-hover:translate-x-0.5 transition-transform">
-                    <span>Entra nel gruppo</span>
-                    <ArrowRight className="w-3.5 h-3.5 stroke-[2.5px]" />
-                  </div>
-                </div>
+        /* CASO 2: MODALITÀ DEFAULT (VISIBILI SOLO I GRUPPI IN CUI L'UTENTE È DENTRO) */
+        <div className="space-y-3">
+          {myJoinedGroups.length === 0 ? (
+            <div className="bg-white dark:bg-neutral-900 rounded-3xl p-8 border border-neutral-200/90 dark:border-neutral-800 shadow-xs text-center space-y-4">
+              <div className="w-16 h-16 rounded-3xl bg-red-50 dark:bg-red-950/40 text-[#f23e2e] mx-auto flex items-center justify-center text-3xl shadow-xs">
+                👥
               </div>
-            );
-          })}
+              <div className="space-y-1">
+                <h3 className="text-sm font-bold text-neutral-900 dark:text-white">
+                  Non fai ancora parte di nessun gruppo
+                </h3>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400 max-w-sm mx-auto">
+                  Cerca un gruppo per nome usando la barra di ricerca in alto, oppure creane uno nuovo per iniziare a collaborare.
+                </p>
+              </div>
+              <div className="flex items-center justify-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateModalOpen(true)}
+                  className="px-4 py-2 bg-[#f23e2e] text-white rounded-xl text-xs font-bold hover:bg-red-600 cursor-pointer shadow-sm flex items-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Crea il Tuo Primo Gruppo</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsJoinModalOpen(true)}
+                  className="px-4 py-2 bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 rounded-xl text-xs font-bold hover:bg-neutral-200 dark:hover:bg-neutral-700 cursor-pointer flex items-center gap-1.5"
+                >
+                  <KeyRound className="w-4 h-4 text-[#f23e2e]" />
+                  <span>Inserisci Codice</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              {myJoinedGroups.map((group) => {
+                const isCreator = group.creatorId === currentUser.id;
+                const myMembership = group.members.find((m) => m.userId === currentUser.id);
+                const isGroupAdmin = isCreator || myMembership?.role === 'admin';
+                const isPublic = group.isPublic === true;
+
+                // Membri popolati
+                const memberUsers = allUsers.filter((u) =>
+                  group.members.some((m) => m.userId === u.id)
+                );
+
+                return (
+                  <div
+                    key={group.id}
+                    onClick={() => onSelectGroup(group)}
+                    className="bg-white dark:bg-neutral-900 rounded-3xl p-5 border border-neutral-200/90 dark:border-neutral-800 hover:border-red-500/50 dark:hover:border-red-500/50 shadow-xs hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between space-y-4"
+                  >
+                    <div className="space-y-3">
+                      {/* Riga Superiore: Avatar + Titolo + Badge Visibilità & Ruolo */}
+                      <div className="flex items-start justify-between gap-2.5">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-12 h-12 rounded-2xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200/80 dark:border-neutral-700/80 flex items-center justify-center text-2xl shadow-xs group-hover:scale-105 transition-transform shrink-0">
+                            {group.avatar || '👥'}
+                          </div>
+                          <div className="min-w-0">
+                            <h3 className="text-sm font-black text-neutral-900 dark:text-white group-hover:text-[#f23e2e] transition-colors leading-tight truncate">
+                              {group.name}
+                            </h3>
+                            <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
+                              {group.members.length} {group.members.length === 1 ? 'membro' : 'membri'}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          {/* Badge Pubblico/Privato */}
+                          <span
+                            className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full flex items-center gap-1 border ${
+                              isPublic
+                                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border-emerald-300/80 dark:border-emerald-800/60'
+                                : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
+                            }`}
+                          >
+                            {isPublic ? (
+                              <>
+                                <Globe className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                                <span>Pubblico</span>
+                              </>
+                            ) : (
+                              <>
+                                <Lock className="w-3 h-3 text-neutral-400" />
+                                <span>Privato</span>
+                              </>
+                            )}
+                          </span>
+
+                          <span
+                            className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                              isGroupAdmin
+                                ? 'bg-red-100 dark:bg-red-950/60 text-[#f23e2e] border border-red-200/60 dark:border-red-900/40'
+                                : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400'
+                            }`}
+                          >
+                            {isCreator ? 'Creatore' : isGroupAdmin ? 'Admin' : 'Membro'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Descrizione */}
+                      {group.description && (
+                        <p className="text-xs text-neutral-600 dark:text-neutral-300 line-clamp-2 leading-relaxed">
+                          {group.description}
+                        </p>
+                      )}
+
+                      {/* Membri Avatars preview */}
+                      <div className="flex items-center gap-2 pt-1">
+                        <div className="flex -space-x-1.5 overflow-hidden">
+                          {memberUsers.slice(0, 5).map((u) => (
+                            <div key={u.id} className="ring-2 ring-white dark:ring-neutral-900 rounded-full">
+                              <UserAvatar user={u} size="sm" />
+                            </div>
+                          ))}
+                        </div>
+                        {memberUsers.length > 5 && (
+                          <span className="text-[10px] font-bold text-neutral-400">
+                            +{memberUsers.length - 5} altri
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Footer Card: Codice Univoco & Tasto Entra */}
+                    <div className="pt-3 border-t border-neutral-100 dark:border-neutral-800 flex items-center justify-between gap-2">
+                      {/* Codice Gruppo */}
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-mono font-bold bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 px-2 py-1 rounded-lg border border-neutral-200 dark:border-neutral-700">
+                          {group.code}
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={(e) => handleCopyCode(e, group)}
+                          title="Copia codice univoco"
+                          className="p-1 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 cursor-pointer transition-colors"
+                        >
+                          {copiedCodeId === `code-${group.id}` ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={(e) => handleCopyLink(e, group)}
+                          title="Copia link d'invito"
+                          className="p-1 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 cursor-pointer transition-colors"
+                        >
+                          {copiedCodeId === `link-${group.id}` ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          ) : (
+                            <Share2 className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
+
+                      {/* Pulsante Entra nel Gruppo */}
+                      <div className="flex items-center gap-1 text-xs font-bold text-[#f23e2e] group-hover:translate-x-0.5 transition-transform">
+                        <span>Entra nello spazio</span>
+                        <ArrowRight className="w-3.5 h-3.5 stroke-[2.5px]" />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
-      {/* MODALE: CREA NUOVO GRUPPO */}
+      {/* MODALE: CREA NUOVO GRUPPO (Con scelta Pubblico o Privato per il creatore) */}
       {isCreateModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white dark:bg-neutral-900 w-full max-w-md rounded-3xl p-6 border border-neutral-200 dark:border-neutral-800 shadow-2xl space-y-4">
@@ -393,13 +708,64 @@ export const GroupsHubView: React.FC<GroupsHubViewProps> = ({
                 />
               </div>
 
-              <div className="p-3 bg-red-50 dark:bg-red-950/30 rounded-2xl border border-red-200/60 dark:border-red-900/40 text-[11px] text-neutral-600 dark:text-neutral-300 space-y-1">
+              {/* SELEZIONE VISIBILITÀ: PUBBLICO O PRIVATO */}
+              <div>
+                <label className="block text-[11px] font-bold text-neutral-700 dark:text-neutral-300 uppercase tracking-wider mb-1.5">
+                  Tipo di Gruppo e Accesso *
+                </label>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setIsPublicGroup(false)}
+                    className={`p-3 rounded-2xl border text-left cursor-pointer transition-all ${
+                      !isPublicGroup
+                        ? 'bg-red-50/70 dark:bg-red-950/40 border-[#f23e2e] ring-2 ring-[#f23e2e]/20'
+                        : 'bg-neutral-50 dark:bg-neutral-800/80 border-neutral-200 dark:border-neutral-700 hover:border-neutral-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-base">🔒</span>
+                      {!isPublicGroup && <Check className="w-3.5 h-3.5 text-[#f23e2e] stroke-[3px]" />}
+                    </div>
+                    <p className="text-xs font-black text-neutral-900 dark:text-white">
+                      Privato
+                    </p>
+                    <p className="text-[10px] text-neutral-500 dark:text-neutral-400 mt-0.5 leading-snug">
+                      Accessibile solo con codice o link d&apos;invito.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsPublicGroup(true)}
+                    className={`p-3 rounded-2xl border text-left cursor-pointer transition-all ${
+                      isPublicGroup
+                        ? 'bg-emerald-50/70 dark:bg-emerald-950/40 border-emerald-500 ring-2 ring-emerald-500/20'
+                        : 'bg-neutral-50 dark:bg-neutral-800/80 border-neutral-200 dark:border-neutral-700 hover:border-neutral-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-base">🌐</span>
+                      {isPublicGroup && <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3px]" />}
+                    </div>
+                    <p className="text-xs font-black text-neutral-900 dark:text-white">
+                      Pubblico
+                    </p>
+                    <p className="text-[10px] text-neutral-500 dark:text-neutral-400 mt-0.5 leading-snug">
+                      Chiunque cerchi il gruppo per nome può entrare liberamente.
+                    </p>
+                  </button>
+                </div>
+              </div>
+
+              {/* Box Informativo Codice Univoco */}
+              <div className="p-3 bg-red-50/60 dark:bg-red-950/30 rounded-2xl border border-red-200/60 dark:border-red-900/40 text-[11px] text-neutral-600 dark:text-neutral-300 space-y-1">
                 <p className="font-bold text-[#f23e2e] flex items-center gap-1">
                   <Shield className="w-3.5 h-3.5" />
-                  <span>Codice d'Invito Univoco Automatico</span>
+                  <span>Codice d&apos;Invito Univoco Automatico</span>
                 </p>
                 <p className="text-[10px] text-neutral-500 dark:text-neutral-400">
-                  Verrà generato un codice esclusivo (es. JES-XXXX) che potrai condividere con chiunque per farlo entrare nel gruppo.
+                  Verrà generato un codice esclusivo (es. <span className="font-mono font-bold">JES-XXXX</span>) che potrai condividere in qualsiasi momento.
                 </p>
               </div>
 
@@ -416,7 +782,7 @@ export const GroupsHubView: React.FC<GroupsHubViewProps> = ({
                   disabled={!newGroupName.trim()}
                   className="flex-1 py-2.5 rounded-xl bg-[#f23e2e] hover:bg-red-600 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-md shadow-red-600/25 cursor-pointer"
                 >
-                  Crea e Genera Codice
+                  Crea Gruppo
                 </button>
               </div>
             </form>
@@ -424,7 +790,7 @@ export const GroupsHubView: React.FC<GroupsHubViewProps> = ({
         </div>
       )}
 
-      {/* MODALE: ENTRA CON CODICE / LINK */}
+      {/* MODALE: ENTRA CON CODICE / LINK (Logica invariata al 100%) */}
       {isJoinModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-white dark:bg-neutral-900 w-full max-w-md rounded-3xl p-6 border border-neutral-200 dark:border-neutral-800 shadow-2xl space-y-4">
@@ -432,7 +798,7 @@ export const GroupsHubView: React.FC<GroupsHubViewProps> = ({
               <div className="flex items-center gap-2">
                 <span className="text-xl">🔑</span>
                 <h3 className="text-base font-black text-neutral-900 dark:text-white">
-                  Entra in un Gruppo
+                  Entra in un Gruppo con Codice
                 </h3>
               </div>
               <button
@@ -448,7 +814,7 @@ export const GroupsHubView: React.FC<GroupsHubViewProps> = ({
             </div>
 
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              Incolla il <strong>codice univoco</strong> fornito dall'amministratore (es. <span className="font-mono font-bold text-neutral-800 dark:text-neutral-200">JES-XXXX</span>) o il link di invito completo.
+              Incolla il <strong>codice univoco</strong> fornito dall&apos;amministratore (es. <span className="font-mono font-bold text-neutral-800 dark:text-neutral-200">JES-XXXX</span>) o il link di invito completo.
             </p>
 
             <form onSubmit={handleJoinSubmit} className="space-y-3.5">

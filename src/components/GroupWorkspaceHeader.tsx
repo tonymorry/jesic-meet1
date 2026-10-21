@@ -157,6 +157,15 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
                     <span className="text-[9px] font-black uppercase tracking-wider bg-red-100 dark:bg-red-950/60 text-[#f23e2e] px-2 py-0.5 rounded-full shrink-0">
                       {isCreator ? 'Creatore' : 'Gruppo'}
                     </span>
+                    <span
+                      className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1 border ${
+                        activeGroup.isPublic
+                          ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border-emerald-300/80 dark:border-emerald-800/60'
+                          : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
+                      }`}
+                    >
+                      {activeGroup.isPublic ? '🌐 Pubblico' : '🔒 Privato'}
+                    </span>
                   </div>
                 )}
                 <p className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">

@@ -54,14 +54,32 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   isInsideGroup = false,
   onBackToGroups,
 }) => {
+  const handleLogoClick = () => {
+    if (onBackToGroups) {
+      onBackToGroups();
+    }
+    if (onSelectTab) {
+      onSelectTab('groups');
+    }
+  };
+
   return (
     <header className="sticky top-0 z-30 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md border-b border-neutral-200/80 dark:border-neutral-800 px-4 sm:px-6 py-2.5 sm:py-3 transition-colors">
       <div className="flex items-center justify-between max-w-md sm:max-w-xl md:max-w-4xl lg:max-w-6xl xl:max-w-7xl mx-auto">
         
-        {/* Logo Brand JESic Meet */}
+        {/* Logo Brand JESic Meet - Cliccato riporta sempre alla Home */}
         <div
-          onClick={() => onSelectTab && onSelectTab(isInsideGroup ? 'dashboard' : 'groups')}
-          className="flex items-center gap-2.5 cursor-pointer group shrink-0"
+          onClick={handleLogoClick}
+          className="flex items-center gap-2.5 cursor-pointer group shrink-0 active:scale-95 transition-transform select-none"
+          title="Torna alla Home"
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleLogoClick();
+            }
+          }}
         >
           <div className="w-8 h-8 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
             <img src="/logo.png" alt="JESic Logo" className="w-full h-full object-contain drop-shadow-xs" />
@@ -295,7 +313,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             type="button"
             onClick={onNavigateToProfile}
             className="flex items-center gap-2 p-1 pl-1.5 pr-2.5 rounded-full border border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 transition-all text-left cursor-pointer"
-            title="Visualizza il tuo profilo (Gestione Ruoli disponibile per Admin nel Profilo)"
+            title="Visualizza il tuo profilo"
           >
             <UserAvatar user={currentUser} size="sm" />
             <div className="hidden sm:block leading-tight">

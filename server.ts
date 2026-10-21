@@ -411,11 +411,13 @@ app.patch('/api/users/:id', async (req: Request, res: Response) => {
 
 // GET /api/groups - Ritorna la lista dei gruppi da MongoDB
 app.get('/api/groups', async (req: Request, res: Response) => {
-  const { userId } = req.query;
+  const { userId, search } = req.query;
 
   try {
     let filter: any = {};
-    if (userId) {
+    if (search && typeof search === 'string' && search.trim()) {
+      filter.name = { $regex: search.trim(), $options: 'i' };
+    } else if (userId) {
       filter = { 'members.userId': userId };
     }
     const groups = await GroupModel.find(filter).sort({ createdAt: -1 }).lean();
@@ -428,6 +430,7 @@ app.get('/api/groups', async (req: Request, res: Response) => {
       creatorId: g.creatorId,
       members: g.members,
       avatar: g.avatar,
+      isPublic: g.isPublic ?? false,
       createdAt: g.createdAt,
       updatedAt: g.updatedAt,
     }));
@@ -440,7 +443,7 @@ app.get('/api/groups', async (req: Request, res: Response) => {
 
 // POST /api/groups - Crea un nuovo gruppo di lavoro in MongoDB
 app.post('/api/groups', async (req: Request, res: Response) => {
-  const { name, description, avatar, creatorId } = req.body;
+  const { name, description, avatar, creatorId, isPublic } = req.body;
   if (!name || !creatorId) {
     return res.status(400).json({ error: 'Nome del gruppo e ID creatore sono obbligatori' });
   }
@@ -456,6 +459,7 @@ app.post('/api/groups', async (req: Request, res: Response) => {
       inviteLink: `/join/${code}`,
       creatorId,
       avatar: avatar || '👥',
+      isPublic: isPublic === true,
       members: [
         {
           userId: creatorId,
@@ -475,6 +479,7 @@ app.post('/api/groups', async (req: Request, res: Response) => {
         creatorId: newGroupDoc.creatorId,
         members: newGroupDoc.members,
         avatar: newGroupDoc.avatar,
+        isPublic: newGroupDoc.isPublic ?? false,
         createdAt: newGroupDoc.createdAt,
       },
     });
@@ -526,6 +531,7 @@ app.post('/api/groups/join', async (req: Request, res: Response) => {
         creatorId: group.creatorId,
         members: group.members,
         avatar: group.avatar,
+        isPublic: group.isPublic ?? false,
       },
     });
   } catch (err: any) {
@@ -534,10 +540,63 @@ app.post('/api/groups/join', async (req: Request, res: Response) => {
   }
 });
 
-// PATCH /api/groups/:id - Modifica nome o dettagli del gruppo (Creatore o Admin)
+// POST /api/groups/:id/join-public - Entra direttamente in un gruppo pubblico conoscendo il nome
+app.post('/api/groups/:id/join-public', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { userId } = req.body;
+  if (!userId) {
+    return res.status(400).json({ error: 'ID utente obbligatorio' });
+  }
+
+  try {
+    const group = await GroupModel.findOne({ $or: [{ _id: id }, { id }] });
+    if (!group) {
+      return res.status(404).json({ error: 'Gruppo non trovato nel database' });
+    }
+
+    if (!group.isPublic) {
+      return res.status(403).json({ error: 'Questo gruppo è privato. È necessario il codice d\'invito.' });
+    }
+
+    const isMember = group.members.some((m) => m.userId === userId);
+    if (!isMember) {
+      group.members.push({
+        userId,
+        role: 'member',
+        joinedAt: new Date().toISOString(),
+      });
+      await group.save();
+    }
+
+    const mappedGroup = {
+      id: group._id || group.id,
+      name: group.name,
+      description: group.description,
+      code: group.code,
+      inviteLink: group.inviteLink,
+      creatorId: group.creatorId,
+      members: group.members,
+      avatar: group.avatar,
+      isPublic: group.isPublic ?? false,
+      createdAt: group.createdAt,
+      updatedAt: group.updatedAt,
+    };
+
+    return res.json({
+      success: true,
+      message: isMember ? 'Sei già membro di questo gruppo' : 'Sei entrato nel gruppo pubblico con successo!',
+      group: mappedGroup,
+    });
+  } catch (err: any) {
+    console.error('Errore join pubblico gruppo:', err.message);
+    return res.status(500).json({ error: 'Errore durante l\'ingresso nel gruppo pubblico' });
+  }
+});
+
+// PATCH /api/groups/:id - Modifica nome, dettagli o visibilità del gruppo (Creatore o Admin)
 app.patch('/api/groups/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, description, avatar, userId } = req.body;
+  const { name, description, avatar, isPublic, userId } = req.body;
 
   try {
     const group = await GroupModel.findOne({ $or: [{ _id: id }, { id }] });
@@ -555,6 +614,7 @@ app.patch('/api/groups/:id', async (req: Request, res: Response) => {
     if (name) group.name = name.trim();
     if (description !== undefined) group.description = description ? description.trim() : '';
     if (avatar) group.avatar = avatar;
+    if (typeof isPublic === 'boolean') group.isPublic = isPublic;
     await group.save();
 
     const mappedGroup = {
@@ -566,6 +626,7 @@ app.patch('/api/groups/:id', async (req: Request, res: Response) => {
       creatorId: group.creatorId,
       members: group.members,
       avatar: group.avatar,
+      isPublic: group.isPublic ?? false,
       createdAt: group.createdAt,
       updatedAt: group.updatedAt,
     };

@@ -37,6 +37,7 @@ export interface Group {
   creatorId: string;
   members: GroupMember[];
   avatar?: string;
+  isPublic?: boolean; // Se true il gruppo è pubblico (chiunque conosca il nome può entrare)
   createdAt: string;
   updatedAt?: string;
 }

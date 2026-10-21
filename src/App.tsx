@@ -676,7 +676,12 @@ export default function App() {
     setCurrentTab('groups');
   };
 
-  const handleCreateGroup = (name: string, description: string, avatar?: string) => {
+  const handleCreateGroup = (
+    name: string,
+    description: string,
+    avatar?: string,
+    isPublic: boolean = false
+  ) => {
     if (!currentUser) return;
     const code = `JES-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
     const newGroup: Group = {
@@ -687,6 +692,7 @@ export default function App() {
       inviteLink: `${typeof window !== 'undefined' ? window.location.origin : ''}/?join=${code}`,
       creatorId: currentUser.id,
       avatar: avatar || '👥',
+      isPublic,
       createdAt: new Date().toISOString(),
       members: [
         {
@@ -710,8 +716,56 @@ export default function App() {
         description,
         avatar,
         creatorId: currentUser.id,
+        isPublic,
       }),
     }).catch((e) => console.log('[API create group sync]', e));
+  };
+
+  const handleJoinPublicGroup = async (
+    targetGroup: Group
+  ): Promise<{ success: boolean; message: string; group?: Group }> => {
+    if (!currentUser) return { success: false, message: 'Devi aver effettuato l\'accesso.' };
+
+    const alreadyMember = targetGroup.members.some((m) => m.userId === currentUser.id);
+    if (alreadyMember) {
+      setActiveGroupId(targetGroup.id);
+      setCurrentTab('dashboard');
+      return { success: true, message: 'Sei già membro di questo gruppo!', group: targetGroup };
+    }
+
+    if (!targetGroup.isPublic) {
+      return { success: false, message: 'Questo gruppo è privato. Inserisci il codice d\'invito.' };
+    }
+
+    const updatedGroup: Group = {
+      ...targetGroup,
+      members: [
+        ...targetGroup.members,
+        {
+          userId: currentUser.id,
+          role: 'member',
+          joinedAt: new Date().toISOString(),
+        },
+      ],
+      updatedAt: new Date().toISOString(),
+    };
+
+    const updatedGroups = groups.map((g) => (g.id === targetGroup.id ? updatedGroup : g));
+    setGroups(updatedGroups);
+    setActiveGroupId(updatedGroup.id);
+    setCurrentTab('dashboard');
+
+    try {
+      await fetch(`/api/groups/${targetGroup.id}/join-public`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: currentUser.id }),
+      });
+    } catch (e) {
+      console.warn('[API join public group error]', e);
+    }
+
+    return { success: true, message: 'Sei entrato nel gruppo con successo!', group: updatedGroup };
   };
 
   const handleJoinGroup = async (
@@ -1404,6 +1458,7 @@ export default function App() {
                     onSelectGroup={handleSelectGroup}
                     onCreateGroup={handleCreateGroup}
                     onJoinGroup={handleJoinGroup}
+                    onJoinPublicGroup={handleJoinPublicGroup}
                   />
                 )}
 

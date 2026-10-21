@@ -172,6 +172,7 @@ export interface IGroup {
   creatorId: string;
   members: IGroupMember[];
   avatar?: string;
+  isPublic?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -226,6 +227,10 @@ const GroupSchema: Schema<IGroup> = new Schema(
     avatar: {
       type: String,
       default: '👥',
+    },
+    isPublic: {
+      type: Boolean,
+      default: false,
     },
   },
   {
