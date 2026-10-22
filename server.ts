@@ -314,16 +314,9 @@ app.patch('/api/users/:id/role', async (req: Request, res: Response) => {
   }
 
   try {
-    if (adminId) {
-      const adminUser = await UserModel.findOne({ $or: [{ _id: adminId }, { id: adminId }] });
-      if (!adminUser || (adminUser.role !== 'admin' && adminUser.role !== 'admin_clienti')) {
-        return res.status(403).json({ error: 'Accesso negato: solo Admin o Admin Clienti possono modificare i ruoli' });
-      }
-    }
-
     const updatedUser = await UserModel.findOneAndUpdate(
       { $or: [{ _id: id }, { id }] },
-      { role, systemRole: role, updatedAt: new Date() },
+      { updatedAt: new Date() },
       { new: true }
     );
 
@@ -333,32 +326,30 @@ app.patch('/api/users/:id/role', async (req: Request, res: Response) => {
 
     return res.json({
       success: true,
-      message: `Ruolo aggiornato a ${role} con successo nel Database`,
+      message: `Utente aggiornato con successo nel Database`,
       user: {
         id: updatedUser._id || updatedUser.id,
         name: updatedUser.name,
         surname: updatedUser.surname,
         email: updatedUser.email,
-        role: updatedUser.role,
-        systemRole: updatedUser.role,
+        groupMemberships: updatedUser.groupMemberships || [],
       },
     });
   } catch (err: any) {
     console.error('Errore aggiornamento ruolo UserModel MongoDB:', err.message);
-    return res.status(500).json({ error: 'Errore aggiornamento ruolo su MongoDB' });
+    return res.status(500).json({ error: 'Errore aggiornamento utente su MongoDB' });
   }
 });
 
 // PATCH /api/users/:id - Modifica profilo utente
 app.patch('/api/users/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, surname, jesicRole, avatarUrl, googleCalendarConnected, googleAccessToken, googleRefreshToken } = req.body;
+  const { name, surname, avatarUrl, googleCalendarConnected, googleAccessToken, googleRefreshToken } = req.body;
 
   try {
     const updateData: any = { updatedAt: new Date() };
     if (name) updateData.name = name;
     if (surname) updateData.surname = surname;
-    if (jesicRole) updateData.jesicRole = jesicRole;
     if (avatarUrl !== undefined) updateData.avatarUrl = avatarUrl;
     if (googleCalendarConnected !== undefined) updateData.googleCalendarConnected = Boolean(googleCalendarConnected);
     if (googleAccessToken !== undefined) updateData.googleAccessToken = googleAccessToken;
@@ -381,9 +372,7 @@ app.patch('/api/users/:id', async (req: Request, res: Response) => {
         name: updatedUser.name,
         surname: updatedUser.surname,
         email: updatedUser.email,
-        role: updatedUser.role,
-        systemRole: updatedUser.role,
-        jesicRole: updatedUser.jesicRole,
+        groupMemberships: updatedUser.groupMemberships || [],
         avatarUrl: updatedUser.avatarUrl,
         googleCalendarConnected: updatedUser.googleCalendarConnected,
         googleAccessToken: updatedUser.googleAccessToken || undefined,
@@ -460,6 +449,16 @@ app.post('/api/groups', async (req: Request, res: Response) => {
       ],
     });
 
+    // Sincronizza l'appartenenza del creatore su UserModel (groupMemberships con ruolo admin)
+    try {
+      await UserModel.updateOne(
+        { _id: creatorId, 'groupMemberships.groupId': { $ne: newGroupDoc._id } },
+        { $push: { groupMemberships: { groupId: newGroupDoc._id, role: 'admin' } } }
+      );
+    } catch (errSync) {
+      console.warn('Sync creator groupMemberships notice:', errSync);
+    }
+
     return res.status(201).json({
       group: {
         id: newGroupDoc._id || newGroupDoc.id,
@@ -480,6 +479,12 @@ app.post('/api/groups', async (req: Request, res: Response) => {
   }
 });
 
+// GET /join/:code - Redirect pulito alla SPA per i link d'invito diretti
+app.get('/join/:code', (req: Request, res: Response) => {
+  const code = encodeURIComponent(req.params.code || '');
+  return res.redirect(`/?join=${code}`);
+});
+
 // POST /api/groups/join - Entra in un gruppo tramite codice o link in MongoDB
 app.post('/api/groups/join', async (req: Request, res: Response) => {
   const { codeOrLink, userId } = req.body;
@@ -487,17 +492,56 @@ app.post('/api/groups/join', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Codice/link e ID utente sono obbligatori' });
   }
 
-  let code = codeOrLink.trim().toUpperCase();
-  if (code.includes('JOIN/')) {
-    code = code.split('JOIN/')[1].split('?')[0].split('/')[0];
-  } else if (code.includes('JOIN=')) {
-    code = code.split('JOIN=')[1].split('&')[0];
+  let raw = String(codeOrLink).trim();
+  let code = raw;
+
+  // 1. Estrazione intelligente del codice da qualsiasi formato di URL o query string
+  try {
+    if (code.includes('http://') || code.includes('https://') || code.includes('://')) {
+      const parsedUrl = new URL(code);
+      const qJoin = parsedUrl.searchParams.get('join');
+      if (qJoin) {
+        code = qJoin;
+      } else {
+        const pathParts = parsedUrl.pathname.split('/').filter(Boolean);
+        const joinIdx = pathParts.findIndex((p) => p.toLowerCase() === 'join');
+        if (joinIdx !== -1 && pathParts[joinIdx + 1]) {
+          code = pathParts[joinIdx + 1];
+        }
+      }
+    }
+  } catch {}
+
+  // Rimuovi parametri query o ancore rimaste
+  code = code.split('?')[0].split('#')[0];
+  if (code.toLowerCase().includes('/join/')) {
+    code = code.split(/\/join\//i)[1];
+  } else if (code.toLowerCase().includes('join=')) {
+    code = code.split(/join=/i)[1];
   }
+  code = code.replace(/[^a-zA-Z0-9-]/g, '').trim().toUpperCase();
+
+  // 2. Costruisci candidati di ricerca (con e senza prefisso JES-)
+  const cleanBare = code.replace(/^JES-?/i, '');
+  const candidateCodes = [
+    code,
+    `JES-${cleanBare}`,
+    cleanBare,
+  ].filter(Boolean);
+  const uniqueCandidates = Array.from(new Set(candidateCodes));
 
   try {
-    const group = await GroupModel.findOne({ code });
+    // Cerca il gruppo su MongoDB con corrispondenza case-insensitive su uno qualsiasi dei codici candidati
+    const group = await GroupModel.findOne({
+      $or: uniqueCandidates.map((c) => ({
+        code: { $regex: new RegExp(`^${c}$`, 'i') },
+      })),
+    });
+
     if (!group) {
-      return res.status(404).json({ error: "Nessun gruppo trovato con questo codice d'invito" });
+      return res.status(404).json({
+        error: `Nessun gruppo trovato con il codice o link "${raw}". Verifica il codice d'invito fornito dal collega.`,
+      });
     }
 
     const isMember = group.members.some((m) => m.userId === userId);
@@ -510,15 +554,25 @@ app.post('/api/groups/join', async (req: Request, res: Response) => {
       await group.save();
     }
 
+    // Sincronizza l'appartenenza al gruppo in UserModel (array groupMemberships)
+    try {
+      await UserModel.updateOne(
+        { _id: userId, 'groupMemberships.groupId': { $ne: group._id } },
+        { $push: { groupMemberships: { groupId: group._id, role: 'member' } } }
+      );
+    } catch (errSync) {
+      console.warn('Sync UserModel groupMemberships notice:', errSync);
+    }
+
     return res.json({
       success: true,
-      message: isMember ? 'Sei già membro di questo gruppo' : 'Sei entrato nel gruppo con successo!',
+      message: isMember ? 'Sei già membro di questo gruppo!' : 'Sei entrato nel gruppo con successo!',
       group: {
         id: group._id || group.id,
         name: group.name,
         description: group.description,
         code: group.code,
-        inviteLink: group.inviteLink,
+        inviteLink: `/join/${group.code}`,
         creatorId: group.creatorId,
         members: group.members,
         avatar: group.avatar,

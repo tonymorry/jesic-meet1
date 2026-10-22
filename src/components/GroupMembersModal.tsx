@@ -56,7 +56,7 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
   };
 
   const handleCopyLink = () => {
-    const link = group.inviteLink || `${window.location.origin}/?join=${group.code}`;
+    const link = `${window.location.origin}/?join=${group.code}`;
     navigator.clipboard.writeText(link);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);

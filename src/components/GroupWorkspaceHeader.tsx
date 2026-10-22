@@ -43,6 +43,7 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
   onDeleteGroup,
 }) => {
   const [copied, setCopied] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
   const [copiedB2b, setCopiedB2b] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [newName, setNewName] = useState(activeGroup.name);
@@ -54,6 +55,13 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
     navigator.clipboard.writeText(activeGroup.code);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleCopyLink = () => {
+    const link = `${window.location.origin}/?join=${activeGroup.code}`;
+    navigator.clipboard.writeText(link);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
   };
 
   const userMembership = activeGroup.members?.find((m) => m.userId === currentUser.id);
@@ -237,6 +245,17 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
                 )}
               </button>
             </div>
+
+            {/* Link Invito Diretto con Copia Rapida */}
+            <button
+              type="button"
+              onClick={handleCopyLink}
+              title={`Copia il link d'invito diretto per entrare in ${activeGroup.name}`}
+              className="px-2.5 py-1.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95 border border-neutral-200/80 dark:border-neutral-700"
+            >
+              {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Link2 className="w-3.5 h-3.5 text-[#f23e2e]" />}
+              <span>{copiedLink ? 'Link Copiato' : 'Copia Link'}</span>
+            </button>
 
             {/* Tasto Membri Gruppo */}
             <button

@@ -357,18 +357,45 @@ export default function App() {
     }
   }, [currentTab, canAccessGroupClientRequests, isInsideGroup]);
 
-  // Supporto invito automatico tramite URL parametro ?join=CODE
+  // Supporto invito automatico tramite URL parametro (?join=CODE) o path (/join/CODE) o hash
   useEffect(() => {
-    if (typeof window !== 'undefined' && currentUser) {
-      const params = new URLSearchParams(window.location.search);
-      const joinCode = params.get('join');
-      if (joinCode) {
-        handleJoinGroup(joinCode).then(() => {
-          try {
-            window.history.replaceState({}, '', window.location.pathname);
-          } catch {}
-        });
+    if (typeof window === 'undefined') return;
+
+    // Estrai il codice invito dall'URL in qualsiasi forma
+    let detectedJoinCode: string | null = null;
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      detectedJoinCode = searchParams.get('join');
+
+      if (!detectedJoinCode && window.location.pathname.startsWith('/join/')) {
+        const parts = window.location.pathname.split('/join/')[1];
+        if (parts) detectedJoinCode = parts.split('/')[0].split('?')[0];
       }
+
+      if (!detectedJoinCode && window.location.hash) {
+        const hashStr = window.location.hash.replace(/^#\/?/, '');
+        if (hashStr.startsWith('join/')) {
+          detectedJoinCode = hashStr.split('join/')[1].split('?')[0];
+        } else if (hashStr.includes('join=')) {
+          detectedJoinCode = new URLSearchParams(hashStr).get('join');
+        }
+      }
+    } catch {}
+
+    if (detectedJoinCode) {
+      sessionStorage.setItem('pending_group_invite', detectedJoinCode);
+      try {
+        window.history.replaceState({}, '', window.location.pathname === '/prenota-call' ? '/prenota-call' : '/');
+      } catch {}
+    }
+
+    const pendingCode = sessionStorage.getItem('pending_group_invite') || detectedJoinCode;
+    if (pendingCode && currentUser) {
+      handleJoinGroup(pendingCode).then((res) => {
+        if (res.success) {
+          sessionStorage.removeItem('pending_group_invite');
+        }
+      });
     }
   }, [currentUser]);
 
@@ -781,55 +808,104 @@ export default function App() {
   const handleJoinGroup = async (
     codeOrLink: string
   ): Promise<{ success: boolean; message: string; group?: Group }> => {
-    if (!currentUser) return { success: false, message: 'Devi aver effettuato l\'accesso.' };
+    if (!currentUser) return { success: false, message: 'Devi aver effettuato l\'accesso per entrare in un gruppo.' };
 
-    let code = codeOrLink.trim().toUpperCase();
-    if (code.includes('JOIN/')) {
-      code = code.split('JOIN/')[1].split('?')[0].split('/')[0];
-    } else if (code.includes('JOIN=')) {
-      code = code.split('JOIN=')[1].split('&')[0];
-    }
+    const rawInput = codeOrLink.trim();
+    if (!rawInput) return { success: false, message: 'Inserisci un codice o link d\'invito valido.' };
 
-    const targetGroup = groups.find((g) => g.code.toUpperCase() === code);
-    if (!targetGroup) {
-      return { success: false, message: 'Nessun gruppo trovato con questo codice d\'invito.' };
-    }
-
-    const alreadyMember = targetGroup.members.some((m) => m.userId === currentUser.id);
-    if (alreadyMember) {
-      setActiveGroupId(targetGroup.id);
-      setCurrentTab('dashboard');
-      return { success: true, message: 'Sei già membro di questo gruppo!', group: targetGroup };
-    }
-
-    const updatedGroup: Group = {
-      ...targetGroup,
-      members: [
-        ...targetGroup.members,
-        {
+    try {
+      // 1. Chiamata al server backend: interroga MongoDB e sincronizza l'utente in modo affidabile
+      const res = await fetch('/api/groups/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          codeOrLink: rawInput,
           userId: currentUser.id,
-          role: 'member',
-          joinedAt: new Date().toISOString(),
-        },
-      ],
-      updatedAt: new Date().toISOString(),
-    };
+        }),
+      });
 
-    const updatedGroups = groups.map((g) => (g.id === targetGroup.id ? updatedGroup : g));
-    setGroups(updatedGroups);
-    setActiveGroupId(updatedGroup.id);
-    setCurrentTab('dashboard');
+      const data = await res.json();
 
-    fetch('/api/groups/join', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        codeOrLink: code,
-        userId: currentUser.id,
-      }),
-    }).catch((e) => console.log('[API join group sync]', e));
+      if (res.ok && data?.group) {
+        const returnedGroup: Group = data.group;
 
-    return { success: true, message: 'Sei entrato nel gruppo con successo!', group: updatedGroup };
+        // Aggiorna lo stato React dei gruppi
+        setGroups((prev) => {
+          const exists = prev.some((g) => g.id === returnedGroup.id);
+          return exists
+            ? prev.map((g) => (g.id === returnedGroup.id ? returnedGroup : g))
+            : [returnedGroup, ...prev];
+        });
+
+        // Entra direttamente nella Dashboard del gruppo
+        setActiveGroupId(returnedGroup.id);
+        setCurrentTab('dashboard');
+
+        // Sincronizza lo stato utente locale (groupMemberships)
+        setCurrentUser((prevUser) => {
+          if (!prevUser) return prevUser;
+          const memberships = prevUser.groupMemberships || [];
+          if (!memberships.some((m) => m.groupId === returnedGroup.id)) {
+            const updatedUser = {
+              ...prevUser,
+              groupMemberships: [...memberships, { groupId: returnedGroup.id, role: 'member' as const }],
+            };
+            try {
+              localStorage.setItem(STORAGE_CURRENT_USER_KEY, JSON.stringify(updatedUser));
+            } catch {}
+            return updatedUser;
+          }
+          return prevUser;
+        });
+
+        return {
+          success: true,
+          message: data.message || 'Sei entrato nel gruppo con successo!',
+          group: returnedGroup,
+        };
+      }
+
+      // Se il backend ha restituito un errore 404 o simile, proviamo per sicurezza nella memoria locale
+      const cleanCode = rawInput.toUpperCase().replace(/^JES-?/i, '');
+      const localMatch = groups.find((g) => {
+        const gClean = g.code.toUpperCase().replace(/^JES-?/i, '');
+        return gClean === cleanCode || g.code.toUpperCase() === rawInput.toUpperCase();
+      });
+
+      if (localMatch) {
+        const alreadyMember = localMatch.members.some((m) => m.userId === currentUser.id);
+        const updatedGroup: Group = alreadyMember
+          ? localMatch
+          : {
+              ...localMatch,
+              members: [
+                ...localMatch.members,
+                { userId: currentUser.id, role: 'member', joinedAt: new Date().toISOString() },
+              ],
+              updatedAt: new Date().toISOString(),
+            };
+
+        setGroups((prev) => prev.map((g) => (g.id === localMatch.id ? updatedGroup : g)));
+        setActiveGroupId(updatedGroup.id);
+        setCurrentTab('dashboard');
+        return {
+          success: true,
+          message: alreadyMember ? 'Sei già membro di questo gruppo!' : 'Sei entrato nel gruppo con successo!',
+          group: updatedGroup,
+        };
+      }
+
+      return {
+        success: false,
+        message: data?.error || 'Nessun gruppo trovato con questo codice d\'invito. Chiedi al creatore del gruppo di ricondividere il link o il codice.',
+      };
+    } catch (err) {
+      console.error('[handleJoinGroup error]', err);
+      return {
+        success: false,
+        message: 'Errore di connessione durante l\'adesione al gruppo. Riprova tra qualche istante.',
+      };
+    }
   };
 
   // GESTIONE E MODIFICA DEI GRUPPI (Creatore o Admin)

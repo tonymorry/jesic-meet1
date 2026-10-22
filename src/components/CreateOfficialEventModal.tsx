@@ -25,6 +25,9 @@ import {
   Square,
   AlertCircle,
   Mail,
+  ChevronLeft,
+  ChevronRight,
+  RotateCcw,
 } from 'lucide-react';
 
 interface CreateOfficialEventModalProps {
@@ -52,51 +55,72 @@ export const CreateOfficialEventModal: React.FC<CreateOfficialEventModalProps> =
   const [description, setDescription] = useState(eventToEdit?.description || '');
   
   // Date (supporto multi-giorno, fino a max 15 giorni)
+  const todayStr = new Date().toISOString().split('T')[0];
   const tomorrowStr = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   const [selectedDates, setSelectedDates] = useState<string[]>(
     eventToEdit?.dates && eventToEdit.dates.length > 0 ? eventToEdit.dates : [tomorrowStr]
   );
-  const [newDateInput, setNewDateInput] = useState('');
   const [dateWarning, setDateWarning] = useState<string | null>(null);
 
-  // Orario inizio e fine (qualsiasi ora)
-  const [startTime, setStartTime] = useState(
-    eventToEdit?.finalizedSlot?.startTime || `${String(eventToEdit?.startHour || 10).padStart(2, '0')}:00`
-  );
-  const [endTime, setEndTime] = useState(
-    eventToEdit?.finalizedSlot?.endTime || `${String(eventToEdit?.endHour || 12).padStart(2, '0')}:00`
-  );
-
-  // Modalità
-  const [meetingType, setMeetingType] = useState<'online' | 'in_person'>(eventToEdit?.type || 'online');
-  const [location, setLocation] = useState(eventToEdit?.location || 'Sede JESic, Catania');
-
-  // Selezione invitati
-  const otherUsers = allUsers.filter((u) => u.id !== currentUser.id);
-  const [selectedUserIds, setSelectedUserIds] = useState<string[]>(() => {
-    if (eventToEdit?.invitees) {
-      return eventToEdit.invitees.filter((i) => i.userId !== currentUser.id).map((i) => i.userId);
-    }
-    return otherUsers.map((u) => u.id);
+  // Mese/Anno navigazione per mini-calendario visuale
+  const [navYear, setNavYear] = useState<number>(() => {
+    const dStr = (eventToEdit?.dates && eventToEdit.dates[0]) || tomorrowStr;
+    const parts = dStr.split('-');
+    return parts.length >= 1 ? parseInt(parts[0], 10) : new Date().getFullYear();
   });
-  const [searchQuery, setSearchQuery] = useState('');
 
-  // Aggiungi / Rimuovi data
-  const handleAddDate = () => {
-    if (!newDateInput) return;
-    if (selectedDates.includes(newDateInput)) {
-      setDateWarning('Data già selezionata.');
-      setTimeout(() => setDateWarning(null), 3000);
-      return;
+  const [navMonth, setNavMonth] = useState<number>(() => {
+    const dStr = (eventToEdit?.dates && eventToEdit.dates[0]) || tomorrowStr;
+    const parts = dStr.split('-');
+    return parts.length >= 2 ? parseInt(parts[1], 10) - 1 : new Date().getMonth();
+  });
+
+  const MONTH_NAMES_IT = [
+    'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
+    'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre',
+  ];
+  const WEEKDAY_NAMES_IT = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
+
+  const handlePrevMonth = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (navMonth === 0) {
+      setNavMonth(11);
+      setNavYear((y) => y - 1);
+    } else {
+      setNavMonth((m) => m - 1);
     }
-    if (selectedDates.length >= 15) {
-      setDateWarning('Massimo 15 giorni consentiti per questo evento.');
-      setTimeout(() => setDateWarning(null), 3000);
-      return;
+  };
+
+  const handleNextMonth = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (navMonth === 11) {
+      setNavMonth(0);
+      setNavYear((y) => y + 1);
+    } else {
+      setNavMonth((m) => m + 1);
     }
+  };
+
+  // Toggle selezione giorno nel mini-calendario
+  const handleToggleCalendarDate = (dateStr: string) => {
     setDateWarning(null);
-    setSelectedDates([...selectedDates, newDateInput].sort());
-    setNewDateInput('');
+    if (selectedDates.includes(dateStr)) {
+      if (selectedDates.length <= 1) {
+        setDateWarning('È necessario selezionare almeno un giorno.');
+        setTimeout(() => setDateWarning(null), 3000);
+        return;
+      }
+      setSelectedDates(selectedDates.filter((d) => d !== dateStr));
+    } else {
+      if (selectedDates.length >= 15) {
+        setDateWarning('Massimo 15 giorni consentiti per questo evento.');
+        setTimeout(() => setDateWarning(null), 3000);
+        return;
+      }
+      setSelectedDates([...selectedDates, dateStr].sort());
+    }
   };
 
   const handleRemoveDate = (d: string) => {
@@ -108,6 +132,109 @@ export const CreateOfficialEventModal: React.FC<CreateOfficialEventModalProps> =
       setTimeout(() => setDateWarning(null), 3000);
     }
   };
+
+  // Calcolo giorni del mese corrente per la griglia
+  const firstDayOfMonth = new Date(navYear, navMonth, 1);
+  const rawFirstDayOfWeek = firstDayOfMonth.getDay();
+  // Lunedì = 0, Domenica = 6
+  const startDayIndex = rawFirstDayOfWeek === 0 ? 6 : rawFirstDayOfWeek - 1;
+  const daysInMonth = new Date(navYear, navMonth + 1, 0).getDate();
+  const emptyPaddingDays = Array.from({ length: startDayIndex });
+  const monthDays = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+  const buildDateString = (dayNum: number): string => {
+    const m = String(navMonth + 1).padStart(2, '0');
+    const d = String(dayNum).padStart(2, '0');
+    return `${navYear}-${m}-${d}`;
+  };
+
+  // Scorciatoie rapide date
+  const handleAddConsecutiveDays = (count: number) => {
+    const base = new Date(tomorrowStr);
+    const newDates: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const d = new Date(base.getTime() + i * 24 * 60 * 60 * 1000);
+      newDates.push(d.toISOString().split('T')[0]);
+    }
+    setSelectedDates(newDates);
+  };
+
+  const handleSelectWorkWeek = () => {
+    const curr = new Date();
+    // Prossimo lunedì
+    const daysUntilNextMonday = ((1 - curr.getDay() + 7) % 7) || 7;
+    const nextMonday = new Date(curr.getTime() + daysUntilNextMonday * 24 * 60 * 60 * 1000);
+    const workWeek: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const d = new Date(nextMonday.getTime() + i * 24 * 60 * 60 * 1000);
+      workWeek.push(d.toISOString().split('T')[0]);
+    }
+    setSelectedDates(workWeek);
+  };
+
+  // Orario inizio e fine (qualsiasi ora)
+  const [startTime, setStartTime] = useState(
+    eventToEdit?.finalizedSlot?.startTime || `${String(eventToEdit?.startHour || 10).padStart(2, '0')}:00`
+  );
+  const [endTime, setEndTime] = useState(
+    eventToEdit?.finalizedSlot?.endTime || `${String(eventToEdit?.endHour || 12).padStart(2, '0')}:00`
+  );
+
+  // Scorciatoia durata in minuti
+  const setDurationFromStart = (minsToAdd: number) => {
+    if (!startTime) return;
+    const [hStr, mStr] = startTime.split(':');
+    const h = parseInt(hStr, 10);
+    const m = parseInt(mStr, 10);
+    if (isNaN(h) || isNaN(m)) return;
+
+    const totalMinutes = h * 60 + m + minsToAdd;
+    const newH = Math.min(23, Math.floor(totalMinutes / 60));
+    const newM = totalMinutes % 60;
+    setEndTime(`${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`);
+  };
+
+  const setQuickStartHour = (hour: number) => {
+    const hStr = `${String(hour).padStart(2, '0')}:00`;
+    setStartTime(hStr);
+    const [curEndH] = endTime.split(':');
+    const curEndInt = parseInt(curEndH, 10);
+    if (isNaN(curEndInt) || curEndInt <= hour) {
+      const newEnd = Math.min(23, hour + 1);
+      setEndTime(`${String(newEnd).padStart(2, '0')}:00`);
+    }
+  };
+
+  // Formattazione data italiana per display testuale
+  const formatDateHuman = (dateStr: string): string => {
+    if (!dateStr) return '';
+    try {
+      const [year, month, day] = dateStr.split('-');
+      if (!year || !month || !day) return dateStr;
+      const d = new Date(Number(year), Number(month) - 1, Number(day));
+      return new Intl.DateTimeFormat('it-IT', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+      }).format(d);
+    } catch {
+      return dateStr;
+    }
+  };
+
+  // Modalità
+  const [meetingType, setMeetingType] = useState<'online' | 'in_person'>(eventToEdit?.type || 'online');
+  const [location, setLocation] = useState<string>(eventToEdit?.location || 'Sede JESic, Catania');
+
+  // Selezione invitati
+  const otherUsers = allUsers.filter((u) => u.id !== currentUser.id);
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>(() => {
+    if (eventToEdit?.invitees) {
+      return eventToEdit.invitees.filter((i) => i.userId !== currentUser.id).map((i) => i.userId);
+    }
+    return otherUsers.map((u) => u.id);
+  });
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Toggle singolo utente
   const handleToggleUser = (userId: string) => {
@@ -322,98 +449,291 @@ export const CreateOfficialEventModal: React.FC<CreateOfficialEventModalProps> =
             </div>
           </div>
 
-          {/* Date & Orari */}
-          <div className="bg-neutral-50 dark:bg-neutral-800/60 p-4 rounded-2xl border border-neutral-200 dark:border-neutral-700/60 space-y-3">
+          {/* Date & Orari - Mini Calendario In-App & Orari Cliccabili */}
+          <div className="bg-neutral-50 dark:bg-neutral-800/60 p-4 rounded-2xl border border-neutral-200 dark:border-neutral-700/60 space-y-3.5">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-neutral-900 dark:text-white font-bold">
+              <div className="flex items-center gap-1.5 text-neutral-900 dark:text-white font-bold text-sm">
                 <Calendar className="w-4 h-4 text-[#f23e2e]" />
-                <span>Data/e e Orario</span>
+                <span>1. Data dell'Evento</span>
               </div>
-              <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-red-100 text-[#f23e2e] dark:bg-red-950/60 dark:text-red-400">
-                {selectedDates.length} di 15 giorni (max 15)
+              <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-red-100 text-[#f23e2e] dark:bg-red-950/60 dark:text-red-400">
+                {selectedDates.length} {selectedDates.length === 1 ? 'giorno selezionato' : 'giorni selezionati'} (max 15)
               </span>
             </div>
 
             {dateWarning && (
-              <p className="text-[11px] text-red-600 dark:text-red-400 font-bold bg-red-50 dark:bg-red-950/40 p-2 rounded-lg border border-red-200 dark:border-red-900">
-                {dateWarning}
+              <p className="text-[11px] text-red-600 dark:text-red-400 font-bold bg-red-50 dark:bg-red-950/40 p-2 rounded-xl border border-red-200 dark:border-red-900 flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>{dateWarning}</span>
               </p>
             )}
 
-            {/* Date selezionate (Multi-giorno) */}
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 mb-1">
-                Date dell'Evento (fino a 15 giorni)
-              </label>
+            {/* Scorciatoie Rapide per i Giorni */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedDates([tomorrowStr]);
+                  const p = tomorrowStr.split('-');
+                  if (p.length >= 2) {
+                    setNavYear(parseInt(p[0], 10));
+                    setNavMonth(parseInt(p[1], 10) - 1);
+                  }
+                }}
+                className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition-all cursor-pointer ${
+                  selectedDates.length === 1 && selectedDates[0] === tomorrowStr
+                    ? 'bg-[#f23e2e] text-white border-[#f23e2e] shadow-xs'
+                    : 'bg-white dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-200 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-700'
+                }`}
+              >
+                Solo Domani
+              </button>
 
-              <div className="flex flex-wrap gap-1.5 mb-2">
-                {selectedDates.map((dateStr) => (
-                  <span
-                    key={dateStr}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-lg font-mono font-semibold text-neutral-800 dark:text-neutral-200"
-                  >
-                    <span>{dateStr}</span>
-                    {selectedDates.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveDate(dateStr)}
-                        className="text-neutral-400 hover:text-red-500 cursor-pointer"
-                      >
-                        ×
-                      </button>
-                    )}
+              <button
+                type="button"
+                onClick={() => handleAddConsecutiveDays(3)}
+                className="text-[10px] font-bold px-2 py-1 rounded-lg bg-white dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors cursor-pointer"
+              >
+                +3 Giorni
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSelectWorkWeek}
+                className="text-[10px] font-bold px-2 py-1 rounded-lg bg-white dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors cursor-pointer"
+              >
+                Settimana (Lun-Ven)
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedDates([tomorrowStr])}
+                className="text-[10px] font-bold px-2 py-1 rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 ml-auto flex items-center gap-1 cursor-pointer"
+                title="Ripristina data a domani"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>Reset</span>
+              </button>
+            </div>
+
+            {/* Mini Calendario In-App Visivo */}
+            <div className="bg-white dark:bg-neutral-900 rounded-2xl p-3 border border-neutral-200 dark:border-neutral-700/80 shadow-2xs">
+              {/* Header Mese/Anno con Tasti Navigazione */}
+              <div className="flex items-center justify-between mb-2 pb-2 border-b border-neutral-100 dark:border-neutral-800">
+                <button
+                  type="button"
+                  onClick={handlePrevMonth}
+                  className="p-1 rounded-lg text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors flex items-center gap-0.5 cursor-pointer"
+                  title="Mese precedente"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  <span className="text-[10px] font-bold hidden sm:inline">Prec</span>
+                </button>
+
+                <div className="text-center">
+                  <span className="text-xs sm:text-sm font-black text-neutral-900 dark:text-white capitalize">
+                    {MONTH_NAMES_IT[navMonth]} {navYear}
                   </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleNextMonth}
+                  className="p-1 rounded-lg text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors flex items-center gap-0.5 cursor-pointer"
+                  title="Mese successivo"
+                >
+                  <span className="text-[10px] font-bold hidden sm:inline">Succ</span>
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Intestazione giorni settimana */}
+              <div className="grid grid-cols-7 gap-1 text-center mb-1">
+                {WEEKDAY_NAMES_IT.map((dName) => (
+                  <div
+                    key={dName}
+                    className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 py-0.5"
+                  >
+                    {dName}
+                  </div>
                 ))}
               </div>
 
-              {/* Aggiungi altra data */}
-              <div className="flex items-center gap-2">
-                <input
-                  type="date"
-                  value={newDateInput}
-                  disabled={selectedDates.length >= 15}
-                  onChange={(e) => setNewDateInput(e.target.value)}
-                  className="px-2.5 py-1.5 bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-lg text-xs disabled:opacity-40"
-                />
-                <button
-                  type="button"
-                  onClick={handleAddDate}
-                  disabled={!newDateInput || selectedDates.length >= 15}
-                  className="px-3 py-1.5 bg-neutral-200 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-200 rounded-lg font-bold hover:bg-neutral-300 dark:hover:bg-neutral-600 disabled:opacity-40 cursor-pointer"
-                >
-                  + Aggiungi Data
-                </button>
+              {/* Griglia giorni del mese */}
+              <div className="grid grid-cols-7 gap-1">
+                {emptyPaddingDays.map((_, idx) => (
+                  <div key={`empty-${idx}`} className="h-7 sm:h-8" />
+                ))}
+
+                {monthDays.map((dayNum) => {
+                  const dateStr = buildDateString(dayNum);
+                  const isPast = dateStr < todayStr;
+                  const isSelected = selectedDates.includes(dateStr);
+                  const isToday = dateStr === todayStr;
+
+                  return (
+                    <button
+                      key={dayNum}
+                      type="button"
+                      disabled={isPast}
+                      onClick={() => handleToggleCalendarDate(dateStr)}
+                      className={`h-7 sm:h-8 rounded-xl text-xs font-bold flex items-center justify-center transition-all cursor-pointer relative ${
+                        isSelected
+                          ? 'bg-[#f23e2e] text-white font-black shadow-xs ring-2 ring-red-400/40 scale-105'
+                          : isPast
+                          ? 'text-neutral-300 dark:text-neutral-700 cursor-not-allowed opacity-30'
+                          : 'text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800'
+                      } ${isToday && !isSelected ? 'border border-[#f23e2e] font-extrabold text-[#f23e2e]' : ''}`}
+                      title={isPast ? 'Data passata' : dateStr}
+                    >
+                      <span>{dayNum}</span>
+                      {isToday && !isSelected && (
+                        <span className="w-1 h-1 rounded-full bg-[#f23e2e] absolute bottom-1" />
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Orario Inizio / Fine */}
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 mb-1 flex items-center gap-1">
-                  <Clock className="w-3 h-3 text-[#f23e2e]" />
-                  <span>Orario Inizio *</span>
-                </label>
-                <input
-                  type="time"
-                  required
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-xl font-mono font-bold"
-                />
+            {/* Chips Giorni Selezionati */}
+            {selectedDates.length > 0 && (
+              <div className="space-y-1.5">
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedDates.map((dateStr) => (
+                    <span
+                      key={dateStr}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-bold text-neutral-800 dark:text-neutral-200 shadow-2xs"
+                    >
+                      <span>{formatDateHuman(dateStr)}</span>
+                      {selectedDates.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveDate(dateStr)}
+                          className="text-neutral-400 hover:text-red-500 cursor-pointer font-black text-sm ml-0.5"
+                          title="Rimuovi questo giorno"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </span>
+                  ))}
+                </div>
+
+                <div className="text-[11px] text-neutral-700 dark:text-neutral-300 font-medium capitalize flex items-center gap-1.5 bg-neutral-100/70 dark:bg-neutral-800/80 p-2 rounded-xl border border-neutral-200/60 dark:border-neutral-700">
+                  <Check className="w-3.5 h-3.5 text-[#f23e2e] shrink-0 stroke-[2.5px]" />
+                  <span>
+                    {selectedDates.length === 1 ? (
+                      <>Data stabilita: <strong className="text-neutral-900 dark:text-white">{formatDateHuman(selectedDates[0])}</strong></>
+                    ) : (
+                      <>{selectedDates.length} date stabilite per l'evento</>
+                    )}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* SEZIONE 2: ORARI CLICCABILI & DURATA */}
+            <div className="pt-2 border-t border-neutral-200/70 dark:border-neutral-700/60 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-neutral-900 dark:text-white font-bold text-sm">
+                  <Clock className="w-4 h-4 text-[#f23e2e]" />
+                  <span>2. Orario Inizio e Fine</span>
+                </div>
+                <span className="text-[10px] font-semibold text-neutral-500 dark:text-neutral-400">
+                  Clicca o digita
+                </span>
               </div>
 
+              {/* Bottoni Rapidi Inizio Incontro */}
               <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 mb-1 flex items-center gap-1">
-                  <Clock className="w-3 h-3 text-[#f23e2e]" />
-                  <span>Orario Fine *</span>
-                </label>
-                <input
-                  type="time"
-                  required
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                  className="w-full px-3 py-2 bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-xl font-mono font-bold"
-                />
+                <span className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider block mb-1">
+                  Orario d'inizio rapido:
+                </span>
+                <div className="flex flex-wrap gap-1">
+                  {[9, 10, 11, 14, 15, 16, 17, 18, 19].map((h) => {
+                    const label = `${String(h).padStart(2, '0')}:00`;
+                    const isSelected = startTime === label;
+                    return (
+                      <button
+                        key={h}
+                        type="button"
+                        onClick={() => setQuickStartHour(h)}
+                        className={`text-[11px] font-bold px-2 py-1 rounded-lg border transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-[#f23e2e] text-white border-[#f23e2e] shadow-xs'
+                            : 'bg-white dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-200 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-700'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Input Inizio / Fine esatti */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 mb-1 flex items-center gap-1">
+                    <Clock className="w-3 h-3 text-[#f23e2e]" />
+                    <span>Ora Inizio *</span>
+                  </label>
+                  <input
+                    type="time"
+                    required
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    style={{ colorScheme: 'light dark' }}
+                    className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl font-mono font-bold text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#f23e2e]/30 focus:border-[#f23e2e] text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 mb-1 flex items-center gap-1">
+                    <Clock className="w-3 h-3 text-[#f23e2e]" />
+                    <span>Ora Fine *</span>
+                  </label>
+                  <input
+                    type="time"
+                    required
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    style={{ colorScheme: 'light dark' }}
+                    className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl font-mono font-bold text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#f23e2e]/30 focus:border-[#f23e2e] text-sm"
+                  />
+                </div>
+              </div>
+
+              {/* Scorciatoie Durata Rapida */}
+              <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                <span className="text-[10px] font-bold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">
+                  Imposta Durata:
+                </span>
+                {[
+                  { label: '30 min', mins: 30 },
+                  { label: '45 min', mins: 45 },
+                  { label: '1 ora', mins: 60 },
+                  { label: '1h 30m', mins: 90 },
+                  { label: '2 ore', mins: 120 },
+                ].map((preset) => (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    onClick={() => setDurationFromStart(preset.mins)}
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white dark:bg-neutral-800 hover:bg-red-50 dark:hover:bg-red-950/60 hover:text-[#f23e2e] dark:hover:text-red-400 border border-neutral-200 dark:border-neutral-700 transition-colors cursor-pointer"
+                  >
+                    +{preset.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Badge Riepilogo Orario */}
+              <div className="p-2 rounded-xl bg-red-50/70 dark:bg-red-950/40 border border-red-200/60 dark:border-red-800/60 flex items-center gap-2 text-[11px] text-[#f23e2e] dark:text-red-300 font-semibold">
+                <Sparkles className="w-3.5 h-3.5 text-[#f23e2e] shrink-0" />
+                <span>
+                  Fascia oraria impostata: <strong>{startTime} - {endTime}</strong>
+                </span>
               </div>
             </div>
           </div>

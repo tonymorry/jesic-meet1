@@ -51,57 +51,56 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish, isReady = 
   };
 
   useEffect(() => {
-    // 1. Spunta il logo JESic al centro (80ms)
+    // 1. Spunta il logo JESic al centro (100ms)
     addTimer(() => {
       setLogoVisible(true);
-    }, 80);
+    }, 100);
 
-    // 2. La mascotte spunta in basso dal lato sinistro (200ms)
+    // 2. La mascotte spunta fuori dallo schermo a sinistra (250ms)
     addTimer(() => {
       setMascotPhase('walk');
-    }, 200);
+    }, 250);
 
-    // 3. Inizia la corsa fluida verso destra fino al lato del logo (260ms)
+    // 3. Inizia la corsa fluida da sinistra verso destra attraverso lo schermo (350ms)
     addTimer(() => {
       setHasArrivedAtRight(true);
-    }, 260);
+    }, 350);
 
-    // Ciclo del passo corsa veloce ed energico (ogni 85ms)
+    // Ciclo del passo corsa veloce ed energico (ogni 80ms)
     const runInterval = setInterval(() => {
       setWalkStep((prev) => (prev + 1) % 4);
-    }, 85);
+    }, 80);
 
-    // 4. Arriva in basso a destra del logo e carica il salto guardando in alto (1350ms)
+    // 4. Arriva a destinazione dopo aver corso tutta la parte sinistra e carica il salto (2450ms)
     addTimer(() => {
       setMascotPhase('anticipate');
-    }, 1350);
+    }, 2450);
 
-    // 5. Salto acrobatico dal pavimento verso la sbarra superiore (1700ms)
+    // 5. Salto acrobatico dal pavimento verso la sbarra superiore (2900ms)
     addTimer(() => {
       setMascotPhase('jump');
       setIsJumpingToCeiling(true);
-    }, 1700);
+    }, 2900);
 
-    // 6. Si aggrappa con entrambe le mani alla sbarra superiore, che flette (2150ms)
+    // 6. Si aggrappa con entrambe le mani alla sbarra superiore (3350ms)
     addTimer(() => {
       setMascotPhase('grab');
       setTopBarSag(true);
-    }, 2150);
+    }, 3350);
 
-    // 7. Tira giù con tutto il peso corporeo (2650ms)
+    // 7. Tira giù con tutto il peso corporeo e il coperchio scende (3850ms)
     addTimer(() => {
       setMascotPhase('pulldown');
-      // Inizia la discesa graduale del coperchio verso il basso (scende piano piano)
       setTimeout(() => {
         setCurtainThrownDown(true);
       }, 150);
-    }, 2650);
+    }, 3850);
 
-    // 8. Il coperchio ha finito di scendere scoprendo completamente il sito (3900ms)
+    // 8. Il sipario ha finito di scendere scoprendo il sito (5100ms)
     addTimer(() => {
       setIsDone(true);
       onFinish?.();
-    }, 3900);
+    }, 5100);
 
     return () => {
       clearInterval(runInterval);
@@ -153,16 +152,13 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish, isReady = 
         }`}
       />
 
-      {/* Sbarra/bordo superiore dello schermo su cui la mascotte si aggrappa */}
-      <div className="absolute top-0 left-0 right-0 z-40 pointer-events-none">
+      {/* Sbarra/bordo superiore dello schermo su cui la mascotte si aggrappa (vada SOPRA le mani) */}
+      <div className="absolute top-0 left-0 right-0 z-[70] pointer-events-none">
         <div
-          className={`h-2.5 bg-gradient-to-r from-neutral-800 via-[#f23e2e] to-neutral-800 transition-all duration-200 shadow-[0_4px_15px_rgba(242,62,46,0.7)] ${
-            topBarSag ? 'translate-y-3.5 scale-y-125 rounded-b-2xl' : 'translate-y-0'
+          className={`h-2.5 sm:h-3 bg-gradient-to-r from-neutral-900 via-[#f23e2e] to-neutral-900 border-b border-[#f23e2e]/50 shadow-[0_3px_12px_rgba(242,62,46,0.45)] transition-all duration-200 ${
+            topBarSag ? 'translate-y-3 sm:translate-y-3.5 scale-y-110 rounded-b-xl shadow-[0_6px_18px_rgba(242,62,46,0.65)]' : 'translate-y-0'
           }`}
         />
-        {topBarSag && (
-          <div className="w-44 sm:w-60 h-3 mx-auto bg-[#f23e2e]/40 blur-xs rounded-full -mt-1 animate-pulse" />
-        )}
       </div>
 
       {/* CONTENUTO CENTRALE: Logo Brand Ufficiale JESic Meet */}
@@ -204,9 +200,10 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish, isReady = 
       </div>
 
       {/* -------------------------------------------------------------------- */}
-      {/* MASCOTTE CARTONATA:                                                  */}
-      {/* 1. Spunta in basso a sinistra e corre fino al lato del logo         */}
-      {/* 2. Carica il salto (anticipate)                                     */}
+      {/* PERSONAGGIO FEMMINILE PIXEL ART:                                     */}
+      {/* 1. Spunta in basso a sinistra fuori dallo schermo e corre visibilmente*/}
+      {/*    lungo tutta la parte sinistra fino a raggiungere il logo          */}
+      {/* 2. Carica il salto (anticipate) guardando in alto                   */}
       {/* 3. Salta acrobaticamente alla sbarra in alto (jump)                  */}
       {/* 4. Si aggrappa con entrambe le mani (grab)                           */}
       {/* 5. Tira giù il sipario come un coperchio svelando il sito (pulldown) */}
@@ -214,28 +211,30 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish, isReady = 
       {mascotPhase !== 'hidden' && (
         <div
           style={{
-            // Orizzontalmente: corre fino a lato del logo
+            // Orizzontalmente: corre da completamente fuori schermo (-160px) attraverso la parte sinistra
             left: hasArrivedAtRight
-              ? 'min(calc(50% + 115px), calc(100vw - 44px))'
-              : '-60px',
-            // Verticalmente: dal pavimento al soffitto
+              ? 'min(calc(50% + 140px), calc(100vw - 65px))'
+              : '-160px',
+            // Verticalmente: dal pavimento al soffitto, posizionata in modo che le mani coincidano con la sbarra
             bottom: isJumpingToCeiling
-              ? 'calc(100% - 110px)'
-              : '24px',
+              ? topBarSag
+                ? 'calc(100% - var(--mascot-h, 96px) - 13px)'
+                : 'calc(100% - var(--mascot-h, 96px) - 1px)'
+              : '20px',
             transform: 'translateX(-50%)',
             transition:
               mascotPhase === 'walk'
-                ? 'left 1.1s cubic-bezier(0.2, 0.85, 0.35, 1)'
+                ? 'left 2.1s cubic-bezier(0.2, 0.6, 0.35, 1)'
                 : mascotPhase === 'jump'
                 ? 'bottom 0.42s cubic-bezier(0.12, 0.85, 0.32, 1)'
-                : 'none',
+                : 'bottom 0.15s ease-out',
           }}
-          className="absolute z-50 pointer-events-none flex flex-col items-center"
+          className="absolute z-50 pointer-events-none flex flex-col items-center [--mascot-h:96px] sm:[--mascot-h:112px]"
         >
           <CartoonMascot
             phase={mascotPhase}
             walkStep={walkStep}
-            scale={0.8}
+            scale={1}
           />
         </div>
       )}

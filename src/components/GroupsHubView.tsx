@@ -96,7 +96,7 @@ export const GroupsHubView: React.FC<GroupsHubViewProps> = ({
 
   const handleCopyLink = (e: React.MouseEvent, group: Group) => {
     e.stopPropagation();
-    const link = group.inviteLink || `${window.location.origin}/?join=${group.code}`;
+    const link = `${window.location.origin}/?join=${group.code}`;
     navigator.clipboard.writeText(link);
     setCopiedCodeId(`link-${group.id}`);
     setTimeout(() => setCopiedCodeId(null), 2000);
