@@ -37,7 +37,7 @@ interface GroupsHubViewProps {
   groups: Group[];
   allUsers: User[];
   onSelectGroup: (group: Group) => void;
-  onCreateGroup: (name: string, description: string, avatar?: string, isPublic?: boolean) => void;
+  onCreateGroup: (name: string, description: string, avatar?: string, isPublic?: boolean) => Promise<any> | void;
   onJoinGroup: (codeOrLink: string) => Promise<{ success: boolean; message: string; group?: Group }>;
   onJoinPublicGroup?: (group: Group) => Promise<{ success: boolean; message: string; group?: Group }>;
 }
@@ -62,6 +62,8 @@ export const GroupsHubView: React.FC<GroupsHubViewProps> = ({
   const [newGroupDesc, setNewGroupDesc] = useState('');
   const [selectedIcon, setSelectedIcon] = useState('👥');
   const [isPublicGroup, setIsPublicGroup] = useState(false); // Default: Privato
+  const [isCreating, setIsCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   // Form Entra con Codice
   const [joinCodeInput, setJoinCodeInput] = useState('');
@@ -76,7 +78,8 @@ export const GroupsHubView: React.FC<GroupsHubViewProps> = ({
 
   // 1. Gruppi in cui l'utente corrente è membro (mostrati DI BASE quando la ricerca è vuota)
   const myJoinedGroups = groups.filter((g) =>
-    g.members.some((m) => m.userId === currentUser.id)
+    (g.members && g.members.some((m) => m.userId === currentUser.id)) ||
+    (currentUser.groupMemberships && currentUser.groupMemberships.some((gm) => gm.groupId === g.id))
   );
 
   // 2. Risultati della ricerca per nome (spuntano sia pubblici che privati)
@@ -102,15 +105,24 @@ export const GroupsHubView: React.FC<GroupsHubViewProps> = ({
     setTimeout(() => setCopiedCodeId(null), 2000);
   };
 
-  const handleCreateSubmit = (e: React.FormEvent) => {
+  const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newGroupName.trim()) return;
-    onCreateGroup(newGroupName.trim(), newGroupDesc.trim(), selectedIcon, isPublicGroup);
-    setNewGroupName('');
-    setNewGroupDesc('');
-    setSelectedIcon('👥');
-    setIsPublicGroup(false);
-    setIsCreateModalOpen(false);
+    if (!newGroupName.trim() || isCreating) return;
+    setCreateError(null);
+    setIsCreating(true);
+
+    try {
+      await onCreateGroup(newGroupName.trim(), newGroupDesc.trim(), selectedIcon, isPublicGroup);
+      setNewGroupName('');
+      setNewGroupDesc('');
+      setSelectedIcon('👥');
+      setIsPublicGroup(false);
+      setIsCreateModalOpen(false);
+    } catch (err: any) {
+      setCreateError(err?.message || 'Errore durante la creazione del gruppo su MongoDB');
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   const handleJoinSubmit = async (e: React.FormEvent) => {
@@ -769,20 +781,31 @@ export const GroupsHubView: React.FC<GroupsHubViewProps> = ({
                 </p>
               </div>
 
+              {createError && (
+                <div className="p-3 bg-red-50 dark:bg-red-950/40 rounded-xl border border-red-200 dark:border-red-900 text-xs font-semibold text-red-700 dark:text-red-400">
+                  {createError}
+                </div>
+              )}
+
               <div className="flex items-center gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setIsCreateModalOpen(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 text-xs font-bold text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 cursor-pointer"
+                  disabled={isCreating}
+                  className="flex-1 py-2.5 rounded-xl border border-neutral-200 dark:border-neutral-700 text-xs font-bold text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 cursor-pointer disabled:opacity-50"
                 >
                   Annulla
                 </button>
                 <button
                   type="submit"
-                  disabled={!newGroupName.trim()}
-                  className="flex-1 py-2.5 rounded-xl bg-[#f23e2e] hover:bg-red-600 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-md shadow-red-600/25 cursor-pointer"
+                  disabled={!newGroupName.trim() || isCreating}
+                  className="flex-1 py-2.5 rounded-xl bg-[#f23e2e] hover:bg-red-600 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-md shadow-red-600/25 cursor-pointer flex items-center justify-center gap-1.5"
                 >
-                  Crea Gruppo
+                  {isCreating ? (
+                    <span className="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                  ) : (
+                    <span>Crea Gruppo</span>
+                  )}
                 </button>
               </div>
             </form>

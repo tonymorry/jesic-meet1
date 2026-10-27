@@ -16,7 +16,7 @@ import {
 } from './types';
 import { isEventPassed } from './utils/dateUtils';
 import { AuthScreen } from './components/AuthScreen';
-import { TopHeader } from './components/TopHeader';
+import { TopHeader, AppTheme } from './components/TopHeader';
 import { BottomNav, NavTab } from './components/BottomNav';
 import { Dashboard } from './components/Dashboard';
 import { EventsFeedView } from './components/EventsFeedView';
@@ -305,27 +305,41 @@ export default function App() {
   // Stato Evento in Modifica (Sondaggio o Evento Ufficiale)
   const [eventToEdit, setEventToEdit] = useState<MeetingEvent | undefined>(undefined);
 
-  // Gestione Tema Scuro / Chiaro
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
-    const saved = localStorage.getItem('jesic_meet_dark_mode');
-    if (saved !== null) {
-      return saved === 'true';
+  // Gestione Temi: 'light' (Sole / Bianco), 'dark' (Luna / Nero), 'brand' (Logo JESic / Rosso Brand Identity)
+  const [theme, setTheme] = useState<AppTheme>(() => {
+    const saved = localStorage.getItem('jesic_meet_theme');
+    if (saved === 'light' || saved === 'dark' || saved === 'brand') {
+      return saved as AppTheme;
     }
-    return window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)').matches : false;
+    const oldDark = localStorage.getItem('jesic_meet_dark_mode');
+    if (oldDark !== null) {
+      return oldDark === 'true' ? 'dark' : 'light';
+    }
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
 
-  useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('jesic_meet_dark_mode', 'true');
-    } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('jesic_meet_dark_mode', 'false');
-    }
-  }, [isDarkMode]);
+  const isDarkMode = theme === 'dark';
 
-  const toggleDarkMode = () => {
-    setIsDarkMode((prev) => !prev);
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.remove('dark', 'theme-brand');
+
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else if (theme === 'brand') {
+      root.classList.add('theme-brand');
+    }
+
+    localStorage.setItem('jesic_meet_theme', theme);
+    localStorage.setItem('jesic_meet_dark_mode', theme === 'dark' ? 'true' : 'false');
+  }, [theme]);
+
+  const cycleTheme = () => {
+    setTheme((prev) => {
+      if (prev === 'light') return 'dark';
+      if (prev === 'dark') return 'brand';
+      return 'light';
+    });
   };
 
   // Ruolo dell'utente all'interno del gruppo specifico (RBAC per Gruppo)
@@ -358,10 +372,25 @@ export default function App() {
   }, [currentTab, canAccessGroupClientRequests, isInsideGroup]);
 
   // Supporto invito automatico tramite URL parametro (?join=CODE) o path (/join/CODE) o hash
+  const [pendingInviteCode, setPendingInviteCode] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const qJoin = searchParams.get('join');
+      if (qJoin) return qJoin.trim().toUpperCase();
+      if (window.location.pathname.startsWith('/join/')) {
+        const parts = window.location.pathname.split('/join/')[1];
+        if (parts) return parts.split('/')[0].split('?')[0].trim().toUpperCase();
+      }
+      return sessionStorage.getItem('pending_group_invite');
+    } catch {
+      return null;
+    }
+  });
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    // Estrai il codice invito dall'URL in qualsiasi forma
     let detectedJoinCode: string | null = null;
     try {
       const searchParams = new URLSearchParams(window.location.search);
@@ -383,21 +412,30 @@ export default function App() {
     } catch {}
 
     if (detectedJoinCode) {
-      sessionStorage.setItem('pending_group_invite', detectedJoinCode);
-      try {
-        window.history.replaceState({}, '', window.location.pathname === '/prenota-call' ? '/prenota-call' : '/');
-      } catch {}
+      const clean = detectedJoinCode.trim().toUpperCase();
+      sessionStorage.setItem('pending_group_invite', clean);
+      setPendingInviteCode(clean);
     }
+  }, []);
 
-    const pendingCode = sessionStorage.getItem('pending_group_invite') || detectedJoinCode;
-    if (pendingCode && currentUser) {
-      handleJoinGroup(pendingCode).then((res) => {
-        if (res.success) {
-          sessionStorage.removeItem('pending_group_invite');
-        }
-      });
-    }
-  }, [currentUser]);
+  // Quando l'utente è autenticato ed è presente un codice invito in sospeso, esegui l'ingresso automatico
+  useEffect(() => {
+    if (!currentUser) return;
+    const codeToJoin = pendingInviteCode || (typeof window !== 'undefined' ? sessionStorage.getItem('pending_group_invite') : null);
+    if (!codeToJoin) return;
+
+    handleJoinGroup(codeToJoin).then((res) => {
+      if (res.success) {
+        sessionStorage.removeItem('pending_group_invite');
+        setPendingInviteCode(null);
+        try {
+          if (window.location.search.includes('join=') || window.location.pathname.startsWith('/join/')) {
+            window.history.replaceState({}, '', '/');
+          }
+        } catch {}
+      }
+    });
+  }, [currentUser, pendingInviteCode]);
 
   // Navigazione alla pagina pubblica /prenota-call
   const navigateToPublicBooking = () => {
@@ -713,49 +751,62 @@ export default function App() {
     setCurrentTab('groups');
   };
 
-  const handleCreateGroup = (
+  const handleCreateGroup = async (
     name: string,
     description: string,
     avatar?: string,
     isPublic: boolean = false
-  ) => {
-    if (!currentUser) return;
-    const code = `JES-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-    const newGroup: Group = {
-      id: `grp-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
-      name: name.trim(),
-      description: description ? description.trim() : '',
-      code,
-      inviteLink: `${typeof window !== 'undefined' ? window.location.origin : ''}/?join=${code}`,
-      creatorId: currentUser.id,
-      avatar: avatar || '👥',
-      isPublic,
-      createdAt: new Date().toISOString(),
-      members: [
-        {
-          userId: currentUser.id,
-          role: 'admin',
-          joinedAt: new Date().toISOString(),
-        },
-      ],
-    };
+  ): Promise<{ success: boolean; group?: Group; error?: string }> => {
+    if (!currentUser) return { success: false, error: 'Devi aver effettuato l\'accesso.' };
 
-    const updated = [newGroup, ...groups];
-    setGroups(updated);
-    setActiveGroupId(newGroup.id);
-    setCurrentTab('dashboard');
+    try {
+      const res = await fetch('/api/groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim(),
+          description: description ? description.trim() : '',
+          avatar: avatar || '👥',
+          creatorId: currentUser.id,
+          isPublic,
+        }),
+      });
 
-    fetch('/api/groups', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name,
-        description,
-        avatar,
-        creatorId: currentUser.id,
-        isPublic,
-      }),
-    }).catch((e) => console.log('[API create group sync]', e));
+      const data = await res.json();
+      if (!res.ok || !data?.group) {
+        throw new Error(data?.error || 'Errore durante la creazione del gruppo su MongoDB');
+      }
+
+      const realGroup: Group = data.group;
+
+      // Aggiorna lo stato dei gruppi con il gruppo salvato realmente su MongoDB
+      setGroups((prev) => [realGroup, ...prev.filter((g) => g.id !== realGroup.id)]);
+      setActiveGroupId(realGroup.id);
+      setCurrentTab('dashboard');
+
+      // Sincronizza lo stato utente locale (groupMemberships con ruolo admin)
+      setCurrentUser((prevUser) => {
+        if (!prevUser) return prevUser;
+        const currentMemberships = prevUser.groupMemberships || [];
+        const hasMembership = currentMemberships.some((m) => m.groupId === realGroup.id);
+        const updatedMemberships = hasMembership
+          ? currentMemberships
+          : [...currentMemberships, { groupId: realGroup.id, role: 'admin' as const }];
+        const updatedUser: User = {
+          ...prevUser,
+          groupMemberships: updatedMemberships,
+        };
+        try {
+          localStorage.setItem(STORAGE_CURRENT_USER_KEY, JSON.stringify(updatedUser));
+        } catch {}
+        return updatedUser;
+      });
+
+      return { success: true, group: realGroup };
+    } catch (err: any) {
+      console.error('[handleCreateGroup error]', err);
+      throw err;
+    }
   };
 
   const handleJoinPublicGroup = async (
@@ -774,35 +825,57 @@ export default function App() {
       return { success: false, message: 'Questo gruppo è privato. Inserisci il codice d\'invito.' };
     }
 
-    const updatedGroup: Group = {
-      ...targetGroup,
-      members: [
-        ...targetGroup.members,
-        {
-          userId: currentUser.id,
-          role: 'member',
-          joinedAt: new Date().toISOString(),
-        },
-      ],
-      updatedAt: new Date().toISOString(),
-    };
-
-    const updatedGroups = groups.map((g) => (g.id === targetGroup.id ? updatedGroup : g));
-    setGroups(updatedGroups);
-    setActiveGroupId(updatedGroup.id);
-    setCurrentTab('dashboard');
-
     try {
-      await fetch(`/api/groups/${targetGroup.id}/join-public`, {
+      const res = await fetch(`/api/groups/${targetGroup.id}/join-public`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: currentUser.id }),
       });
+
+      const data = await res.json();
+      const updatedGroup: Group = data?.group || {
+        ...targetGroup,
+        members: [
+          ...targetGroup.members,
+          {
+            userId: currentUser.id,
+            role: 'member',
+            joinedAt: new Date().toISOString(),
+          },
+        ],
+        updatedAt: new Date().toISOString(),
+      };
+
+      setGroups((prev) => prev.map((g) => (g.id === targetGroup.id ? updatedGroup : g)));
+      setActiveGroupId(updatedGroup.id);
+      setCurrentTab('dashboard');
+
+      // Sincronizza l'appartenenza nel profilo utente locale
+      setCurrentUser((prevUser) => {
+        if (!prevUser) return prevUser;
+        const memberships = prevUser.groupMemberships || [];
+        if (!memberships.some((m) => m.groupId === updatedGroup.id)) {
+          const updatedUser = {
+            ...prevUser,
+            groupMemberships: [...memberships, { groupId: updatedGroup.id, role: 'member' as const }],
+          };
+          try {
+            localStorage.setItem(STORAGE_CURRENT_USER_KEY, JSON.stringify(updatedUser));
+          } catch {}
+          return updatedUser;
+        }
+        return prevUser;
+      });
+
+      return {
+        success: true,
+        message: data?.message || 'Sei entrato nel gruppo pubblico con successo!',
+        group: updatedGroup,
+      };
     } catch (e) {
       console.warn('[API join public group error]', e);
+      return { success: false, message: 'Errore durante l\'adesione al gruppo pubblico' };
     }
-
-    return { success: true, message: 'Sei entrato nel gruppo con successo!', group: updatedGroup };
   };
 
   const handleJoinGroup = async (
@@ -829,7 +902,7 @@ export default function App() {
       if (res.ok && data?.group) {
         const returnedGroup: Group = data.group;
 
-        // Aggiorna lo stato React dei gruppi
+        // Aggiorna lo stato React dei gruppi con i dati freschi da MongoDB
         setGroups((prev) => {
           const exists = prev.some((g) => g.id === returnedGroup.id);
           return exists
@@ -841,7 +914,7 @@ export default function App() {
         setActiveGroupId(returnedGroup.id);
         setCurrentTab('dashboard');
 
-        // Sincronizza lo stato utente locale (groupMemberships)
+        // Sincronizza lo stato utente locale (groupMemberships con ruolo member)
         setCurrentUser((prevUser) => {
           if (!prevUser) return prevUser;
           const memberships = prevUser.groupMemberships || [];
@@ -865,39 +938,9 @@ export default function App() {
         };
       }
 
-      // Se il backend ha restituito un errore 404 o simile, proviamo per sicurezza nella memoria locale
-      const cleanCode = rawInput.toUpperCase().replace(/^JES-?/i, '');
-      const localMatch = groups.find((g) => {
-        const gClean = g.code.toUpperCase().replace(/^JES-?/i, '');
-        return gClean === cleanCode || g.code.toUpperCase() === rawInput.toUpperCase();
-      });
-
-      if (localMatch) {
-        const alreadyMember = localMatch.members.some((m) => m.userId === currentUser.id);
-        const updatedGroup: Group = alreadyMember
-          ? localMatch
-          : {
-              ...localMatch,
-              members: [
-                ...localMatch.members,
-                { userId: currentUser.id, role: 'member', joinedAt: new Date().toISOString() },
-              ],
-              updatedAt: new Date().toISOString(),
-            };
-
-        setGroups((prev) => prev.map((g) => (g.id === localMatch.id ? updatedGroup : g)));
-        setActiveGroupId(updatedGroup.id);
-        setCurrentTab('dashboard');
-        return {
-          success: true,
-          message: alreadyMember ? 'Sei già membro di questo gruppo!' : 'Sei entrato nel gruppo con successo!',
-          group: updatedGroup,
-        };
-      }
-
       return {
         success: false,
-        message: data?.error || 'Nessun gruppo trovato con questo codice d\'invito. Chiedi al creatore del gruppo di ricondividere il link o il codice.',
+        message: data?.error || 'Nessun gruppo trovato con questo codice d\'invito. Verifica il codice o chiedi al collega di ricondividerlo.',
       };
     } catch (err) {
       console.error('[handleJoinGroup error]', err);
@@ -1519,6 +1562,7 @@ export default function App() {
           onRegister={handleRegisterUser}
           onGoogleAuthCode={handleGoogleAuthCode}
           onOpenPublicBooking={navigateToPublicBooking}
+          pendingInviteCode={pendingInviteCode}
         />
       ) : (
         /* 4. DASHBOARD APPLICATIVA (Intravista subito dallo sfondo se utente autenticato) */
@@ -1530,8 +1574,10 @@ export default function App() {
             currentUser={currentUser}
             onLogout={handleLogout}
             onNavigateToProfile={() => setCurrentTab('profile')}
+            theme={theme}
+            onCycleTheme={cycleTheme}
             isDarkMode={isDarkMode}
-            onToggleDarkMode={toggleDarkMode}
+            onToggleDarkMode={cycleTheme}
             currentTab={currentTab}
             onSelectTab={setCurrentTab}
             onOpenCreateMenu={handlePlusButtonClick}

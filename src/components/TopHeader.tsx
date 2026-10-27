@@ -21,12 +21,16 @@ import {
   User as UserIcon,
 } from 'lucide-react';
 
+export type AppTheme = 'light' | 'dark' | 'brand';
+
 export interface TopHeaderProps {
   currentUser: User;
   onLogout: () => void;
   onNavigateToProfile: () => void;
-  isDarkMode: boolean;
-  onToggleDarkMode: () => void;
+  theme?: AppTheme;
+  onCycleTheme?: () => void;
+  isDarkMode?: boolean;
+  onToggleDarkMode?: () => void;
   currentTab?: NavTab;
   onSelectTab?: (tab: NavTab) => void;
   onOpenCreateMenu?: () => void;
@@ -42,7 +46,9 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   currentUser,
   onLogout,
   onNavigateToProfile,
-  isDarkMode,
+  theme,
+  onCycleTheme,
+  isDarkMode = false,
   onToggleDarkMode,
   currentTab = 'groups',
   onSelectTab,
@@ -54,6 +60,43 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   isInsideGroup = false,
   onBackToGroups,
 }) => {
+  const currentTheme: AppTheme = theme || (isDarkMode ? 'dark' : 'light');
+
+  const handleThemeClick = () => {
+    if (onCycleTheme) {
+      onCycleTheme();
+    } else if (onToggleDarkMode) {
+      onToggleDarkMode();
+    }
+  };
+
+  const getThemeMeta = () => {
+    switch (currentTheme) {
+      case 'light':
+        return {
+          currentLabel: 'Tema Chiaro (Sole)',
+          nextLabel: 'Tema Scuro (Luna)',
+        };
+      case 'dark':
+        return {
+          currentLabel: 'Tema Scuro (Luna)',
+          nextLabel: 'Tema Brand Identity (Logo JESic)',
+        };
+      case 'brand':
+        return {
+          currentLabel: 'Tema Brand Identity (Logo JESic)',
+          nextLabel: 'Tema Chiaro (Sole)',
+        };
+      default:
+        return {
+          currentLabel: 'Tema',
+          nextLabel: 'Tema',
+        };
+    }
+  };
+
+  const { currentLabel, nextLabel } = getThemeMeta();
+
   const handleLogoClick = () => {
     if (onBackToGroups) {
       onBackToGroups();
@@ -275,18 +318,34 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             </button>
           )}
 
-          {/* Bottoncino di cambio modalità (Tema Scuro / Chiaro) */}
+          {/* Bottoncino di cambio modalità: Chiaro (Sole), Scuro (Luna), Brand Identity (Logo JESic) */}
           <button
             type="button"
-            onClick={onToggleDarkMode}
-            aria-label={isDarkMode ? 'Attiva tema chiaro' : 'Attiva tema scuro'}
-            title={isDarkMode ? 'Passa al tema chiaro' : 'Passa al tema scuro'}
-            className="w-8 h-8 rounded-full border border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-200 transition-all flex items-center justify-center cursor-pointer shadow-2xs hover:scale-105 active:scale-95"
+            onClick={handleThemeClick}
+            aria-label={`Tema attuale: ${currentLabel}. Clicca per passare a ${nextLabel}`}
+            title={`Tema attuale: ${currentLabel} (Clicca per passare a ${nextLabel})`}
+            className={`w-8 h-8 rounded-full border transition-all duration-300 flex items-center justify-center cursor-pointer shadow-2xs hover:scale-105 active:scale-95 ${
+              currentTheme === 'brand'
+                ? 'bg-white border-white shadow-[0_2px_10px_rgba(0,0,0,0.25)] ring-2 ring-white/70 hover:scale-110'
+                : currentTheme === 'dark'
+                ? 'bg-neutral-800 border-neutral-700 hover:border-neutral-600 text-neutral-200'
+                : 'bg-amber-50/90 border-amber-300/80 hover:border-amber-400 text-amber-600'
+            }`}
           >
-            {isDarkMode ? (
-              <Sun className="w-4 h-4 text-amber-400" />
-            ) : (
-              <Moon className="w-4 h-4 text-neutral-600 dark:text-neutral-300" />
+            {currentTheme === 'light' && (
+              <Sun className="w-4 h-4 text-amber-500 fill-amber-500/20 transition-transform duration-300 hover:rotate-45" />
+            )}
+            {currentTheme === 'dark' && (
+              <Moon className="w-4 h-4 text-neutral-300 fill-neutral-300/20 transition-transform duration-300 hover:-rotate-12" />
+            )}
+            {currentTheme === 'brand' && (
+              <div className="w-4 h-4 flex items-center justify-center transition-transform duration-300 hover:scale-110">
+                <img
+                  src="/logo.png"
+                  alt="JESic Brand Theme"
+                  className="w-3.5 h-3.5 object-contain filter drop-shadow-[0_0_4px_rgba(242,62,46,0.8)]"
+                />
+              </div>
             )}
           </button>
 

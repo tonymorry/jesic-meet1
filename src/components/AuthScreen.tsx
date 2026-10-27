@@ -32,6 +32,7 @@ interface AuthScreenProps {
   onRegister: (newUser: Omit<User, 'id'>) => void;
   onGoogleAuthCode?: (code: string) => Promise<void>;
   onOpenPublicBooking?: () => void;
+  pendingInviteCode?: string | null;
 }
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({
@@ -40,6 +41,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   onRegister,
   onGoogleAuthCode,
   onOpenPublicBooking,
+  pendingInviteCode,
 }) => {
   const [mode, setMode] = useState<'login' | 'register'>(
     registeredUsers.length === 0 ? 'register' : 'login'
@@ -326,6 +328,17 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 <span>Crea Profilo</span>
               </button>
             </div>
+
+            {/* Banner Invito Gruppo in Sospeso */}
+            {pendingInviteCode && (
+              <div className="bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs px-4 py-3 rounded-2xl font-medium mb-4 animate-in fade-in flex items-center gap-2.5">
+                <span className="text-base shrink-0">👥</span>
+                <div>
+                  <p className="font-bold">Link di invito attivo (Codice: {pendingInviteCode})</p>
+                  <p className="text-[11px] opacity-90">Accedi o registrati per entrare automaticamente nel gruppo!</p>
+                </div>
+              </div>
+            )}
 
             {/* Messaggio Errore */}
             {errorMsg && (

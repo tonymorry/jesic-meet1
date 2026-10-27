@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
+@custom-variant brand (&:where(.theme-brand, .theme-brand *));
 
 @theme {
   --font-sans: 'Ubuntu', system-ui, -apple-system, sans-serif;
@@ -71,3 +72,270 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover,
 input[type="date"]::-webkit-calendar-picker-indicator:hover {
   transform: scale(1.02);
 }
+
+/* ========================================================================== */
+/* TEMA BRAND IDENTITY JESic (Tutto Rosso come gli altri due temi)           */
+/* ========================================================================== */
+html.theme-brand {
+  --color-jesic-red: #f23e2e;
+}
+
+html.theme-brand body {
+  background-color: #f23e2e !important;
+  color: #ffffff !important;
+}
+
+/* Sfondo dell'app generale - Rosso Logo Ufficiale #f23e2e */
+html.theme-brand .min-h-screen.bg-neutral-100,
+html.theme-brand .dark\:bg-black {
+  background-color: #f23e2e !important;
+  background-image: none !important;
+}
+
+/* Contenitore centrale dell'applicazione */
+html.theme-brand .shadow-2xl.border-x,
+html.theme-brand .w-full.max-w-md,
+html.theme-brand .w-full.max-w-xl,
+html.theme-brand .w-full.max-w-4xl,
+html.theme-brand .w-full.max-w-6xl,
+html.theme-brand .w-full.max-w-7xl {
+  background-color: #f23e2e !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+}
+
+/* Header Superiore - Rosso #d92d1e */
+html.theme-brand header {
+  background-color: #d92d1e !important;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.25) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Riquadro per il logo rosso nell'header in modo che risalti a contrasto */
+html.theme-brand header .w-8.h-8 {
+  background-color: #ffffff !important;
+  border-radius: 10px !important;
+  padding: 3px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25) !important;
+}
+
+/* Titolo "JESic Meet" e sottotitolo nell'Header in bianco pulito */
+html.theme-brand header span.font-extrabold,
+html.theme-brand header span.text-neutral-900,
+html.theme-brand header span.dark\:text-white {
+  color: #ffffff !important;
+}
+
+html.theme-brand header p {
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+/* Navigazione Desktop nell'Header */
+html.theme-brand header nav {
+  background-color: rgba(0, 0, 0, 0.25) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+html.theme-brand header nav button {
+  color: #ffffff !important;
+}
+
+html.theme-brand header nav button.bg-white,
+html.theme-brand header nav button.dark\:bg-neutral-900 {
+  background-color: #ffffff !important;
+  color: #f23e2e !important;
+  font-weight: 900 !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25) !important;
+}
+
+/* Bottone Desktop "+ Nuovo" nell'Header */
+html.theme-brand header button.bg-\[\#f23e2e\] {
+  background-color: #ffffff !important;
+  color: #f23e2e !important;
+  font-weight: 900 !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25) !important;
+}
+
+/* Bottone Profilo Utente nell'Header */
+html.theme-brand header button.bg-neutral-50,
+html.theme-brand header button.dark\:bg-neutral-800 {
+  background-color: rgba(255, 255, 255, 0.2) !important;
+  border-color: rgba(255, 255, 255, 0.35) !important;
+}
+
+html.theme-brand header button.bg-neutral-50 span,
+html.theme-brand header button.dark\:bg-neutral-800 span {
+  color: #ffffff !important;
+}
+
+html.theme-brand header span.bg-neutral-200,
+html.theme-brand header span.dark\:bg-neutral-700 {
+  background-color: #ffffff !important;
+  color: #f23e2e !important;
+  font-weight: 900 !important;
+}
+
+/* Bottom Navigation Bar Mobile - Rosso #d92d1e */
+html.theme-brand nav.fixed.bottom-0 > div {
+  background-color: #d92d1e !important;
+  border-top: 2px solid rgba(255, 255, 255, 0.25) !important;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.2) !important;
+}
+
+html.theme-brand nav.fixed.bottom-0 button {
+  color: rgba(255, 255, 255, 0.75) !important;
+}
+
+html.theme-brand nav.fixed.bottom-0 button.text-\[\#f23e2e\] {
+  color: #ffffff !important;
+  font-weight: 900 !important;
+}
+
+html.theme-brand nav.fixed.bottom-0 button.text-\[\#f23e2e\] svg {
+  stroke: #ffffff !important;
+}
+
+html.theme-brand nav.fixed.bottom-0 button.text-\[\#f23e2e\] span {
+  color: #ffffff !important;
+}
+
+/* Area dei contenuti (main) */
+html.theme-brand main {
+  background-color: #f23e2e !important;
+}
+
+/* TUTTE LE CARD, I BOX E I PANNELLI: TUTTI ROSSI COME GLI ALTRI DUE TEMI */
+html.theme-brand .bg-white,
+html.theme-brand .dark\:bg-neutral-900 {
+  background-color: #e03223 !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.25) !important;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18) !important;
+  color: #ffffff !important;
+}
+
+/* Box interni, schede annidate, liste e contenitori secondari */
+html.theme-brand .bg-neutral-50,
+html.theme-brand .bg-neutral-100,
+html.theme-brand .dark\:bg-neutral-800,
+html.theme-brand .dark\:bg-neutral-800\/80,
+html.theme-brand .dark\:bg-neutral-800\/60,
+html.theme-brand .dark\:bg-neutral-800\/50 {
+  background-color: rgba(0, 0, 0, 0.18) !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  color: #ffffff !important;
+}
+
+/* Bordi generali delle card e divisori */
+html.theme-brand .border-neutral-200,
+html.theme-brand .border-neutral-200\/90,
+html.theme-brand .border-neutral-200\/80,
+html.theme-brand .border-neutral-300,
+html.theme-brand .dark\:border-neutral-800,
+html.theme-brand .dark\:border-neutral-700,
+html.theme-brand .dark\:border-neutral-700\/80,
+html.theme-brand .dark\:border-neutral-600 {
+  border-color: rgba(255, 255, 255, 0.22) !important;
+}
+
+/* Titoli e scritte di tutte le card in bianco ad alto contrasto */
+html.theme-brand h1,
+html.theme-brand h2,
+html.theme-brand h3,
+html.theme-brand h4,
+html.theme-brand .font-black,
+html.theme-brand .font-extrabold,
+html.theme-brand .font-bold {
+  color: #ffffff !important;
+}
+
+/* Paragrafi e testi secondari */
+html.theme-brand p {
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+html.theme-brand span.text-neutral-500,
+html.theme-brand span.text-neutral-400,
+html.theme-brand span.dark\:text-neutral-400,
+html.theme-brand span.text-neutral-600,
+html.theme-brand span.dark\:text-neutral-300,
+html.theme-brand span.text-neutral-700,
+html.theme-brand span.dark\:text-neutral-200 {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+/* Input di ricerca, form e textarea */
+html.theme-brand input:not([type="checkbox"]):not([type="radio"]),
+html.theme-brand select,
+html.theme-brand textarea {
+  background-color: rgba(0, 0, 0, 0.22) !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.3) !important;
+  color: #ffffff !important;
+}
+
+html.theme-brand input::placeholder,
+html.theme-brand textarea::placeholder {
+  color: rgba(255, 255, 255, 0.65) !important;
+}
+
+html.theme-brand input:focus,
+html.theme-brand select:focus,
+html.theme-brand textarea:focus {
+  border-color: #ffffff !important;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35) !important;
+  outline: none !important;
+}
+
+/* Bottoni primari in modalità rossa: risaltano in bianco con testo rosso */
+html.theme-brand button.bg-\[\#f23e2e\] {
+  background-color: #ffffff !important;
+  color: #f23e2e !important;
+  font-weight: 900 !important;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.22) !important;
+}
+
+html.theme-brand button.bg-\[\#f23e2e\] svg {
+  stroke: #f23e2e !important;
+}
+
+/* Bottoni secondari (es. "Entra con Codice") */
+html.theme-brand button.bg-neutral-100,
+html.theme-brand button.dark\:bg-neutral-800 {
+  background-color: rgba(0, 0, 0, 0.22) !important;
+  border: 1px solid rgba(255, 255, 255, 0.28) !important;
+  color: #ffffff !important;
+}
+
+html.theme-brand button.bg-neutral-100 svg,
+html.theme-brand button.dark\:bg-neutral-800 svg {
+  stroke: #ffffff !important;
+  color: #ffffff !important;
+}
+
+/* Badge e pillole */
+html.theme-brand .bg-emerald-50,
+html.theme-brand .dark\:bg-emerald-950\/60 {
+  background-color: rgba(6, 78, 59, 0.45) !important;
+  border-color: rgba(167, 243, 208, 0.35) !important;
+  color: #a7f3d0 !important;
+}
+
+html.theme-brand .bg-red-50,
+html.theme-brand .bg-red-100,
+html.theme-brand .dark\:bg-red-950\/40,
+html.theme-brand .dark\:bg-red-950\/60 {
+  background-color: rgba(0, 0, 0, 0.25) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  color: #ffffff !important;
+}
+
+/* Testi accento rosso diventano bianchi per risaltare sul fondo rosso */
+html.theme-brand .text-\[\#f23e2e\] {
+  color: #ffffff !important;
+}
+
+/* Modali e Overlay */
+html.theme-brand .fixed.inset-0.bg-black\/60,
+html.theme-brand .fixed.inset-0.bg-black\/70,
+html.theme-brand .fixed.inset-0.bg-black\/80 {
+  background-color: rgba(0, 0, 0, 0.75) !important;
+}
+

@@ -421,22 +421,39 @@ app.get('/api/groups', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/groups - Crea un nuovo gruppo di lavoro in MongoDB
+// POST /api/groups - Crea un nuovo gruppo di lavoro in MongoDB con codice univoco reale
 app.post('/api/groups', async (req: Request, res: Response) => {
-  const { name, description, avatar, creatorId, isPublic } = req.body;
+  const { name, description, avatar, creatorId, isPublic, code: requestedCode, id: requestedId } = req.body;
   if (!name || !creatorId) {
     return res.status(400).json({ error: 'Nome del gruppo e ID creatore sono obbligatori' });
   }
 
-  const code = `JES-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-
   try {
+    // Genera un codice univoco reale o valida quello richiesto
+    let code = requestedCode ? String(requestedCode).toUpperCase().replace(/[^A-Z0-9-]/g, '').trim() : '';
+    if (!code || code.length < 4) {
+      code = `JES-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+    }
+
+    // Assicura l'unicità del codice su MongoDB
+    let existing = await GroupModel.findOne({ code });
+    let attempts = 0;
+    while (existing && attempts < 10) {
+      code = `JES-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+      existing = await GroupModel.findOne({ code });
+      attempts++;
+    }
+
+    const groupId = requestedId || `grp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const inviteLink = `/join/${code}`;
+
     const newGroupDoc = await GroupModel.create({
-      _id: `grp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      _id: groupId,
+      id: groupId,
       name: name.trim(),
       description: description ? description.trim() : '',
       code,
-      inviteLink: `/join/${code}`,
+      inviteLink,
       creatorId,
       avatar: avatar || '👥',
       isPublic: isPublic === true,
@@ -449,17 +466,23 @@ app.post('/api/groups', async (req: Request, res: Response) => {
       ],
     });
 
-    // Sincronizza l'appartenenza del creatore su UserModel (groupMemberships con ruolo admin)
+    // Sincronizza l'appartenenza del creatore su UserModel (groupMemberships con ruolo admin) in MongoDB
     try {
       await UserModel.updateOne(
-        { _id: creatorId, 'groupMemberships.groupId': { $ne: newGroupDoc._id } },
+        {
+          $or: [{ _id: creatorId }, { id: creatorId }],
+          'groupMemberships.groupId': { $ne: newGroupDoc._id }
+        },
         { $push: { groupMemberships: { groupId: newGroupDoc._id, role: 'admin' } } }
       );
     } catch (errSync) {
       console.warn('Sync creator groupMemberships notice:', errSync);
     }
 
+    console.log(`[MongoDB] Gruppo "${newGroupDoc.name}" creato con successo. Codice: ${newGroupDoc.code}, ID: ${newGroupDoc._id}`);
+
     return res.status(201).json({
+      success: true,
       group: {
         id: newGroupDoc._id || newGroupDoc.id,
         name: newGroupDoc.name,
@@ -471,11 +494,12 @@ app.post('/api/groups', async (req: Request, res: Response) => {
         avatar: newGroupDoc.avatar,
         isPublic: newGroupDoc.isPublic ?? false,
         createdAt: newGroupDoc.createdAt,
+        updatedAt: newGroupDoc.updatedAt,
       },
     });
   } catch (err: any) {
     console.error('Errore creazione GroupModel MongoDB:', err.message);
-    return res.status(500).json({ error: 'Errore creazione gruppo su MongoDB' });
+    return res.status(500).json({ error: 'Errore creazione gruppo su MongoDB: ' + err.message });
   }
 });
 
@@ -492,48 +516,48 @@ app.post('/api/groups/join', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Codice/link e ID utente sono obbligatori' });
   }
 
-  let raw = String(codeOrLink).trim();
+  const raw = String(codeOrLink).trim();
   let code = raw;
 
-  // 1. Estrazione intelligente del codice da qualsiasi formato di URL o query string
-  try {
-    if (code.includes('http://') || code.includes('https://') || code.includes('://')) {
-      const parsedUrl = new URL(code);
-      const qJoin = parsedUrl.searchParams.get('join');
-      if (qJoin) {
-        code = qJoin;
-      } else {
-        const pathParts = parsedUrl.pathname.split('/').filter(Boolean);
-        const joinIdx = pathParts.findIndex((p) => p.toLowerCase() === 'join');
-        if (joinIdx !== -1 && pathParts[joinIdx + 1]) {
-          code = pathParts[joinIdx + 1];
-        }
-      }
+  // 1. Estrazione intelligente del codice da URL completo, URL relativo o query parameter
+  // Formati supportati:
+  // - https://dominio.it/?join=JES-ABCD
+  // - http://localhost:3000/?join=JES-ABCD
+  // - /?join=JES-ABCD
+  // - ?join=JES-ABCD
+  // - join=JES-ABCD
+  // - https://dominio.it/join/JES-ABCD
+  // - /join/JES-ABCD
+  // - join/JES-ABCD
+  // - JES-ABCD
+  // - ABCD
+  const queryJoinMatch = raw.match(/[?&]join=([^&#\s]+)/i);
+  if (queryJoinMatch && queryJoinMatch[1]) {
+    code = decodeURIComponent(queryJoinMatch[1]);
+  } else {
+    const slashJoinMatch = raw.match(/(?:^|\/)join\/([^/?#\s]+)/i);
+    if (slashJoinMatch && slashJoinMatch[1]) {
+      code = decodeURIComponent(slashJoinMatch[1]);
     }
-  } catch {}
-
-  // Rimuovi parametri query o ancore rimaste
-  code = code.split('?')[0].split('#')[0];
-  if (code.toLowerCase().includes('/join/')) {
-    code = code.split(/\/join\//i)[1];
-  } else if (code.toLowerCase().includes('join=')) {
-    code = code.split(/join=/i)[1];
   }
-  code = code.replace(/[^a-zA-Z0-9-]/g, '').trim().toUpperCase();
 
-  // 2. Costruisci candidati di ricerca (con e senza prefisso JES-)
+  // Pulisci il codice eliminando query string residue, ancore e caratteri non alfanumerici
+  code = code.split('?')[0].split('#')[0].replace(/[^a-zA-Z0-9-]/g, '').trim().toUpperCase();
+
+  // Candidati di ricerca (sia con prefisso JES- che senza prefisso)
   const cleanBare = code.replace(/^JES-?/i, '');
-  const candidateCodes = [
-    code,
-    `JES-${cleanBare}`,
-    cleanBare,
-  ].filter(Boolean);
-  const uniqueCandidates = Array.from(new Set(candidateCodes));
+  const candidateCodes = Array.from(
+    new Set([
+      code,
+      `JES-${cleanBare}`,
+      cleanBare,
+    ].filter(Boolean))
+  );
 
   try {
-    // Cerca il gruppo su MongoDB con corrispondenza case-insensitive su uno qualsiasi dei codici candidati
+    // Cerca il gruppo su MongoDB con corrispondenza case-insensitive su tutti i formati
     const group = await GroupModel.findOne({
-      $or: uniqueCandidates.map((c) => ({
+      $or: candidateCodes.map((c) => ({
         code: { $regex: new RegExp(`^${c}$`, 'i') },
       })),
     });
@@ -554,15 +578,20 @@ app.post('/api/groups/join', async (req: Request, res: Response) => {
       await group.save();
     }
 
-    // Sincronizza l'appartenenza al gruppo in UserModel (array groupMemberships)
+    // Sincronizza l'appartenenza al gruppo in UserModel (array groupMemberships) in MongoDB
     try {
       await UserModel.updateOne(
-        { _id: userId, 'groupMemberships.groupId': { $ne: group._id } },
-        { $push: { groupMemberships: { groupId: group._id, role: 'member' } } }
+        {
+          $or: [{ _id: userId }, { id: userId }],
+          'groupMemberships.groupId': { $ne: group._id }
+        },
+        { $push: { groupMemberships: { groupId: group._id || group.id, role: 'member' } } }
       );
     } catch (errSync) {
       console.warn('Sync UserModel groupMemberships notice:', errSync);
     }
+
+    console.log(`[MongoDB] Utente ${userId} unito con successo al gruppo "${group.name}" (Codice: ${group.code})`);
 
     return res.json({
       success: true,
@@ -577,6 +606,8 @@ app.post('/api/groups/join', async (req: Request, res: Response) => {
         members: group.members,
         avatar: group.avatar,
         isPublic: group.isPublic ?? false,
+        createdAt: group.createdAt,
+        updatedAt: group.updatedAt,
       },
     });
   } catch (err: any) {
@@ -611,6 +642,19 @@ app.post('/api/groups/:id/join-public', async (req: Request, res: Response) => {
         joinedAt: new Date().toISOString(),
       });
       await group.save();
+    }
+
+    // Sincronizza l'appartenenza al gruppo anche in UserModel in MongoDB
+    try {
+      await UserModel.updateOne(
+        {
+          $or: [{ _id: userId }, { id: userId }],
+          'groupMemberships.groupId': { $ne: group._id }
+        },
+        { $push: { groupMemberships: { groupId: group._id || group.id, role: 'member' } } }
+      );
+    } catch (errSync) {
+      console.warn('Sync UserModel join-public groupMemberships notice:', errSync);
     }
 
     const mappedGroup = {
