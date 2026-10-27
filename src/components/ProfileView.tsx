@@ -30,6 +30,7 @@ import {
   Crop,
   X,
   Users,
+  FileText,
 } from 'lucide-react';
 import { ImageCropModal } from './ImageCropModal';
 import { UserAvatar } from './UserAvatar';
@@ -42,6 +43,8 @@ interface ProfileViewProps {
   onLogout: () => void;
   onUpdateUserRole?: (targetUserId: string, newRole: AppRole) => void;
   onUpdateUserProfile?: (updates: Partial<User>) => void;
+  onNavigateToPrivacy?: () => void;
+  onNavigateToTerms?: () => void;
 }
 
 export interface PresetAvatar {
@@ -152,6 +155,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   onLogout,
   onUpdateUserRole,
   onUpdateUserProfile,
+  onNavigateToPrivacy,
+  onNavigateToTerms,
 }) => {
   const [calendarConnected, setCalendarConnected] = useState(
     currentUser.googleCalendarConnected ?? true
@@ -710,6 +715,45 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           <p className="text-xs font-medium text-neutral-700 dark:text-neutral-200 leading-relaxed">
             Ogni evento viene inserito automaticamente nel Google Calendar di {currentUser.email}.
           </p>
+        </div>
+      </div>
+
+      {/* Trasparenza & Informazioni Legali (Google OAuth & GDPR) */}
+      <div className="bg-white dark:bg-neutral-900 rounded-3xl p-5 border border-neutral-200/90 dark:border-neutral-800 shadow-xs space-y-3">
+        <div className="flex items-center gap-2 text-xs font-bold text-neutral-900 dark:text-white">
+          <Shield className="w-4 h-4 text-[#f23e2e]" />
+          <span>Trasparenza & Informazioni Legali</span>
+        </div>
+        <p className="text-[11px] text-neutral-500 dark:text-neutral-400 leading-relaxed">
+          JESic Meet rispetta la tua privacy e la Google API Services User Data Policy. I dati del calendario sono usati esclusivamente per le disponibilità del team.
+        </p>
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          <a
+            href="/privacy"
+            onClick={(e) => {
+              if (onNavigateToPrivacy) {
+                e.preventDefault();
+                onNavigateToPrivacy();
+              }
+            }}
+            className="flex-1 min-w-[130px] p-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-700 border border-neutral-200 dark:border-neutral-700 text-xs font-bold text-neutral-800 dark:text-neutral-200 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-[#f23e2e]" />
+            <span>Privacy Policy</span>
+          </a>
+          <a
+            href="/terms"
+            onClick={(e) => {
+              if (onNavigateToTerms) {
+                e.preventDefault();
+                onNavigateToTerms();
+              }
+            }}
+            className="flex-1 min-w-[130px] p-2.5 rounded-xl bg-neutral-50 dark:bg-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-700 border border-neutral-200 dark:border-neutral-700 text-xs font-bold text-neutral-800 dark:text-neutral-200 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+          >
+            <FileText className="w-3.5 h-3.5 text-neutral-500" />
+            <span>Termini di Servizio</span>
+          </a>
         </div>
       </div>
 

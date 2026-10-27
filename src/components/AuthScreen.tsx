@@ -24,6 +24,8 @@ import {
   Sparkles,
   ShieldCheck,
   CheckCircle2,
+  Shield,
+  FileText,
 } from 'lucide-react';
 
 interface AuthScreenProps {
@@ -33,6 +35,8 @@ interface AuthScreenProps {
   onGoogleAuthCode?: (code: string) => Promise<void>;
   onOpenPublicBooking?: () => void;
   pendingInviteCode?: string | null;
+  onOpenPrivacy?: () => void;
+  onOpenTerms?: () => void;
 }
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({
@@ -42,6 +46,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   onGoogleAuthCode,
   onOpenPublicBooking,
   pendingInviteCode,
+  onOpenPrivacy,
+  onOpenTerms,
 }) => {
   const [mode, setMode] = useState<'login' | 'register'>(
     registeredUsers.length === 0 ? 'register' : 'login'
@@ -55,6 +61,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showRegisterPassword, setShowRegisterPassword] = useState(false);
   const [googleCalendarConnected, setGoogleCalendarConnected] = useState(true);
+  const [acceptTerms, setAcceptTerms] = useState(false);
 
   // Form Accesso (Email e Password)
   const [loginEmail, setLoginEmail] = useState('');
@@ -106,6 +113,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
     if (password !== confirmPassword) {
       setErrorMsg('Le password inserite non coincidono. Verifica e riprova.');
+      return;
+    }
+
+    if (!acceptTerms) {
+      setErrorMsg('Devi accettare i Termini e Condizioni e la Privacy Policy per registrarti.');
       return;
     }
 
@@ -602,22 +614,56 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 </div>
 
                 {/* Permesso Google Calendar in piccolino con quadratino da spuntare */}
-                <div className="flex items-start gap-2.5 p-2.5 bg-neutral-50 dark:bg-neutral-800/60 rounded-xl border border-neutral-200 dark:border-neutral-700 text-xs">
+                <div className="flex items-center gap-2.5 p-2.5 bg-neutral-50 dark:bg-neutral-800/60 rounded-xl border border-neutral-200 dark:border-neutral-700 text-xs">
                   <input
                     type="checkbox"
                     id="googleCalPermission"
                     checked={googleCalendarConnected}
                     onChange={(e) => setGoogleCalendarConnected(e.target.checked)}
-                    className="w-4 h-4 text-[#f23e2e] accent-[#f23e2e] rounded cursor-pointer mt-0.5 shrink-0"
+                    className="w-4 h-4 text-[#f23e2e] accent-[#f23e2e] rounded cursor-pointer shrink-0"
                   />
-                  <label htmlFor="googleCalPermission" className="text-[11px] cursor-pointer text-neutral-700 dark:text-neutral-300 leading-tight">
-                    <span className="font-semibold text-neutral-900 dark:text-white flex items-center gap-1">
+                  <label htmlFor="googleCalPermission" className="text-[11px] cursor-pointer text-neutral-700 dark:text-neutral-300 select-none">
+                    <span className="font-semibold text-neutral-900 dark:text-white flex items-center gap-1.5">
                       <Calendar className="w-3.5 h-3.5 text-[#f23e2e] shrink-0" />
                       Sincronizza automaticamente con Google Calendar
                     </span>
-                    <span className="text-[10px] text-neutral-500 dark:text-neutral-400 block mt-0.5">
-                      Inserisci automaticamente ogni evento confermato nell'app nel Google Calendar dell'email inserita.
-                    </span>
+                  </label>
+                </div>
+
+                {/* Spunta obbligatoria per Termini e Condizioni e Privacy Policy */}
+                <div className="flex items-start gap-2.5 p-2.5 bg-neutral-50 dark:bg-neutral-800/60 rounded-xl border border-neutral-200 dark:border-neutral-700 text-xs">
+                  <input
+                    type="checkbox"
+                    id="acceptTermsCheckbox"
+                    checked={acceptTerms}
+                    onChange={(e) => setAcceptTerms(e.target.checked)}
+                    required
+                    className="w-4 h-4 text-[#f23e2e] accent-[#f23e2e] rounded cursor-pointer mt-0.5 shrink-0"
+                  />
+                  <label htmlFor="acceptTermsCheckbox" className="text-[11px] cursor-pointer text-neutral-700 dark:text-neutral-300 leading-snug select-none">
+                    Accetto i{' '}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onOpenTerms) onOpenTerms();
+                      }}
+                      className="text-[#f23e2e] hover:underline font-semibold inline underline-offset-2"
+                    >
+                      Termini e Condizioni
+                    </button>{' '}
+                    e la{' '}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onOpenPrivacy) onOpenPrivacy();
+                      }}
+                      className="text-[#f23e2e] hover:underline font-semibold inline underline-offset-2"
+                    >
+                      Privacy Policy
+                    </button>{' '}
+                    di JESic Meet *
                   </label>
                 </div>
 
@@ -653,15 +699,96 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 onClick={onOpenPublicBooking}
                 className="text-xs text-neutral-500 dark:text-neutral-400 hover:text-[#f23e2e] dark:hover:text-[#f23e2e] transition-colors inline-flex items-center gap-1.5 font-semibold cursor-pointer"
               >
-                <span>Sei un'azienda o un cliente esterno?</span>
+                <span>Sei un&apos;azienda o un cliente esterno?</span>
                 <span className="text-[#f23e2e] font-black underline">Fissa una Call (/prenota-call) &rarr;</span>
               </button>
             </div>
           )}
 
+          {/* Link legali rapidi all'interno della colonna */}
+          <div className="pt-4 mt-4 border-t border-neutral-100 dark:border-neutral-800 flex flex-wrap items-center justify-center gap-3 text-[11px] text-neutral-400 dark:text-neutral-500">
+            <a
+              href="/privacy"
+              onClick={(e) => {
+                if (onOpenPrivacy) {
+                  e.preventDefault();
+                  onOpenPrivacy();
+                }
+              }}
+              className="hover:text-[#f23e2e] transition-colors underline"
+            >
+              Privacy Policy
+            </a>
+            <span>•</span>
+            <a
+              href="/terms"
+              onClick={(e) => {
+                if (onOpenTerms) {
+                  e.preventDefault();
+                  onOpenTerms();
+                }
+              }}
+              className="hover:text-[#f23e2e] transition-colors underline"
+            >
+              Termini di Servizio
+            </a>
+          </div>
+
         </div>
 
       </div>
+
+      {/* FOOTER PRINCIPALE VISIBILE A TUTTI (Requisito Google OAuth Verification) */}
+      <footer className="w-full max-w-md md:max-w-4xl lg:max-w-5xl mt-6 px-5 py-6 bg-white/5 dark:bg-white/5 backdrop-blur-md rounded-3xl border border-white/10 text-center space-y-3 animate-in fade-in">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-2 text-xs font-bold text-neutral-200">
+          <div className="flex items-center gap-2">
+            <span className="text-white text-sm">JESic<span className="text-[#f23e2e]">Meet</span></span>
+            <span className="text-neutral-500 hidden sm:inline">•</span>
+          </div>
+          <span className="text-neutral-300 font-medium text-center">
+            Piattaforma intelligente di coordinamento riunioni, gestione gruppi e sincronizzazione automatica con Google Calendar
+          </span>
+        </div>
+
+        <p className="text-[11px] text-neutral-400 max-w-2xl mx-auto leading-relaxed">
+          Sviluppata per <strong>Junior Enterprise Sicilia</strong>. I dati di Google Calendar sono utilizzati esclusivamente per verificare le disponibilità orarie degli utenti e creare gli eventi e le videochiamate Google Meet concordate nei gruppi, senza mai vendere o cedere dati a terzi.
+        </p>
+
+        <div className="flex flex-wrap items-center justify-center gap-4 pt-1 text-xs">
+          <a
+            href="/privacy"
+            onClick={(e) => {
+              if (onOpenPrivacy) {
+                e.preventDefault();
+                onOpenPrivacy();
+              }
+            }}
+            className="font-bold text-[#f23e2e] hover:text-red-400 transition-colors underline inline-flex items-center gap-1.5 cursor-pointer"
+          >
+            <Shield className="w-3.5 h-3.5" />
+            <span>Informativa sulla Privacy (Privacy Policy)</span>
+          </a>
+          <span className="text-neutral-600">•</span>
+          <a
+            href="/terms"
+            onClick={(e) => {
+              if (onOpenTerms) {
+                e.preventDefault();
+                onOpenTerms();
+              }
+            }}
+            className="font-bold text-neutral-300 hover:text-white transition-colors underline inline-flex items-center gap-1.5 cursor-pointer"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>Termini e Condizioni di Servizio</span>
+          </a>
+        </div>
+
+        <div className="pt-2 border-t border-white/10 text-[10px] text-neutral-400 flex flex-col sm:flex-row items-center justify-between gap-2 max-w-3xl mx-auto">
+          <span>© 2026 Junior Enterprise Sicilia (JESic) • Tutti i diritti riservati</span>
+          <span className="text-neutral-400">Conforme alla Google API Services User Data Policy</span>
+        </div>
+      </footer>
     </div>
   );
 };

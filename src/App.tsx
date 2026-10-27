@@ -34,6 +34,8 @@ import { OfficialEventDetailModal } from './components/OfficialEventDetailModal'
 import { PublicBookingForm } from './components/PublicBookingForm';
 import { ClientRequestsDashboard } from './components/ClientRequestsDashboard';
 import { SplashScreen } from './components/SplashScreen';
+import { PrivacyPolicyView } from './components/PrivacyPolicyView';
+import { TermsOfServiceView } from './components/TermsOfServiceView';
 import { autoSyncMeetingEventToCalendar } from './utils/googleWorkspaceAuth';
 
 // Chiavi LocalStorage versione pulita V3
@@ -46,12 +48,19 @@ const STORAGE_GROUPS_KEY = 'jesic_meet_v3_groups';
 const STORAGE_ACTIVE_GROUP_KEY = 'jesic_meet_v3_active_group_id';
 
 export default function App() {
-  // Riconoscimento rotta /prenota-call
+  // Riconoscimento rotte pubbliche (/prenota-call, /privacy, /terms)
   const [currentRoute, setCurrentRoute] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       const path = window.location.pathname;
-      if (path === '/prenota-call' || window.location.hash === '#/prenota-call') {
+      const hash = window.location.hash;
+      if (path === '/prenota-call' || hash === '#/prenota-call') {
         return '/prenota-call';
+      }
+      if (path === '/privacy' || hash === '#/privacy') {
+        return '/privacy';
+      }
+      if (path === '/terms' || hash === '#/terms') {
+        return '/terms';
       }
     }
     return '/';
@@ -61,8 +70,13 @@ export default function App() {
   useEffect(() => {
     const handlePopState = () => {
       const path = window.location.pathname;
-      if (path === '/prenota-call' || window.location.hash === '#/prenota-call') {
+      const hash = window.location.hash;
+      if (path === '/prenota-call' || hash === '#/prenota-call') {
         setCurrentRoute('/prenota-call');
+      } else if (path === '/privacy' || hash === '#/privacy') {
+        setCurrentRoute('/privacy');
+      } else if (path === '/terms' || hash === '#/terms') {
+        setCurrentRoute('/terms');
       } else {
         setCurrentRoute('/');
       }
@@ -445,7 +459,23 @@ export default function App() {
     setCurrentRoute('/prenota-call');
   };
 
-  // Ritorno dalla pagina pubblica /prenota-call all'app interna
+  // Navigazione alla pagina pubblica /privacy
+  const navigateToPrivacy = () => {
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', '/privacy');
+    }
+    setCurrentRoute('/privacy');
+  };
+
+  // Navigazione alla pagina pubblica /terms
+  const navigateToTerms = () => {
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', '/terms');
+    }
+    setCurrentRoute('/terms');
+  };
+
+  // Ritorno dalle pagine pubbliche all'app interna
   const navigateBackToApp = () => {
     if (typeof window !== 'undefined') {
       window.history.pushState({}, '', '/');
@@ -1546,7 +1576,7 @@ export default function App() {
         />
       )}
 
-      {/* 2. ROTTA PUBBLICA ESTERNA /prenota-call (Form univoco per ogni gruppo) */}
+      {/* 2. ROTTE PUBBLICHE ESTERNE (/prenota-call, /privacy, /terms) */}
       {currentRoute === '/prenota-call' ? (
         <PublicBookingForm
           groups={groups}
@@ -1554,6 +1584,10 @@ export default function App() {
           onSubmitRequest={handleClientRequestSubmit}
           onBackToApp={navigateBackToApp}
         />
+      ) : currentRoute === '/privacy' ? (
+        <PrivacyPolicyView onBackToApp={navigateBackToApp} />
+      ) : currentRoute === '/terms' ? (
+        <TermsOfServiceView onBackToApp={navigateBackToApp} />
       ) : !currentUser ? (
         /* 3. SCHERMATA LOGIN / REGISTRAZIONE (Intravista subito dallo sfondo semi-trasparente) */
         <AuthScreen
@@ -1563,6 +1597,8 @@ export default function App() {
           onGoogleAuthCode={handleGoogleAuthCode}
           onOpenPublicBooking={navigateToPublicBooking}
           pendingInviteCode={pendingInviteCode}
+          onOpenPrivacy={navigateToPrivacy}
+          onOpenTerms={navigateToTerms}
         />
       ) : (
         /* 4. DASHBOARD APPLICATIVA (Intravista subito dallo sfondo se utente autenticato) */
@@ -1678,6 +1714,8 @@ export default function App() {
                     onLogout={handleLogout}
                     onUpdateUserRole={handleUpdateUserRole}
                     onUpdateUserProfile={handleUpdateUserProfile}
+                    onNavigateToPrivacy={navigateToPrivacy}
+                    onNavigateToTerms={navigateToTerms}
                   />
                 )}
               </>
@@ -1771,6 +1809,8 @@ export default function App() {
                     onLogout={handleLogout}
                     onUpdateUserRole={handleUpdateUserRole}
                     onUpdateUserProfile={handleUpdateUserProfile}
+                    onNavigateToPrivacy={navigateToPrivacy}
+                    onNavigateToTerms={navigateToTerms}
                   />
                 )}
               </>
