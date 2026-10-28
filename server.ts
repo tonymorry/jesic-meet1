@@ -11,6 +11,7 @@
  * - Configurazione pronta per il deploy su Render (NODE_ENV=production -> dist static files)
  */
 
+import http from 'http';
 import express, { Request, Response } from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -18,6 +19,41 @@ import cors from 'cors';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
+import { WebSocketServer, WebSocket } from 'ws';
+
+// Gestione WebSocket per aggiornamenti istantanei in tempo reale (Chat, Nuovi Membri, Presenza, Eventi, Ruoli)
+let wss: WebSocketServer | null = null;
+const activeClientSockets = new Map<WebSocket, { userId?: string; userName?: string }>();
+
+export function broadcastOnlinePresence() {
+  if (!wss) return;
+  const onlineUserIds = Array.from(
+    new Set(
+      Array.from(activeClientSockets.values())
+        .map((u) => u.userId)
+        .filter(Boolean) as string[]
+    )
+  );
+  broadcastRealtimeEvent('presence:sync', { onlineUserIds });
+}
+
+export function broadcastRealtimeEvent(event: string, payload: any) {
+  if (!wss) return;
+  const message = JSON.stringify({
+    event,
+    payload,
+    timestamp: new Date().toISOString(),
+  });
+  wss.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      try {
+        client.send(message);
+      } catch (err) {
+        console.warn('Errore broadcast WebSocket:', err);
+      }
+    }
+  });
+}
 
 import {
   UserModel,
@@ -485,21 +521,25 @@ app.post('/api/groups', async (req: Request, res: Response) => {
 
     console.log(`[MongoDB] Gruppo "${newGroupDoc.name}" creato con successo. Codice: ${newGroupDoc.code}, ID: ${newGroupDoc._id}`);
 
+    const mappedCreatedGroup = {
+      id: newGroupDoc._id || newGroupDoc.id,
+      name: newGroupDoc.name,
+      description: newGroupDoc.description,
+      code: newGroupDoc.code,
+      inviteLink: newGroupDoc.inviteLink,
+      creatorId: newGroupDoc.creatorId,
+      members: newGroupDoc.members,
+      avatar: newGroupDoc.avatar,
+      isPublic: newGroupDoc.isPublic ?? false,
+      createdAt: newGroupDoc.createdAt,
+      updatedAt: newGroupDoc.updatedAt,
+    };
+
+    broadcastRealtimeEvent('group:created', { group: mappedCreatedGroup });
+
     return res.status(201).json({
       success: true,
-      group: {
-        id: newGroupDoc._id || newGroupDoc.id,
-        name: newGroupDoc.name,
-        description: newGroupDoc.description,
-        code: newGroupDoc.code,
-        inviteLink: newGroupDoc.inviteLink,
-        creatorId: newGroupDoc.creatorId,
-        members: newGroupDoc.members,
-        avatar: newGroupDoc.avatar,
-        isPublic: newGroupDoc.isPublic ?? false,
-        createdAt: newGroupDoc.createdAt,
-        updatedAt: newGroupDoc.updatedAt,
-      },
+      group: mappedCreatedGroup,
     });
   } catch (err: any) {
     console.error('Errore creazione GroupModel MongoDB:', err.message);
@@ -597,22 +637,31 @@ app.post('/api/groups/join', async (req: Request, res: Response) => {
 
     console.log(`[MongoDB] Utente ${userId} unito con successo al gruppo "${group.name}" (Codice: ${group.code})`);
 
+    const mappedJoinedGroup = {
+      id: group._id || group.id,
+      name: group.name,
+      description: group.description,
+      code: group.code,
+      inviteLink: `/join/${group.code}`,
+      creatorId: group.creatorId,
+      members: group.members,
+      subgroups: group.subgroups || [],
+      avatar: group.avatar,
+      isPublic: group.isPublic ?? false,
+      createdAt: group.createdAt,
+      updatedAt: group.updatedAt,
+    };
+
+    broadcastRealtimeEvent('group:member_joined', {
+      groupId: mappedJoinedGroup.id,
+      userId,
+      group: mappedJoinedGroup,
+    });
+
     return res.json({
       success: true,
       message: isMember ? 'Sei già membro di questo gruppo!' : 'Sei entrato nel gruppo con successo!',
-      group: {
-        id: group._id || group.id,
-        name: group.name,
-        description: group.description,
-        code: group.code,
-        inviteLink: `/join/${group.code}`,
-        creatorId: group.creatorId,
-        members: group.members,
-        avatar: group.avatar,
-        isPublic: group.isPublic ?? false,
-        createdAt: group.createdAt,
-        updatedAt: group.updatedAt,
-      },
+      group: mappedJoinedGroup,
     });
   } catch (err: any) {
     console.error('Errore join GroupModel MongoDB:', err.message);
@@ -669,11 +718,18 @@ app.post('/api/groups/:id/join-public', async (req: Request, res: Response) => {
       inviteLink: group.inviteLink,
       creatorId: group.creatorId,
       members: group.members,
+      subgroups: group.subgroups || [],
       avatar: group.avatar,
       isPublic: group.isPublic ?? false,
       createdAt: group.createdAt,
       updatedAt: group.updatedAt,
     };
+
+    broadcastRealtimeEvent('group:member_joined', {
+      groupId: mappedGroup.id,
+      userId,
+      group: mappedGroup,
+    });
 
     return res.json({
       success: true,
@@ -743,11 +799,14 @@ app.patch('/api/groups/:id', async (req: Request, res: Response) => {
       inviteLink: group.inviteLink,
       creatorId: group.creatorId,
       members: group.members,
+      subgroups: group.subgroups || [],
       avatar: group.avatar,
       isPublic: group.isPublic ?? false,
       createdAt: group.createdAt,
       updatedAt: group.updatedAt,
     };
+
+    broadcastRealtimeEvent('group:updated', { groupId: mappedGroup.id, group: mappedGroup });
 
     return res.json({ success: true, message: 'Gruppo aggiornato con successo in MongoDB', group: mappedGroup });
   } catch (err: any) {
@@ -775,6 +834,7 @@ app.delete('/api/groups/:id', async (req: Request, res: Response) => {
     }
 
     await GroupModel.deleteOne({ $or: [{ _id: id }, { id }] });
+    broadcastRealtimeEvent('group:deleted', { groupId: id });
     return res.json({ success: true, message: 'Gruppo eliminato definitivamente con successo da MongoDB' });
   } catch (err: any) {
     console.error('Errore eliminazione GroupModel MongoDB:', err.message);
@@ -815,10 +875,13 @@ const handleRemoveMemberFromGroup = async (req: Request, res: Response) => {
       inviteLink: group.inviteLink,
       creatorId: group.creatorId,
       members: group.members,
+      subgroups: group.subgroups || [],
       avatar: group.avatar,
       createdAt: group.createdAt,
       updatedAt: group.updatedAt,
     };
+
+    broadcastRealtimeEvent('group:member_removed', { groupId: id, memberId, group: mappedGroup });
 
     return res.json({ success: true, message: 'Membro rimosso con successo dal gruppo in MongoDB', group: mappedGroup });
   } catch (err: any) {
@@ -899,6 +962,8 @@ const handleUpdateGroupMemberRole = async (req: Request, res: Response) => {
       createdAt: group.createdAt,
       updatedAt: group.updatedAt,
     };
+
+    broadcastRealtimeEvent('group:member_role_updated', { groupId: id, memberId, role, group: mappedGroup });
 
     return res.json({ success: true, message: 'Ruolo del membro aggiornato con successo', group: mappedGroup });
   } catch (err: any) {
@@ -982,6 +1047,12 @@ app.post('/api/groups/:id/subgroups', async (req: Request, res: Response) => {
       updatedAt: group.updatedAt,
     };
 
+    broadcastRealtimeEvent('group:subgroups_updated', {
+      groupId: mappedGroup.id,
+      group: mappedGroup,
+      subgroups: group.subgroups,
+    });
+
     return res.status(201).json({
       success: true,
       message: 'Sottogruppo creato con successo in MongoDB',
@@ -1049,6 +1120,12 @@ app.post('/api/groups/:id/subgroups/:subgroupId/join', async (req: Request, res:
       updatedAt: group.updatedAt,
     };
 
+    broadcastRealtimeEvent('group:subgroups_updated', {
+      groupId: mappedGroup.id,
+      group: mappedGroup,
+      subgroups: group.subgroups,
+    });
+
     return res.json({
       success: true,
       message: 'Accesso al sottogruppo effettuato con successo!',
@@ -1101,6 +1178,12 @@ app.delete('/api/groups/:id/subgroups/:subgroupId', async (req: Request, res: Re
       createdAt: group.createdAt,
       updatedAt: group.updatedAt,
     };
+
+    broadcastRealtimeEvent('group:subgroups_updated', {
+      groupId: mappedGroup.id,
+      group: mappedGroup,
+      subgroups: group.subgroups,
+    });
 
     return res.json({
       success: true,
@@ -1169,6 +1252,12 @@ app.patch('/api/groups/:id/subgroups/:subgroupId', async (req: Request, res: Res
       createdAt: group.createdAt,
       updatedAt: group.updatedAt,
     };
+
+    broadcastRealtimeEvent('group:subgroups_updated', {
+      groupId: mappedGroup.id,
+      group: mappedGroup,
+      subgroups: group.subgroups,
+    });
 
     return res.json({
       success: true,
@@ -1269,6 +1358,12 @@ app.post('/api/groups/:id/chat', async (req: Request, res: Response) => {
       createdAt: created.createdAt,
     };
 
+    broadcastRealtimeEvent('chat:message_created', {
+      groupId: id,
+      subgroupId: cleanSubgroupId,
+      message: mapped,
+    });
+
     return res.status(201).json({ success: true, message: mapped });
   } catch (err: any) {
     console.error('Errore invio messaggio chat MongoDB:', err.message);
@@ -1320,6 +1415,12 @@ app.patch('/api/groups/:id/chat/:messageId', async (req: Request, res: Response)
       createdAt: msg.createdAt,
     };
 
+    broadcastRealtimeEvent('chat:message_updated', {
+      groupId: id,
+      subgroupId: msg.subgroupId || null,
+      message: mapped,
+    });
+
     return res.json({ success: true, message: mapped });
   } catch (err: any) {
     console.error('Errore modifica messaggio chat MongoDB:', err.message);
@@ -1356,7 +1457,14 @@ app.delete('/api/groups/:id/chat/:messageId', async (req: Request, res: Response
       }
     }
 
+    const subgroupId = msg.subgroupId || null;
     await ChatMessageModel.deleteOne({ _id: msg._id });
+
+    broadcastRealtimeEvent('chat:message_deleted', {
+      groupId: id,
+      subgroupId,
+      messageId,
+    });
 
     return res.json({
       success: true,
@@ -2331,6 +2439,42 @@ app.post('/api/client-requests/:id/confirm-final', async (req: Request, res: Res
    CONFIGURAZIONE PRONTA PER IL DEPLOY SU RENDER
    ========================================================================== */
 async function startServer() {
+  const server = http.createServer(app);
+
+  // Inizializza WebSocketServer sul percorso /ws condiviso sulla stessa porta 3000
+  wss = new WebSocketServer({ server, path: '/ws' });
+
+  wss.on('connection', (ws) => {
+    activeClientSockets.set(ws, {});
+    ws.send(JSON.stringify({ event: 'connected', payload: { time: new Date().toISOString() } }));
+    broadcastOnlinePresence();
+
+    ws.on('message', (msg) => {
+      try {
+        const parsed = JSON.parse(msg.toString());
+        if (parsed.event === 'ping') {
+          ws.send(JSON.stringify({ event: 'pong' }));
+        } else if (parsed.event === 'identify') {
+          activeClientSockets.set(ws, {
+            userId: parsed.payload?.userId,
+            userName: parsed.payload?.userName,
+          });
+          broadcastOnlinePresence();
+        }
+      } catch {}
+    });
+
+    ws.on('close', () => {
+      activeClientSockets.delete(ws);
+      broadcastOnlinePresence();
+    });
+
+    ws.on('error', () => {
+      activeClientSockets.delete(ws);
+      broadcastOnlinePresence();
+    });
+  });
+
   if (process.env.NODE_ENV === 'production') {
     // In produzione (Render) Express serve i file statici compilati da Vite nella cartella dist
     const distPath = path.resolve(__dirname, 'dist');
@@ -2347,8 +2491,8 @@ async function startServer() {
     app.use(vite.middlewares);
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 JESic Meet Server attivo su http://0.0.0.0:${PORT} [NODE_ENV=${process.env.NODE_ENV || 'development'}]`);
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 JESic Meet Server attivo su http://0.0.0.0:${PORT} con WebSocket su /ws [NODE_ENV=${process.env.NODE_ENV || 'development'}]`);
   });
 }
 
