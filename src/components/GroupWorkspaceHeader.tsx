@@ -263,15 +263,15 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
 
   return (
     <>
-      <div className="bg-white dark:bg-neutral-900 border-b border-neutral-200/90 dark:border-neutral-800 shadow-2xs transition-colors mb-4 rounded-3xl p-4 sm:p-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          {/* Tasto Torna Indietro + Avatar + Nome Gruppo o Sottogruppo + Ruolo */}
-          <div className="flex items-start sm:items-center gap-3 min-w-0">
+      <div className="bg-white dark:bg-neutral-900 border-b border-neutral-200/90 dark:border-neutral-800 shadow-2xs transition-colors mb-3 sm:mb-4 rounded-2xl sm:rounded-3xl p-2.5 sm:p-5">
+        <div className="flex items-center justify-between gap-2">
+          {/* Tasto Torna Indietro + Avatar + (Nome Gruppo + Ruolo sotto) */}
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
             {/* Tasto Freccetta: se dentro un sottogruppo torna al gruppo principale, se nel gruppo principale torna a I Tuoi Gruppi (senza testo, solo freccia) */}
             <button
               type="button"
               onClick={activeSubgroup ? (onBackToMainGroup || onBackToGroups) : onBackToGroups}
-              className="p-2 rounded-2xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-[#f23e2e] transition-all flex items-center justify-center cursor-pointer active:scale-95 shrink-0"
+              className="p-1.5 sm:p-2 rounded-xl sm:rounded-2xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-[#f23e2e] transition-all flex items-center justify-center cursor-pointer active:scale-95 shrink-0"
               title={
                 activeSubgroup
                   ? `Torna al gruppo principale "${activeGroup.name}"`
@@ -279,19 +279,22 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
               }
               aria-label="Torna indietro"
             >
-              <ArrowLeft className="w-4 h-4 stroke-[2.5px]" />
+              <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5px]" />
             </button>
 
-            <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
               {/* Avatar Icona o Immagine: del Sottogruppo se attivo, altrimenti del Gruppo Principale */}
-              <GroupAvatar
-                avatar={activeSubgroup ? (activeSubgroup.avatar || '📁') : (activeGroup.avatar || '👥')}
-                name={activeSubgroup ? activeSubgroup.name : activeGroup.name}
-                size="md"
-                fallbackEmoji={activeSubgroup ? '📁' : '👥'}
-              />
+              <div className="shrink-0">
+                <GroupAvatar
+                  avatar={activeSubgroup ? (activeSubgroup.avatar || '📁') : (activeGroup.avatar || '👥')}
+                  name={activeSubgroup ? activeSubgroup.name : activeGroup.name}
+                  size="sm"
+                  className="sm:w-10 sm:h-10 sm:text-xl"
+                  fallbackEmoji={activeSubgroup ? '📁' : '👥'}
+                />
+              </div>
 
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 {/* Nome & Azioni Modifica Inline */}
                 {isEditingName ? (
                   <form onSubmit={handleSaveName} className="flex items-center gap-1.5 py-0.5">
@@ -301,15 +304,15 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
                       onChange={(e) => setNewName(e.target.value)}
                       disabled={isSavingName}
                       autoFocus
-                      className="text-sm sm:text-base font-black px-2.5 py-1 rounded-xl border-2 border-[#f23e2e] bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white focus:outline-none"
+                      className="text-xs sm:text-base font-black px-2 py-0.5 rounded-lg border-2 border-[#f23e2e] bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white focus:outline-none min-w-0 w-full"
                     />
                     <button
                       type="submit"
                       disabled={isSavingName || !newName.trim()}
-                      className="p-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-xs disabled:opacity-50"
+                      className="p-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-xs disabled:opacity-50 shrink-0"
                       title="Salva nuovo nome"
                     >
-                      <Check className="w-4 h-4" />
+                      <Check className="w-3.5 h-3.5" />
                     </button>
                     <button
                       type="button"
@@ -317,15 +320,18 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
                         setIsEditingName(false);
                         setNewName(activeSubgroup ? activeSubgroup.name : activeGroup.name);
                       }}
-                      className="p-1.5 rounded-xl bg-neutral-200 hover:bg-neutral-300 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 cursor-pointer"
+                      className="p-1 rounded-lg bg-neutral-200 hover:bg-neutral-300 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 cursor-pointer shrink-0"
                       title="Annulla modifica"
                     >
-                      <X className="w-4 h-4" />
+                      <X className="w-3.5 h-3.5" />
                     </button>
                   </form>
                 ) : (
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h2 className="text-base sm:text-lg font-black text-neutral-900 dark:text-white truncate leading-tight">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <h2
+                      title={activeSubgroup ? activeSubgroup.name : activeGroup.name}
+                      className="text-xs sm:text-base font-black text-neutral-900 dark:text-white truncate leading-tight min-w-0"
+                    >
                       {activeSubgroup ? activeSubgroup.name : activeGroup.name}
                     </h2>
 
@@ -337,10 +343,10 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
                           setNewName(activeSubgroup ? activeSubgroup.name : activeGroup.name);
                           setIsEditingName(true);
                         }}
-                        className="p-1 rounded-lg text-neutral-400 hover:text-[#f23e2e] hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+                        className="p-0.5 sm:p-1 rounded-md text-neutral-400 hover:text-[#f23e2e] hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer shrink-0"
                         title={activeSubgroup ? 'Rinomina sottogruppo' : 'Modifica nome gruppo'}
                       >
-                        <Edit2 className="w-3.5 h-3.5" />
+                        <Edit2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                       </button>
                     )}
 
@@ -349,17 +355,17 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
                       <button
                         type="button"
                         onClick={handleOpenCustomizeSubgroup}
-                        className="p-1 rounded-lg text-neutral-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/40 transition-colors cursor-pointer"
+                        className="p-0.5 sm:p-1 rounded-md text-neutral-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/40 transition-colors cursor-pointer shrink-0"
                         title="Personalizza sottogruppo (Icona, Descrizione, Privacy)"
                       >
-                        <Settings className="w-3.5 h-3.5" />
+                        <Settings className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                       </button>
                     )}
 
                     {/* Badge Privacy: solo icona lucchetto o globo */}
                     <span
                       title={isCurrentPublic ? 'Pubblico' : 'Privato'}
-                      className={`text-xs px-1.5 py-0.5 rounded-full shrink-0 flex items-center justify-center border ${
+                      className={`text-[10px] sm:text-xs px-1 sm:px-1.5 py-0.2 sm:py-0.5 rounded-full shrink-0 flex items-center justify-center border ${
                         isCurrentPublic
                           ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border-emerald-300/80 dark:border-emerald-800/60'
                           : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
@@ -371,13 +377,13 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
                 )}
 
                 {/* SOTTO IL NOME: Solo il badge ruolo e, se in sottogruppo, il link al gruppo principale (senza etichette di testo) */}
-                <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                <div className="flex items-center gap-1 sm:gap-2 mt-0.5 min-w-0 truncate">
                   {activeSubgroup && (
-                    <div className="flex items-center gap-1 text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">
+                    <div className="flex items-center gap-1 text-[10px] sm:text-[11px] font-semibold text-neutral-500 dark:text-neutral-400 shrink-0">
                       <button
                         type="button"
                         onClick={onBackToMainGroup}
-                        className="font-bold text-[#f23e2e] hover:underline cursor-pointer"
+                        className="font-bold text-[#f23e2e] hover:underline cursor-pointer truncate max-w-[80px] sm:max-w-none"
                         title={`Vai a ${activeGroup.name}`}
                       >
                         {activeGroup.name}
@@ -387,7 +393,7 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
                   )}
 
                   <span
-                    className={`inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${roleMeta.badgeClass}`}
+                    className={`inline-flex items-center gap-1 text-[8.5px] sm:text-[10px] font-black uppercase tracking-wider px-1.5 sm:px-2 py-0.2 sm:py-0.5 rounded-full border shrink-0 ${roleMeta.badgeClass}`}
                   >
                     <span>{roleMeta.icon}</span>
                     <span>{roleMeta.label}</span>
@@ -397,18 +403,18 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
             </div>
           </div>
 
-          {/* Azioni: Semplificato in UN UNICO PULSANTE Membri (piccola icona con numero a fianco) */}
-          <div className="flex items-center gap-2 self-end sm:self-center shrink-0 flex-wrap">
+          {/* Azioni: Semplificato in UN UNICO PULSANTE Membri (piccola icona con numero a fianco) + eventuale cestino */}
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             {/* Tasto Membri: solo piccola icona con il numero nei membri di fianco */}
             <button
               type="button"
               onClick={onOpenMembersModal}
-              className="px-2.5 py-1.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95 shrink-0"
+              className="px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 text-[11px] sm:text-xs font-bold transition-all flex items-center gap-1 sm:gap-1.5 cursor-pointer shadow-2xs active:scale-95 shrink-0"
               title="Visualizza Membri, Codice e Link"
               aria-label={`Membri: ${activeSubgroup ? (activeSubgroup.members?.length || 1) : activeGroup.members.length}`}
             >
-              <Users className="w-3.5 h-3.5 text-[#f23e2e]" />
-              <span className="font-mono font-bold text-xs">
+              <Users className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#f23e2e]" />
+              <span className="font-mono font-bold text-[11px] sm:text-xs">
                 {activeSubgroup ? (activeSubgroup.members?.length || 1) : activeGroup.members.length}
               </span>
             </button>
@@ -418,11 +424,11 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
               <button
                 type="button"
                 onClick={() => setShowDeleteConfirm(true)}
-                className="p-2 rounded-xl bg-red-50 hover:bg-red-100 dark:bg-red-950/50 dark:hover:bg-red-900/60 text-red-600 dark:text-red-400 text-xs font-bold transition-all cursor-pointer shadow-2xs active:scale-95 border border-red-200/50 dark:border-red-900/40 shrink-0"
+                className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-red-50 hover:bg-red-100 dark:bg-red-950/50 dark:hover:bg-red-900/60 text-red-600 dark:text-red-400 text-xs font-bold transition-all cursor-pointer shadow-2xs active:scale-95 border border-red-200/50 dark:border-red-900/40 shrink-0"
                 title={activeSubgroup ? 'Elimina questo sottogruppo' : 'Elimina questo gruppo'}
                 aria-label="Elimina"
               >
-                <Trash2 className="w-4 h-4" />
+                <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </button>
             )}
           </div>
