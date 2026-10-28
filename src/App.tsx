@@ -13,6 +13,8 @@ import {
   ClientRequest,
   Group,
   AppRole,
+  GroupMemberRole,
+  Subgroup,
 } from './types';
 import { isEventPassed } from './utils/dateUtils';
 import { AuthScreen } from './components/AuthScreen';
@@ -26,6 +28,8 @@ import { GroupsHubView } from './components/GroupsHubView';
 import { PollsHubView } from './components/PollsHubView';
 import { GroupWorkspaceHeader } from './components/GroupWorkspaceHeader';
 import { GroupMembersModal } from './components/GroupMembersModal';
+import { SubgroupsDrawer } from './components/SubgroupsDrawer';
+import { GroupChatView } from './components/GroupChatView';
 import { CreateEventModal, PreFillClientData } from './components/CreateEventModal';
 import { CreateOfficialEventModal } from './components/CreateOfficialEventModal';
 import { CreateActionChoiceModal } from './components/CreateActionChoiceModal';
@@ -179,6 +183,14 @@ export default function App() {
 
   const activeGroup = groups.find((g) => g.id === activeGroupId) || null;
   const isInsideGroup = Boolean(activeGroup);
+
+  // Sottogruppo Attivo (null = Gruppo Principale / Generale)
+  const [activeSubgroupId, setActiveSubgroupId] = useState<string | null>(null);
+  const [isSubgroupsDrawerOpen, setIsSubgroupsDrawerOpen] = useState(false);
+
+  // Sottogruppo selezionato corrente
+  const activeSubgroup: Subgroup | null =
+    activeGroup?.subgroups?.find((s) => s.id === activeSubgroupId) || null;
 
   // Modale Membri del Gruppo
   const [isGroupMembersModalOpen, setIsGroupMembersModalOpen] = useState(false);
@@ -720,6 +732,7 @@ export default function App() {
   const handleLogout = () => {
     setCurrentUser(null);
     setActiveGroupId(null);
+    setActiveSubgroupId(null);
     setCurrentTab('groups');
   };
 
@@ -773,11 +786,13 @@ export default function App() {
   // GESTIONE GRUPPI
   const handleSelectGroup = (group: Group) => {
     setActiveGroupId(group.id);
+    setActiveSubgroupId(null);
     setCurrentTab('dashboard');
   };
 
   const handleBackToGroups = () => {
     setActiveGroupId(null);
+    setActiveSubgroupId(null);
     setCurrentTab('groups');
   };
 
@@ -1043,7 +1058,7 @@ export default function App() {
 
   const handleUpdateMemberRole = async (
     memberId: string,
-    newRole: 'member' | 'admin' | 'admin_clienti'
+    newRole: GroupMemberRole
   ) => {
     if (!currentUser || !activeGroup) return;
 
@@ -1052,6 +1067,17 @@ export default function App() {
     );
     const updatedGroup: Group = { ...activeGroup, members: updatedMembers };
     setGroups((prev) => prev.map((g) => (g.id === activeGroup.id ? updatedGroup : g)));
+
+    if (currentUser.id === memberId) {
+      setCurrentUser((prev) => {
+        if (!prev) return prev;
+        const currentMemberships = prev.groupMemberships || [];
+        const updated = currentMemberships.map((m) =>
+          m.groupId === activeGroup.id ? { ...m, role: newRole } : m
+        );
+        return { ...prev, groupMemberships: updated };
+      });
+    }
 
     try {
       const res = await fetch(`/api/groups/${activeGroup.id}/members/${memberId}/role`, {
@@ -1067,6 +1093,78 @@ export default function App() {
       }
     } catch (e) {
       console.warn('[API update member role error]', e);
+    }
+  };
+
+  // GESTIONE SOTTOGRUPPI (CARTELLE)
+  const handleCreateSubgroup = async (name: string, description?: string) => {
+    if (!activeGroup || !currentUser) return;
+    try {
+      const res = await fetch(`/api/groups/${activeGroup.id}/subgroups`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim(),
+          description: description?.trim() || '',
+          requesterId: currentUser.id,
+          creatorId: currentUser.id,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.group) {
+        throw new Error(data?.error || 'Errore nella creazione del sottogruppo');
+      }
+      setGroups((prev) => prev.map((g) => (g.id === activeGroup.id ? data.group : g)));
+      if (data.subgroup) {
+        setActiveSubgroupId(data.subgroup.id);
+      }
+    } catch (err: any) {
+      console.error('[handleCreateSubgroup error]', err);
+      throw err;
+    }
+  };
+
+  const handleJoinSubgroup = async (
+    subgroupId: string,
+    code: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!activeGroup || !currentUser) return { success: false, error: 'Non autorizzato' };
+    try {
+      const res = await fetch(`/api/groups/${activeGroup.id}/subgroups/${subgroupId}/join`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: code.trim().toUpperCase(), userId: currentUser.id }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.group) {
+        return { success: false, error: data?.error || 'Codice errato. Riprova.' };
+      }
+      setGroups((prev) => prev.map((g) => (g.id === activeGroup.id ? data.group : g)));
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Errore durante l\'accesso al sottogruppo' };
+    }
+  };
+
+  const handleDeleteSubgroup = async (subgroupId: string) => {
+    if (!activeGroup || !currentUser) return;
+    try {
+      const res = await fetch(`/api/groups/${activeGroup.id}/subgroups/${subgroupId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requesterId: currentUser.id }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.group) {
+        throw new Error(data?.error || 'Errore nella cancellazione del sottogruppo');
+      }
+      setGroups((prev) => prev.map((g) => (g.id === activeGroup.id ? data.group : g)));
+      if (activeSubgroupId === subgroupId) {
+        setActiveSubgroupId(null);
+      }
+    } catch (err: any) {
+      console.error('[handleDeleteSubgroup error]', err);
+      throw err;
     }
   };
 
@@ -1623,6 +1721,8 @@ export default function App() {
             pendingClientRequestsCount={pendingClientRequestsCount}
             isInsideGroup={isInsideGroup}
             onBackToGroups={handleBackToGroups}
+            activeSubgroupName={activeSubgroup ? activeSubgroup.name : undefined}
+            onToggleSubgroupsMenu={() => setIsSubgroupsDrawerOpen(true)}
           />
 
           {/* Banner scorrevole rapido per aprire o testare la rotta esterna /prenota-call (Visibile SOLO all'interno del gruppo per Admin e Admin Clienti di questo gruppo) */}
@@ -1728,19 +1828,26 @@ export default function App() {
                 {/* Header dello Spazio di Lavoro Gruppo */}
                 <GroupWorkspaceHeader
                   activeGroup={activeGroup}
+                  activeSubgroup={activeSubgroup}
                   currentUser={currentUser}
                   allUsers={users}
                   onBackToGroups={handleBackToGroups}
                   onOpenMembersModal={() => setIsGroupMembersModalOpen(true)}
                   onUpdateGroupName={handleUpdateGroupName}
                   onDeleteGroup={handleDeleteGroup}
+                  onToggleSubgroupsMenu={() => setIsSubgroupsDrawerOpen(true)}
                 />
 
-                {/* 1. Sondaggi del Gruppo (ex Dashboard) */}
+                {/* 1. Sondaggi del Gruppo (filtrati per Sottogruppo / Cartella) */}
                 {currentTab === 'dashboard' && (
                   <Dashboard
                     currentUser={currentUser}
-                    allEvents={events.filter((e) => e.groupId === activeGroup.id)}
+                    allEvents={events.filter((e) =>
+                      e.groupId === activeGroup.id &&
+                      (activeSubgroupId
+                        ? e.subgroupId === activeSubgroupId
+                        : !e.subgroupId || e.subgroupId === null)
+                    )}
                     allResponses={responses}
                     allUsers={users}
                     onOpenEvent={(evt) => setSelectedEventId(evt.id)}
@@ -1783,7 +1890,7 @@ export default function App() {
                   />
                 )}
 
-                {/* 4. Calendario associato esclusivo del Gruppo (include eventi del gruppo e call B2B confermate) */}
+                {/* 4. Calendario associato esclusivo del Gruppo (CALENDARIO UNICO: include tutti gli eventi del gruppo e di tutti i suoi sottogruppi) */}
                 {currentTab === 'calendar' && (
                   <CalendarView
                     currentUser={currentUser}
@@ -1799,7 +1906,17 @@ export default function App() {
                   />
                 )}
 
-                {/* 5. Profilo (Dentro il Gruppo) */}
+                {/* 5. Chat del Gruppo (dedicata per Sottogruppo selezionato o Generale) */}
+                {currentTab === 'chat' && (
+                  <GroupChatView
+                    activeGroup={activeGroup}
+                    activeSubgroup={activeSubgroup}
+                    currentUser={currentUser}
+                    allUsers={users}
+                  />
+                )}
+
+                {/* 6. Profilo (Dentro il Gruppo se aperto da TopHeader) */}
                 {currentTab === 'profile' && (
                   <ProfileView
                     currentUser={currentUser}
@@ -1827,6 +1944,7 @@ export default function App() {
             isClientAdmin={isClientAdmin}
             pendingClientRequestsCount={pendingClientRequestsCount}
             isInsideGroup={isInsideGroup}
+            onToggleSubgroupsMenu={() => setIsSubgroupsDrawerOpen(true)}
           />
 
           {/* Modale Membri del Gruppo Attivo */}
@@ -1895,6 +2013,7 @@ export default function App() {
               eventToEdit={eventToEdit}
               onUpdateEvent={handleUpdatePollEvent}
               activeGroup={activeGroup || undefined}
+              activeSubgroup={activeSubgroup}
             />
           )}
 
@@ -1911,6 +2030,23 @@ export default function App() {
               eventToEdit={eventToEdit}
               onUpdateOfficialEvent={handleUpdateOfficialEvent}
               activeGroup={activeGroup || undefined}
+            />
+          )}
+
+          {/* Menu Drawer Sottogruppi / Cartelle (Accessibile da tasto 3 lineette a sinistra) */}
+          {isInsideGroup && activeGroup && (
+            <SubgroupsDrawer
+              isOpen={isSubgroupsDrawerOpen}
+              onClose={() => setIsSubgroupsDrawerOpen(false)}
+              activeGroup={activeGroup}
+              activeSubgroupId={activeSubgroupId}
+              onSelectSubgroup={(subgroupId) => {
+                setActiveSubgroupId(subgroupId);
+              }}
+              currentUser={currentUser}
+              onCreateSubgroup={handleCreateSubgroup}
+              onDeleteSubgroup={handleDeleteSubgroup}
+              onJoinSubgroup={handleJoinSubgroup}
             />
           )}
 

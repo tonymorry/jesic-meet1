@@ -7,7 +7,7 @@
  */
 
 import React, { useState } from 'react';
-import { Group, User } from '../types';
+import { Group, User, GroupMemberRole } from '../types';
 import { UserAvatar } from './UserAvatar';
 import {
   X,
@@ -29,7 +29,7 @@ export interface GroupMembersModalProps {
   onClose: () => void;
   onAddMemberEmail?: (email: string) => Promise<boolean>;
   onRemoveMember?: (memberId: string) => Promise<boolean | void>;
-  onUpdateMemberRole?: (memberId: string, newRole: 'member' | 'admin' | 'admin_clienti') => Promise<void> | void;
+  onUpdateMemberRole?: (memberId: string, newRole: GroupMemberRole) => Promise<void> | void;
 }
 
 export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
@@ -253,7 +253,7 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
                         value={membership.role}
                         disabled={updatingRoleId === membership.userId}
                         onChange={async (e) => {
-                          const newRole = e.target.value as 'member' | 'admin' | 'admin_clienti';
+                          const newRole = e.target.value as GroupMemberRole;
                           setUpdatingRoleId(membership.userId);
                           try {
                             await onUpdateMemberRole(membership.userId, newRole);
@@ -266,7 +266,9 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
                         }}
                         aria-label={`Ruolo di ${memberName}`}
                         className={`text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-xl cursor-pointer border outline-hidden transition-all ${
-                          membership.role === 'admin'
+                          membership.role === 'responsabile'
+                            ? 'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border-purple-300 dark:border-purple-800'
+                            : membership.role === 'admin'
                             ? 'bg-red-50 dark:bg-red-950/60 text-[#f23e2e] border-red-300 dark:border-red-800'
                             : membership.role === 'admin_clienti'
                             ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-800'
@@ -274,6 +276,7 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
                         }`}
                       >
                         <option value="member">👤 Membro (Solo Sondaggi)</option>
+                        <option value="responsabile">⭐ Responsabile (+ Crea Sottogruppi)</option>
                         <option value="admin">⚡ Admin (+ Eventi Ufficiali)</option>
                         <option value="admin_clienti">🏢 Admin Clienti (+ Form B2B & Richieste)</option>
                       </select>
@@ -282,6 +285,8 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
                         className={`text-[9px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full shrink-0 ${
                           isGroupCreator
                             ? 'bg-red-100 dark:bg-red-950/60 text-[#f23e2e] border border-red-200/60 dark:border-red-900/40'
+                            : membership.role === 'responsabile'
+                            ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200/60 dark:border-purple-800'
                             : isGroupAdmin
                             ? 'bg-red-100 dark:bg-red-950/60 text-[#f23e2e]'
                             : isGroupAdminClienti
@@ -289,7 +294,15 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
                             : 'bg-neutral-100 dark:bg-neutral-700/60 text-neutral-600 dark:text-neutral-300'
                         }`}
                       >
-                        {isGroupCreator ? '👑 Creatore' : isGroupAdmin ? '⚡ Admin' : isGroupAdminClienti ? '🏢 Admin Clienti' : '👤 Membro'}
+                        {isGroupCreator
+                          ? '👑 Creatore'
+                          : membership.role === 'responsabile'
+                          ? '⭐ Responsabile'
+                          : isGroupAdmin
+                          ? '⚡ Admin'
+                          : isGroupAdminClienti
+                          ? '🏢 Admin Clienti'
+                          : '👤 Membro'}
                       </span>
                     )}
 

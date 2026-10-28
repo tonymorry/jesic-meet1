@@ -10,7 +10,7 @@
  */
 
 import React, { useState } from 'react';
-import { Group, User } from '../types';
+import { Group, User, Subgroup } from '../types';
 import {
   ArrowLeft,
   Users,
@@ -21,24 +21,30 @@ import {
   X,
   AlertTriangle,
   Link2,
+  FolderOpen,
+  Menu,
 } from 'lucide-react';
 
 export interface GroupWorkspaceHeaderProps {
   activeGroup: Group;
+  activeSubgroup?: Subgroup | null;
   currentUser: User;
   allUsers: User[];
   onBackToGroups: () => void;
   onOpenMembersModal: () => void;
+  onToggleSubgroupsMenu?: () => void;
   onUpdateGroupName?: (groupId: string, newName: string) => Promise<boolean | void>;
   onDeleteGroup?: (groupId: string) => Promise<boolean | void>;
 }
 
 export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
   activeGroup,
+  activeSubgroup,
   currentUser,
   allUsers,
   onBackToGroups,
   onOpenMembersModal,
+  onToggleSubgroupsMenu,
   onUpdateGroupName,
   onDeleteGroup,
 }) => {
@@ -69,6 +75,7 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
   const currentGroupRole = userMembership?.role || (isGroupCreator ? 'admin' : 'member');
   const isGroupAdmin = isGroupCreator || currentGroupRole === 'admin';
   const isGroupAdminClienti = currentGroupRole === 'admin_clienti';
+  const isGroupResponsabile = isGroupCreator || currentGroupRole === 'responsabile';
   const canManageGroup = isGroupAdmin || isGroupAdminClienti;
   const isCreator = isGroupAdmin;
 
@@ -170,24 +177,6 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
                         <Edit2 className="w-3.5 h-3.5" />
                       </button>
                     )}
-                    {/* Badge Ruolo dell'Utente in questo Gruppo */}
-                    <span
-                      className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1 ${
-                        isGroupAdmin
-                          ? 'bg-red-100 dark:bg-red-950/60 text-[#f23e2e] border border-red-200/60 dark:border-red-900/40'
-                          : isGroupAdminClienti
-                          ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200/60 dark:border-amber-900/40'
-                          : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400'
-                      }`}
-                    >
-                      {isGroupCreator
-                        ? '👑 Creatore'
-                        : isGroupAdmin
-                        ? '⚡ Admin Gruppo'
-                        : isGroupAdminClienti
-                        ? '🏢 Admin Clienti Gruppo'
-                        : '👤 Membro'}
-                    </span>
                     <span
                       className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1 border ${
                         activeGroup.isPublic
@@ -199,9 +188,6 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
                     </span>
                   </div>
                 )}
-                <p className="text-[11px] text-neutral-500 dark:text-neutral-400 truncate">
-                  Spazio di lavoro condiviso del gruppo &bull; {activeGroup.members.length} {activeGroup.members.length === 1 ? 'membro' : 'membri'}
-                </p>
               </div>
             </div>
           </div>

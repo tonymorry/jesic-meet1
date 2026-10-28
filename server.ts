@@ -28,6 +28,7 @@ import {
   OfficialEventModel,
   ClientRequestModel,
   EventResponseModel,
+  ChatMessageModel,
   UserRole,
 } from './src/models/schemas';
 import {
@@ -50,7 +51,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+// AI Studio dev environment requires port 3000 (port 8080 is reserved by the container proxy).
+// In production (e.g. Render), process.env.PORT is used if specified.
+const PORT = process.env.NODE_ENV === 'production' && process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -409,6 +412,7 @@ app.get('/api/groups', async (req: Request, res: Response) => {
       inviteLink: g.inviteLink,
       creatorId: g.creatorId,
       members: g.members,
+      subgroups: g.subgroups || [],
       avatar: g.avatar,
       isPublic: g.isPublic ?? false,
       createdAt: g.createdAt,
@@ -826,14 +830,14 @@ const handleRemoveMemberFromGroup = async (req: Request, res: Response) => {
 app.delete('/api/groups/:id/members/:memberId', handleRemoveMemberFromGroup);
 app.post('/api/groups/:id/members/:memberId/remove', handleRemoveMemberFromGroup);
 
-// PATCH /api/groups/:id/members/:memberId/role - Modifica ruolo membro (Gerarchia: 'member' | 'admin' | 'admin_clienti')
+// PATCH /api/groups/:id/members/:memberId/role - Modifica ruolo membro (Gerarchia: 'member' | 'admin' | 'admin_clienti' | 'responsabile')
 const handleUpdateGroupMemberRole = async (req: Request, res: Response) => {
   const { id, memberId } = req.params;
   const { role, requesterId } = req.body;
 
-  const validRoles = ['member', 'admin', 'admin_clienti'];
+  const validRoles = ['member', 'admin', 'admin_clienti', 'responsabile'];
   if (!validRoles.includes(role)) {
-    return res.status(400).json({ error: "Il ruolo deve essere 'member', 'admin' o 'admin_clienti'" });
+    return res.status(400).json({ error: "Il ruolo deve essere 'member', 'admin', 'admin_clienti' o 'responsabile'" });
   }
 
   try {
@@ -859,7 +863,27 @@ const handleUpdateGroupMemberRole = async (req: Request, res: Response) => {
     }
 
     group.members[memberIndex].role = role;
+    group.markModified('members');
     await group.save();
+
+    // Sincronizza il ruolo anche dentro UserModel in MongoDB
+    try {
+      const userDoc = await UserModel.findOne({ $or: [{ _id: memberId }, { id: memberId }] });
+      if (userDoc) {
+        if (!userDoc.groupMemberships) userDoc.groupMemberships = [];
+        const targetGid = String(group._id || group.id);
+        const mIdx = userDoc.groupMemberships.findIndex((gm: any) => String(gm.groupId) === targetGid);
+        if (mIdx !== -1) {
+          userDoc.groupMemberships[mIdx].role = role;
+        } else {
+          userDoc.groupMemberships.push({ groupId: targetGid, role });
+        }
+        userDoc.markModified('groupMemberships');
+        await userDoc.save();
+      }
+    } catch (errSync) {
+      console.warn('Sync UserModel role notice:', errSync);
+    }
 
     const mappedGroup = {
       id: group._id || group.id,
@@ -869,7 +893,9 @@ const handleUpdateGroupMemberRole = async (req: Request, res: Response) => {
       inviteLink: group.inviteLink,
       creatorId: group.creatorId,
       members: group.members,
+      subgroups: group.subgroups || [],
       avatar: group.avatar,
+      isPublic: group.isPublic ?? false,
       createdAt: group.createdAt,
       updatedAt: group.updatedAt,
     };
@@ -883,6 +909,294 @@ const handleUpdateGroupMemberRole = async (req: Request, res: Response) => {
 
 app.patch('/api/groups/:id/members/:memberId/role', handleUpdateGroupMemberRole);
 app.post('/api/groups/:id/members/:memberId/role', handleUpdateGroupMemberRole);
+
+/* ==========================================================================
+   3.1 SUBGROUPS API (Sottogruppi / Cartelle - Esclusivo Ruolo "Responsabile")
+   ========================================================================== */
+
+// POST /api/groups/:id/subgroups - Creazione Sottogruppo (Solo Responsabile o Creatore del gruppo)
+app.post('/api/groups/:id/subgroups', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { name, description } = req.body;
+  const requesterId = req.body?.requesterId || req.body?.creatorId || req.body?.userId;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'Il nome del sottogruppo è obbligatorio' });
+  }
+  if (!requesterId) {
+    return res.status(400).json({ error: 'ID utente richiedente obbligatorio' });
+  }
+
+  try {
+    const group = await GroupModel.findOne({ $or: [{ _id: id }, { id }] });
+    if (!group) {
+      return res.status(404).json({ error: 'Gruppo principale non trovato nel database' });
+    }
+
+    // Regola richiesta: Il "Responsabile" è l'UNICO ruolo autorizzato a creare nuovi sottogruppi
+    const member = group.members.find((m: any) => m.userId === requesterId);
+    const isResponsabile = member && member.role === 'responsabile';
+    const isCreator = group.creatorId === requesterId;
+
+    if (!isResponsabile && !isCreator) {
+      return res.status(403).json({
+        error: 'Accesso negato: solo chi possiede il ruolo "Responsabile" in questo gruppo può creare nuovi sottogruppi',
+      });
+    }
+
+    const subgroupId = `subgrp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const subCode = 'SUB-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+    const newSubgroup = {
+      _id: subgroupId,
+      id: subgroupId,
+      name: name.trim(),
+      description: description ? description.trim() : '',
+      code: subCode,
+      members: [requesterId],
+      createdBy: requesterId,
+      createdAt: new Date().toISOString(),
+    };
+
+    if (!group.subgroups) group.subgroups = [];
+    group.subgroups.push(newSubgroup as any);
+    group.markModified('subgroups');
+    await group.save();
+
+    console.log(`[MongoDB] Sottogruppo "${newSubgroup.name}" creato in Gruppo "${group.name}". ID: ${subgroupId}, Codice: ${subCode}`);
+
+    const mappedGroup = {
+      id: group._id || group.id,
+      name: group.name,
+      description: group.description,
+      code: group.code,
+      inviteLink: group.inviteLink,
+      creatorId: group.creatorId,
+      members: group.members,
+      subgroups: group.subgroups,
+      avatar: group.avatar,
+      isPublic: group.isPublic ?? false,
+      createdAt: group.createdAt,
+      updatedAt: group.updatedAt,
+    };
+
+    return res.status(201).json({
+      success: true,
+      message: 'Sottogruppo creato con successo in MongoDB',
+      subgroup: newSubgroup,
+      group: mappedGroup,
+      subgroups: group.subgroups,
+    });
+  } catch (err: any) {
+    console.error('Errore creazione sottogruppo MongoDB:', err.message);
+    return res.status(500).json({ error: 'Errore durante la creazione del sottogruppo in MongoDB' });
+  }
+});
+
+// POST /api/groups/:id/subgroups/:subgroupId/join - Entra in un sottogruppo tramite codice d'invito
+app.post('/api/groups/:id/subgroups/:subgroupId/join', async (req: Request, res: Response) => {
+  const { id, subgroupId } = req.params;
+  const { code, userId } = req.body;
+
+  if (!code || !code.trim()) {
+    return res.status(400).json({ error: 'Codice di accesso obbligatorio' });
+  }
+  if (!userId) {
+    return res.status(400).json({ error: 'ID utente obbligatorio' });
+  }
+
+  try {
+    const group = await GroupModel.findOne({ $or: [{ _id: id }, { id }] });
+    if (!group) {
+      return res.status(404).json({ error: 'Gruppo non trovato nel database' });
+    }
+
+    const subgroup = group.subgroups?.find((s: any) => s._id === subgroupId || s.id === subgroupId);
+    if (!subgroup) {
+      return res.status(404).json({ error: 'Sottogruppo non trovato' });
+    }
+
+    const cleanInputCode = code.trim().toUpperCase();
+    const subgroupCode = (subgroup.code || '').trim().toUpperCase();
+
+    if (cleanInputCode !== subgroupCode) {
+      return res.status(400).json({ error: 'Codice errato. Verifica il codice e riprova.' });
+    }
+
+    if (!subgroup.members) {
+      subgroup.members = [];
+    }
+    if (!subgroup.members.includes(userId)) {
+      subgroup.members.push(userId);
+      group.markModified('subgroups');
+      await group.save();
+    }
+
+    const mappedGroup = {
+      id: group._id || group.id,
+      name: group.name,
+      description: group.description,
+      code: group.code,
+      inviteLink: group.inviteLink,
+      creatorId: group.creatorId,
+      members: group.members,
+      subgroups: group.subgroups,
+      avatar: group.avatar,
+      isPublic: group.isPublic ?? false,
+      createdAt: group.createdAt,
+      updatedAt: group.updatedAt,
+    };
+
+    return res.json({
+      success: true,
+      message: 'Accesso al sottogruppo effettuato con successo!',
+      subgroup,
+      group: mappedGroup,
+    });
+  } catch (err: any) {
+    console.error('Errore join sottogruppo MongoDB:', err.message);
+    return res.status(500).json({ error: 'Errore durante l\'accesso al sottogruppo in MongoDB' });
+  }
+});
+
+// DELETE /api/groups/:id/subgroups/:subgroupId - Eliminazione Sottogruppo
+app.delete('/api/groups/:id/subgroups/:subgroupId', async (req: Request, res: Response) => {
+  const { id, subgroupId } = req.params;
+  const requesterId = (req.body?.requesterId || req.query?.requesterId) as string | undefined;
+
+  try {
+    const group = await GroupModel.findOne({ $or: [{ _id: id }, { id }] });
+    if (!group) {
+      return res.status(404).json({ error: 'Gruppo principale non trovato' });
+    }
+
+    if (requesterId) {
+      const member = group.members.find((m: any) => m.userId === requesterId);
+      const isResponsabile = member && member.role === 'responsabile';
+      const isCreator = group.creatorId === requesterId;
+      if (!isResponsabile && !isCreator) {
+        return res.status(403).json({ error: 'Non sei autorizzato a eliminare questo sottogruppo' });
+      }
+    }
+
+    group.subgroups = (group.subgroups || []).filter(
+      (s: any) => s._id !== subgroupId && s.id !== subgroupId
+    );
+    group.markModified('subgroups');
+    await group.save();
+
+    const mappedGroup = {
+      id: group._id || group.id,
+      name: group.name,
+      description: group.description,
+      code: group.code,
+      inviteLink: group.inviteLink,
+      creatorId: group.creatorId,
+      members: group.members,
+      subgroups: group.subgroups,
+      avatar: group.avatar,
+      isPublic: group.isPublic ?? false,
+      createdAt: group.createdAt,
+      updatedAt: group.updatedAt,
+    };
+
+    return res.json({
+      success: true,
+      message: 'Sottogruppo eliminato con successo da MongoDB',
+      group: mappedGroup,
+      subgroups: group.subgroups,
+    });
+  } catch (err: any) {
+    console.error('Errore eliminazione sottogruppo MongoDB:', err.message);
+    return res.status(500).json({ error: 'Errore eliminazione sottogruppo in MongoDB' });
+  }
+});
+
+/* ==========================================================================
+   3.2 CHAT API (Messaggi per Gruppo Generale & Sottogruppi Dedicati - Stile WhatsApp)
+   ========================================================================== */
+
+// GET /api/groups/:id/chat - Recupera i messaggi della chat per il gruppo generale o sottogruppo
+app.get('/api/groups/:id/chat', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { subgroupId } = req.query;
+
+  try {
+    let filter: any = { groupId: id };
+    if (subgroupId && subgroupId !== 'null' && subgroupId !== 'undefined') {
+      filter.subgroupId = String(subgroupId);
+    } else {
+      filter.$or = [{ subgroupId: null }, { subgroupId: '' }, { subgroupId: { $exists: false } }];
+    }
+
+    const messages = await ChatMessageModel.find(filter).sort({ createdAt: 1 }).limit(300).lean();
+    const mapped = messages.map((m: any) => ({
+      id: m._id || m.id,
+      groupId: m.groupId,
+      subgroupId: m.subgroupId || null,
+      authorId: m.authorId,
+      authorName: m.authorName,
+      authorSurname: m.authorSurname,
+      authorAvatar: m.authorAvatar,
+      content: m.content || '',
+      attachment: m.attachment || undefined,
+      replyTo: m.replyTo || undefined,
+      createdAt: m.createdAt,
+    }));
+
+    return res.json({ messages: mapped });
+  } catch (err: any) {
+    console.error('Errore lettura messaggi chat MongoDB:', err.message);
+    return res.status(500).json({ error: 'Errore durante la lettura dei messaggi della chat da MongoDB' });
+  }
+});
+
+// POST /api/groups/:id/chat - Invia un nuovo messaggio di chat in MongoDB
+app.post('/api/groups/:id/chat', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { subgroupId, authorId, authorName, authorSurname, authorAvatar, content, attachment, replyTo } = req.body;
+
+  if (!authorId || (!content?.trim() && !attachment)) {
+    return res.status(400).json({ error: 'Autore e contenuto o allegato obbligatori' });
+  }
+
+  try {
+    const cleanSubgroupId =
+      subgroupId && subgroupId !== 'null' && subgroupId !== 'undefined'
+        ? String(subgroupId)
+        : null;
+
+    const created = await ChatMessageModel.create({
+      groupId: id,
+      subgroupId: cleanSubgroupId,
+      authorId,
+      authorName: authorName || 'Utente',
+      authorSurname: authorSurname || '',
+      authorAvatar: authorAvatar || null,
+      content: content ? content.trim() : '',
+      attachment: attachment || undefined,
+      replyTo: replyTo || undefined,
+    });
+
+    const mapped = {
+      id: created._id || created.id,
+      groupId: created.groupId,
+      subgroupId: created.subgroupId || null,
+      authorId: created.authorId,
+      authorName: created.authorName,
+      authorSurname: created.authorSurname,
+      authorAvatar: created.authorAvatar,
+      content: created.content,
+      attachment: created.attachment,
+      replyTo: created.replyTo,
+      createdAt: created.createdAt,
+    };
+
+    return res.status(201).json({ success: true, message: mapped });
+  } catch (err: any) {
+    console.error('Errore invio messaggio chat MongoDB:', err.message);
+    return res.status(500).json({ error: 'Errore durante il salvataggio del messaggio in MongoDB' });
+  }
+});
 
 /* ==========================================================================
    4. EVENTS & POLLS API (EventModel / PollModel / OfficialEventModel)

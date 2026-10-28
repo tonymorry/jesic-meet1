@@ -8,7 +8,7 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { User, MeetingEvent, InviteeConfig, ClientSlotPreference, Group } from '../types';
+import { User, MeetingEvent, InviteeConfig, ClientSlotPreference, Group, Subgroup } from '../types';
 import { UserAvatar } from './UserAvatar';
 import {
   X,
@@ -57,6 +57,7 @@ interface CreateEventModalProps {
   eventToEdit?: MeetingEvent;
   onUpdateEvent?: (updatedEvent: MeetingEvent) => void;
   activeGroup?: Group;
+  activeSubgroup?: Subgroup | null;
 }
 
 export const CreateEventModal: React.FC<CreateEventModalProps> = ({
@@ -68,6 +69,7 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
   eventToEdit,
   onUpdateEvent,
   activeGroup,
+  activeSubgroup,
 }) => {
   // Ora il wizard ha solo 3 step (rimosso step orari disponibilità organizzatore)
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -462,6 +464,7 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
         pollDeadline: new Date(pollDeadline).toISOString(),
         invitees: inviteesConfig,
         groupId: activeGroup?.id || eventToEdit.groupId,
+        subgroupId: activeSubgroup !== undefined ? (activeSubgroup?.id || undefined) : eventToEdit.subgroupId,
         externalInviteEmails: externalInviteEmails.length > 0 ? externalInviteEmails : eventToEdit.externalInviteEmails,
       });
       onClose();
@@ -489,6 +492,7 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
         clientInfo: prefillData?.clientInfo,
         allowedSlots: prefillData?.fixedSlots?.map((s) => s.slotKey),
         groupId: activeGroup?.id,
+        subgroupId: activeSubgroup?.id || undefined,
         externalInviteEmails: externalInviteEmails.length > 0 ? externalInviteEmails : undefined,
       },
       [], // Inizialmente nessun orario spuntato in automatico
@@ -506,9 +510,17 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
         {/* Header con Step indicator (3 step) */}
         <div className="p-4 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between bg-neutral-50/50 dark:bg-neutral-800/50">
           <div>
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-red-600 dark:text-red-400">
-              {eventToEdit ? 'Modifica Sondaggio' : `Step ${step} di 3`}
-            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-red-600 dark:text-red-400">
+                {eventToEdit ? 'Modifica Sondaggio' : `Step ${step} di 3`}
+              </span>
+              {activeGroup && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700 flex items-center gap-1">
+                  <span>{activeSubgroup ? '📂' : '📁'}</span>
+                  <span>{activeSubgroup ? activeSubgroup.name : `${activeGroup.name} (Generale)`}</span>
+                </span>
+              )}
+            </div>
             <h2 className="text-base font-extrabold text-neutral-900 dark:text-white">
               {step === 1 && 'Dettagli Riunione'}
               {step === 2 && 'Date & Fascia Oraria'}

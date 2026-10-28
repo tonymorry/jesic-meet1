@@ -21,14 +21,17 @@ import {
   Calendar,
   Plus,
   Briefcase,
+  Menu,
+  MessageSquare,
 } from 'lucide-react';
 
-export type NavTab = 'groups' | 'polls' | 'profile' | 'dashboard' | 'events' | 'requests' | 'calendar';
+export type NavTab = 'groups' | 'polls' | 'profile' | 'dashboard' | 'events' | 'requests' | 'calendar' | 'chat';
 
 interface BottomNavProps {
   currentTab: NavTab;
   onSelectTab: (tab: NavTab) => void;
   onOpenCreateMenu?: () => void;
+  onToggleSubgroupsMenu?: () => void;
   pendingInvitesCount?: number;
   pendingOfficialEventsCount?: number;
   isClientAdmin?: boolean; // True SOLO per 'admin' e 'admin_clienti'
@@ -40,6 +43,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   currentTab,
   onSelectTab,
   onOpenCreateMenu,
+  onToggleSubgroupsMenu,
   pendingInvitesCount = 0,
   pendingOfficialEventsCount = 0,
   isClientAdmin = false,
@@ -181,6 +185,17 @@ export const BottomNav: React.FC<BottomNavProps> = ({
              CASO 2: DENTRO UN GRUPPO
              ==================================================================== */
           <div className="flex items-center justify-between h-14">
+            {/* 0. Tasto a 3 lineette (Menu Hamburger Cartelle & Sottogruppi - solo icona) */}
+            <button
+              type="button"
+              onClick={onToggleSubgroupsMenu}
+              className="flex-1 flex flex-col items-center justify-center py-1 transition-all active:scale-95 cursor-pointer text-neutral-700 dark:text-neutral-300 hover:text-[#f23e2e] dark:hover:text-[#f23e2e]"
+              aria-label="Menu Cartelle e Sottogruppi"
+              title="Sottogruppi e Cartelle"
+            >
+              <Menu className="w-5 h-5 stroke-[2.4px]" />
+            </button>
+
             {/* 1. Sondaggi Gruppo (ex Dashboard) */}
             <button
               type="button"
@@ -292,7 +307,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               </button>
             )}
 
-            {/* 5. Calendario Gruppo */}
+            {/* 5. Calendario Gruppo (Unico e Condiviso) */}
             <button
               type="button"
               onClick={() => onSelectTab('calendar')}
@@ -319,30 +334,30 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               </span>
             </button>
 
-            {/* 6. Profilo */}
+            {/* 6. Chat (dedicata al Gruppo Generale o al Sottogruppo attivo - sostituisce Profilo) */}
             <button
               type="button"
-              onClick={() => onSelectTab('profile')}
+              onClick={() => onSelectTab('chat')}
               className={`flex-1 flex flex-col items-center justify-center py-1 transition-all active:scale-95 cursor-pointer ${
-                currentTab === 'profile'
+                currentTab === 'chat'
                   ? 'text-[#f23e2e] dark:text-[#f23e2e]'
                   : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
               }`}
-              aria-label="Profilo personale"
+              aria-label="Chat del gruppo o sottogruppo"
             >
-              <UserIcon
+              <MessageSquare
                 className={`w-5 h-5 transition-transform ${
-                  currentTab === 'profile' ? 'stroke-[2.5px] scale-110' : 'stroke-[1.8px]'
+                  currentTab === 'chat' ? 'stroke-[2.5px] scale-110' : 'stroke-[1.8px]'
                 }`}
               />
               <span
                 className={`text-[10px] mt-1 tracking-tight leading-none ${
-                  currentTab === 'profile'
+                  currentTab === 'chat'
                     ? 'font-black text-[#f23e2e]'
                     : 'font-semibold text-neutral-500 dark:text-neutral-400'
                 }`}
               >
-                Profilo
+                Chat
               </span>
             </button>
           </div>

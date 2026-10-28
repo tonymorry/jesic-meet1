@@ -19,6 +19,8 @@ import {
   Plus,
   Users,
   User as UserIcon,
+  Menu,
+  MessageSquare,
 } from 'lucide-react';
 
 export type AppTheme = 'light' | 'dark' | 'brand';
@@ -34,6 +36,8 @@ export interface TopHeaderProps {
   currentTab?: NavTab;
   onSelectTab?: (tab: NavTab) => void;
   onOpenCreateMenu?: () => void;
+  onToggleSubgroupsMenu?: () => void;
+  activeSubgroupName?: string;
   pendingInvitesCount?: number;
   pendingOfficialEventsCount?: number;
   isClientAdmin?: boolean;
@@ -53,6 +57,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   currentTab = 'groups',
   onSelectTab,
   onOpenCreateMenu,
+  onToggleSubgroupsMenu,
+  activeSubgroupName,
   pendingInvitesCount = 0,
   pendingOfficialEventsCount = 0,
   isClientAdmin = false,
@@ -211,13 +217,26 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                   <button
                     type="button"
                     onClick={onBackToGroups}
-                    className="px-2.5 py-1.5 rounded-xl text-xs font-bold text-neutral-500 hover:text-[#f23e2e] hover:bg-white dark:hover:bg-neutral-900 transition-all flex items-center gap-1 cursor-pointer mr-1"
+                    className="px-2.5 py-1.5 rounded-xl text-xs font-bold text-neutral-500 hover:text-[#f23e2e] hover:bg-white dark:hover:bg-neutral-900 transition-all flex items-center gap-1 cursor-pointer mr-0.5"
                   >
                     <span>← Gruppi</span>
                   </button>
                 )}
 
-                {/* 1. Sondaggi (ex Dashboard) */}
+                {/* 0. Tasto 3 Lineette (Menu Hamburger Cartelle & Sottogruppi - solo icona) */}
+                {onToggleSubgroupsMenu && (
+                  <button
+                    type="button"
+                    onClick={onToggleSubgroupsMenu}
+                    className="p-1.5 rounded-xl text-xs font-bold bg-neutral-200/70 hover:bg-neutral-300/80 dark:bg-neutral-700/60 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-100 transition-all flex items-center justify-center cursor-pointer mr-1 active:scale-95"
+                    title={activeSubgroupName ? `Cartella attiva: ${activeSubgroupName}` : 'Sottogruppi e Cartelle'}
+                    aria-label="Menu Sottogruppi"
+                  >
+                    <Menu className="w-4 h-4 stroke-[2.5px] text-[#f23e2e]" />
+                  </button>
+                )}
+
+                {/* 1. Sondaggi (filtrati per sottogruppo attivo o gruppo generale) */}
                 <button
                   type="button"
                   onClick={() => onSelectTab('dashboard')}
@@ -271,7 +290,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                   </button>
                 )}
 
-                {/* 4. Calendario */}
+                {/* 4. Calendario (Unico e Condiviso per tutto il gruppo) */}
                 <button
                   type="button"
                   onClick={() => onSelectTab('calendar')}
@@ -285,18 +304,18 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                   <span>Calendario</span>
                 </button>
 
-                {/* 5. Profilo */}
+                {/* 5. Chat (sostituisce Profilo dentro il gruppo) */}
                 <button
                   type="button"
-                  onClick={() => onSelectTab('profile')}
+                  onClick={() => onSelectTab('chat')}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                    currentTab === 'profile'
-                      ? 'bg-white dark:bg-neutral-900 text-[#f23e2e] shadow-xs'
+                    currentTab === 'chat'
+                      ? 'bg-white dark:bg-neutral-900 text-[#f23e2e] shadow-xs font-black'
                       : 'text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white'
                   }`}
                 >
-                  <UserIcon className="w-3.5 h-3.5" />
-                  <span>Profilo</span>
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>Chat</span>
                 </button>
               </>
             )}

@@ -28,12 +28,22 @@ export interface User {
   googleCalendarConnected?: boolean;
 }
 
-export type GroupMemberRole = 'member' | 'admin' | 'admin_clienti';
+export type GroupMemberRole = 'member' | 'admin' | 'admin_clienti' | 'responsabile';
 
 export interface GroupMember {
   userId: string;
   role: GroupMemberRole;
   joinedAt: string;
+}
+
+export interface Subgroup {
+  id: string;
+  name: string;
+  description?: string;
+  code?: string; // Codice univoco per accedere al sottogruppo
+  members?: string[]; // IDs degli utenti che hanno inserito il codice e possono accedere
+  createdBy: string;
+  createdAt: string;
 }
 
 export interface Group {
@@ -44,6 +54,7 @@ export interface Group {
   inviteLink?: string;
   creatorId: string;
   members: GroupMember[];
+  subgroups?: Subgroup[];
   avatar?: string;
   isPublic?: boolean; // Se true il gruppo è pubblico (chiunque conosca il nome può entrare)
   createdAt: string;
@@ -130,7 +141,37 @@ export interface MeetingEvent {
   };
   allowedSlots?: string[]; // Se vincolato agli slot specificati dal cliente (es. 2 o 3 slot)
   groupId?: string; // Se legato a un gruppo specifico (null se creato a livello generale)
+  subgroupId?: string | null; // Se legato a un sottogruppo specifico (null se gruppo generale)
   externalInviteEmails?: string[]; // Destinatari invitati via email fuori da qualsiasi gruppo
+}
+
+export interface ChatAttachment {
+  type: 'image' | 'audio' | 'file';
+  url: string; // Data URL Base64 o URL file
+  name?: string;
+  size?: number; // Dimensione in byte
+  duration?: number; // Durata audio in secondi
+}
+
+export interface ChatReplyTo {
+  messageId: string;
+  authorName: string;
+  content: string;
+  attachmentType?: 'image' | 'audio' | 'file';
+}
+
+export interface ChatMessage {
+  id: string;
+  groupId: string;
+  subgroupId?: string | null; // null se è la chat generale del gruppo
+  authorId: string;
+  authorName: string;
+  authorSurname: string;
+  authorAvatar?: string | null;
+  content: string;
+  attachment?: ChatAttachment;
+  replyTo?: ChatReplyTo;
+  createdAt: string;
 }
 
 export type ResponseStatus = 'pending' | 'submitted';

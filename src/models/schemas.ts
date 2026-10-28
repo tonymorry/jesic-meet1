@@ -22,7 +22,7 @@ export type UserSystemRole = UserRole;
    ========================================================================== */
 export interface IUserGroupMembership {
   groupId: string;
-  role: 'member' | 'admin' | 'admin_clienti';
+  role: 'member' | 'admin' | 'admin_clienti' | 'responsabile';
 }
 
 export interface IUser {
@@ -52,7 +52,7 @@ const UserGroupMembershipSchema = new Schema<IUserGroupMembership>(
     },
     role: {
       type: String,
-      enum: ['member', 'admin', 'admin_clienti'],
+      enum: ['member', 'admin', 'admin_clienti', 'responsabile'],
       default: 'member',
     },
   },
@@ -159,8 +159,19 @@ export const User: Model<IUser> = UserModel;
    ========================================================================== */
 export interface IGroupMember {
   userId: string;
-  role: 'member' | 'admin' | 'admin_clienti';
+  role: 'member' | 'admin' | 'admin_clienti' | 'responsabile';
   joinedAt: string;
+}
+
+export interface ISubgroup {
+  _id?: string;
+  id?: string;
+  name: string;
+  description?: string;
+  code?: string;
+  members?: string[];
+  createdBy: string;
+  createdAt?: string;
 }
 
 export interface IGroup {
@@ -172,6 +183,7 @@ export interface IGroup {
   inviteLink?: string;
   creatorId: string;
   members: IGroupMember[];
+  subgroups?: ISubgroup[];
   avatar?: string;
   isPublic?: boolean;
   createdAt?: Date;
@@ -181,11 +193,69 @@ export interface IGroup {
 const GroupMemberSubSchema = new Schema<IGroupMember>(
   {
     userId: { type: String, required: true },
-    role: { type: String, enum: ['member', 'admin', 'admin_clienti'], default: 'member' },
+    role: { type: String, enum: ['member', 'admin', 'admin_clienti', 'responsabile'], default: 'member' },
     joinedAt: { type: String, default: () => new Date().toISOString() },
   },
   { _id: false }
 );
+
+const SubgroupSubSchema = new Schema<ISubgroup>(
+  {
+    _id: {
+      type: String,
+      default: () => `subgrp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    },
+    name: {
+      type: String,
+      required: [true, 'Nome sottogruppo obbligatorio'],
+      trim: true,
+      maxlength: [100, 'Nome sottogruppo troppo lungo'],
+    },
+    description: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    code: {
+      type: String,
+      default: () => 'SUB-' + Math.random().toString(36).substring(2, 6).toUpperCase(),
+    },
+    members: {
+      type: [String],
+      default: [],
+    },
+    createdBy: {
+      type: String,
+      required: true,
+    },
+    createdAt: {
+      type: String,
+      default: () => new Date().toISOString(),
+    },
+  },
+  {
+    _id: true,
+    toJSON: {
+      virtuals: true,
+      transform: (_doc, ret: any) => {
+        ret.id = ret._id ? ret._id.toString() : ret.id;
+        delete ret.__v;
+        return ret;
+      },
+    },
+    toObject: {
+      virtuals: true,
+      transform: (_doc, ret: any) => {
+        ret.id = ret._id ? ret._id.toString() : ret.id;
+        return ret;
+      },
+    },
+  }
+);
+
+SubgroupSubSchema.virtual('id').get(function (this: any) {
+  return this._id ? this._id.toString() : undefined;
+});
 
 const GroupSchema: Schema<IGroup> = new Schema(
   {
@@ -223,6 +293,10 @@ const GroupSchema: Schema<IGroup> = new Schema(
     },
     members: {
       type: [GroupMemberSubSchema],
+      default: [],
+    },
+    subgroups: {
+      type: [SubgroupSubSchema],
       default: [],
     },
     avatar: {
@@ -436,6 +510,7 @@ export interface IEvent {
   finalizedSlot?: IFinalizedSlot;
   finalDate?: string;
   groupId?: string | null;
+  subgroupId?: string | null;
   externalInviteEmails?: string[];
   clientRequestId?: string | null;
   clientInfo?: {
@@ -566,6 +641,11 @@ const EventSchema: Schema<IEvent> = new Schema(
       default: null,
       index: true,
     },
+    subgroupId: {
+      type: String,
+      default: null,
+      index: true,
+    },
     externalInviteEmails: {
       type: [String],
       default: [],
@@ -689,6 +769,125 @@ ResponseSchema.virtual('id').get(function (this: any) {
 export const EventResponseModel: Model<IResponse> =
   mongoose.models.Response || mongoose.model<IResponse>('Response', ResponseSchema);
 export const Response: Model<IResponse> = EventResponseModel;
+
+/* ==========================================================================
+   7. CHAT MESSAGE SCHEMA & MODEL (Chat per Gruppo Generale & Sottogruppi)
+   ========================================================================== */
+export interface IChatAttachment {
+  type: 'image' | 'audio' | 'file';
+  url: string;
+  name?: string;
+  size?: number;
+  duration?: number;
+}
+
+export interface IChatReplyTo {
+  messageId: string;
+  authorName: string;
+  content: string;
+  attachmentType?: 'image' | 'audio' | 'file';
+}
+
+export interface IChatMessage {
+  _id?: string;
+  id?: string;
+  groupId: string;
+  subgroupId?: string | null;
+  authorId: string;
+  authorName: string;
+  authorSurname: string;
+  authorAvatar?: string | null;
+  content: string;
+  attachment?: IChatAttachment;
+  replyTo?: IChatReplyTo;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+const ChatMessageSchema: Schema<IChatMessage> = new Schema(
+  {
+    _id: {
+      type: String,
+      default: () => `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    },
+    groupId: {
+      type: String,
+      required: true,
+      index: true,
+    },
+    subgroupId: {
+      type: String,
+      default: null,
+      index: true,
+    },
+    authorId: {
+      type: String,
+      required: true,
+      index: true,
+    },
+    authorName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    authorSurname: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    authorAvatar: {
+      type: String,
+      default: null,
+    },
+    content: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    attachment: {
+      type: {
+        type: String,
+        enum: ['image', 'audio', 'file'],
+      },
+      url: String,
+      name: String,
+      size: Number,
+      duration: Number,
+    },
+    replyTo: {
+      messageId: String,
+      authorName: String,
+      content: String,
+      attachmentType: String,
+    },
+  },
+  {
+    timestamps: true,
+    toJSON: {
+      virtuals: true,
+      transform: (_doc, ret: any) => {
+        ret.id = ret._id ? ret._id.toString() : ret.id;
+        delete ret.__v;
+        return ret;
+      },
+    },
+    toObject: {
+      virtuals: true,
+      transform: (_doc, ret: any) => {
+        ret.id = ret._id ? ret._id.toString() : ret.id;
+        return ret;
+      },
+    },
+  }
+);
+
+ChatMessageSchema.virtual('id').get(function (this: any) {
+  return this._id ? this._id.toString() : undefined;
+});
+
+export const ChatMessageModel: Model<IChatMessage> =
+  mongoose.models.ChatMessage || mongoose.model<IChatMessage>('ChatMessage', ChatMessageSchema);
+export const ChatMessage: Model<IChatMessage> = ChatMessageModel;
 
 /* ==========================================================================
    7. DOCUMENTAZIONE PER CODE VIEW MODAL
