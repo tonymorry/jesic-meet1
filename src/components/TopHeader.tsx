@@ -21,6 +21,7 @@ import {
   User as UserIcon,
   Menu,
   MessageSquare,
+  ArrowLeft,
 } from 'lucide-react';
 
 export type AppTheme = 'light' | 'dark';
@@ -208,9 +209,11 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                   <button
                     type="button"
                     onClick={onBackToGroups}
-                    className="px-2.5 py-1.5 rounded-xl text-xs font-bold text-neutral-500 hover:text-[#f23e2e] hover:bg-white dark:hover:bg-neutral-900 transition-all flex items-center gap-1 cursor-pointer mr-0.5"
+                    className="p-1.5 rounded-xl text-neutral-500 hover:text-[#f23e2e] hover:bg-white dark:hover:bg-neutral-900 transition-all flex items-center justify-center cursor-pointer mr-0.5"
+                    title="Torna indietro"
+                    aria-label="Torna indietro"
                   >
-                    <span>← Gruppi</span>
+                    <ArrowLeft className="w-4 h-4 text-[#f23e2e] stroke-[2.5px]" />
                   </button>
                 )}
 
@@ -347,11 +350,11 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             )}
           </button>
 
-          {/* Profilo Utente Connesso (Solo Avatar, senza nome e titolo nell'header) */}
+          {/* Profilo Utente Connesso (Visibile su desktop in TopHeader; su mobile è in basso a destra nella barra di navigazione) */}
           <button
             type="button"
             onClick={onNavigateToProfile}
-            className="p-0.5 rounded-full border border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 transition-all cursor-pointer hover:scale-105 active:scale-95 shrink-0"
+            className="hidden md:flex p-0.5 rounded-full border border-neutral-200 dark:border-neutral-700 hover:border-neutral-300 dark:hover:border-neutral-600 bg-neutral-50 dark:bg-neutral-800 transition-all cursor-pointer hover:scale-105 active:scale-95 shrink-0"
             title={`Visualizza profilo di ${currentUser.name} ${currentUser.surname}`}
             aria-label="Profilo Utente"
           >

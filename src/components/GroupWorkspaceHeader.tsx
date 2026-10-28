@@ -11,8 +11,9 @@
  *   - Codice univoco d'accesso del sottogruppo, link e membri dedicati
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Group, User, Subgroup } from '../types';
+import { GroupAvatar } from './GroupAvatar';
 import {
   ArrowLeft,
   Users,
@@ -25,6 +26,8 @@ import {
   Link2,
   Settings,
   FolderOpen,
+  Image as ImageIcon,
+  Upload,
 } from 'lucide-react';
 
 export interface GroupWorkspaceHeaderProps {
@@ -81,6 +84,45 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
   const [editSubAvatar, setEditSubAvatar] = useState('📁');
   const [editSubIsPublic, setEditSubIsPublic] = useState(false);
   const [isSavingCustomization, setIsSavingCustomization] = useState(false);
+  const subImageInputRef = useRef<HTMLInputElement>(null);
+
+  const handleSubgroupImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) {
+      alert("L'immagine non può superare 8MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_SIZE = 160;
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height = Math.round((height * MAX_SIZE) / width);
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width = Math.round((width * MAX_SIZE) / height);
+            height = MAX_SIZE;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        setEditSubAvatar(dataUrl);
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
 
   const userMembership = activeGroup.members?.find((m) => m.userId === currentUser.id);
   const isGroupCreator = activeGroup.creatorId === currentUser.id;
@@ -225,28 +267,29 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           {/* Tasto Torna Indietro + Avatar + Nome Gruppo o Sottogruppo + Ruolo */}
           <div className="flex items-start sm:items-center gap-3 min-w-0">
-            {/* Tasto Freccetta: se dentro un sottogruppo torna al gruppo principale, se nel gruppo principale torna a I Tuoi Gruppi */}
+            {/* Tasto Freccetta: se dentro un sottogruppo torna al gruppo principale, se nel gruppo principale torna a I Tuoi Gruppi (senza testo, solo freccia) */}
             <button
               type="button"
               onClick={activeSubgroup ? (onBackToMainGroup || onBackToGroups) : onBackToGroups}
-              className="p-2 rounded-2xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 shrink-0"
+              className="p-2 rounded-2xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-[#f23e2e] transition-all flex items-center justify-center cursor-pointer active:scale-95 shrink-0"
               title={
                 activeSubgroup
                   ? `Torna al gruppo principale "${activeGroup.name}"`
                   : 'Torna alla lista dei tuoi gruppi'
               }
+              aria-label="Torna indietro"
             >
-              <ArrowLeft className="w-4 h-4 text-[#f23e2e]" />
-              <span className="hidden sm:inline">
-                {activeSubgroup ? `Torna a ${activeGroup.name}` : 'I Tuoi Gruppi'}
-              </span>
+              <ArrowLeft className="w-4 h-4 stroke-[2.5px]" />
             </button>
 
             <div className="flex items-center gap-2.5 min-w-0">
-              {/* Avatar Icona: del Sottogruppo se attivo, altrimenti del Gruppo Principale */}
-              <span className="text-2xl shrink-0 p-1 bg-neutral-50 dark:bg-neutral-800 rounded-xl border border-neutral-200/60 dark:border-neutral-700/60">
-                {activeSubgroup ? (activeSubgroup.avatar || '📁') : (activeGroup.avatar || '👥')}
-              </span>
+              {/* Avatar Icona o Immagine: del Sottogruppo se attivo, altrimenti del Gruppo Principale */}
+              <GroupAvatar
+                avatar={activeSubgroup ? (activeSubgroup.avatar || '📁') : (activeGroup.avatar || '👥')}
+                name={activeSubgroup ? activeSubgroup.name : activeGroup.name}
+                size="md"
+                fallbackEmoji={activeSubgroup ? '📁' : '👥'}
+              />
 
               <div className="min-w-0">
                 {/* Nome & Azioni Modifica Inline */}
@@ -313,24 +356,24 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
                       </button>
                     )}
 
-                    {/* Badge Privacy: Privato vs Pubblico */}
+                    {/* Badge Privacy: solo icona lucchetto o globo */}
                     <span
-                      className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1 border ${
+                      title={isCurrentPublic ? 'Pubblico' : 'Privato'}
+                      className={`text-xs px-1.5 py-0.5 rounded-full shrink-0 flex items-center justify-center border ${
                         isCurrentPublic
                           ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border-emerald-300/80 dark:border-emerald-800/60'
                           : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
                       }`}
                     >
-                      {isCurrentPublic ? '🌐 Pubblico' : '🔒 Privato'}
+                      {isCurrentPublic ? '🌐' : '🔒'}
                     </span>
                   </div>
                 )}
 
-                {/* SOTTO IL NOME: Gruppo Principale (se in sottogruppo) + TUO RUOLO */}
+                {/* SOTTO IL NOME: Solo il badge ruolo e, se in sottogruppo, il link al gruppo principale (senza etichette di testo) */}
                 <div className="flex items-center gap-2 flex-wrap mt-0.5">
                   {activeSubgroup && (
                     <div className="flex items-center gap-1 text-[11px] font-semibold text-neutral-500 dark:text-neutral-400">
-                      <span>Gruppo principale:</span>
                       <button
                         type="button"
                         onClick={onBackToMainGroup}
@@ -343,94 +386,41 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
                     </div>
                   )}
 
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
-                      Tuo ruolo:
-                    </span>
-                    <span
-                      className={`inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${roleMeta.badgeClass}`}
-                    >
-                      <span>{roleMeta.icon}</span>
-                      <span>{roleMeta.label}</span>
-                    </span>
-                  </div>
+                  <span
+                    className={`inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${roleMeta.badgeClass}`}
+                  >
+                    <span>{roleMeta.icon}</span>
+                    <span>{roleMeta.label}</span>
+                  </span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Azioni: Codice Univoco & Link & Membri & Personalizza / Elimina */}
+          {/* Azioni: Semplificato in UN UNICO PULSANTE Membri (piccola icona con numero a fianco) */}
           <div className="flex items-center gap-2 self-end sm:self-center shrink-0 flex-wrap">
-            {/* Link B2B Univoco del Gruppo (visibile ESCLUSIVAMENTE ad admin_clienti quando nel gruppo generale) */}
-            {!activeSubgroup && isGroupAdminClienti && (
-              <button
-                type="button"
-                onClick={() => {
-                  const link = `${window.location.origin}/prenota-call?groupId=${activeGroup.id}`;
-                  navigator.clipboard.writeText(link);
-                  setCopiedB2b(true);
-                  setTimeout(() => setCopiedB2b(false), 2000);
-                }}
-                title={`Copia il link di prenotazione B2B univoco per ${activeGroup.name} (Riservato Admin Clienti)`}
-                className="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95 border border-amber-200 dark:border-amber-800/60"
-              >
-                {copiedB2b ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Link2 className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />}
-                <span className="hidden sm:inline">{copiedB2b ? 'Copiato!' : 'Link Form B2B'}</span>
-              </button>
-            )}
-
-            {/* Codice Gruppo o Sottogruppo con Copia */}
-            <div className="flex items-center gap-1 bg-neutral-100 dark:bg-neutral-800/80 px-2.5 py-1.5 rounded-xl border border-neutral-200 dark:border-neutral-700">
-              <span className="text-[10px] text-neutral-400 font-semibold">Codice:</span>
-              <span className="text-xs font-mono font-black text-neutral-900 dark:text-white">
-                {currentCode}
-              </span>
-              <button
-                type="button"
-                onClick={handleCopyCode}
-                title={activeSubgroup ? 'Copia codice del sottogruppo' : 'Copia codice d\'invito del gruppo'}
-                className="p-1 rounded-md hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 cursor-pointer transition-colors"
-              >
-                {copied ? (
-                  <Check className="w-3.5 h-3.5 text-emerald-600" />
-                ) : (
-                  <Copy className="w-3.5 h-3.5" />
-                )}
-              </button>
-            </div>
-
-            {/* Link Invito Diretto con Copia Rapida */}
-            <button
-              type="button"
-              onClick={handleCopyLink}
-              title={`Copia il link d'accesso rapido per ${activeSubgroup ? activeSubgroup.name : activeGroup.name}`}
-              className="px-2.5 py-1.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95 border border-neutral-200/80 dark:border-neutral-700"
-            >
-              {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Link2 className="w-3.5 h-3.5 text-[#f23e2e]" />}
-              <span>{copiedLink ? 'Link Copiato' : 'Copia Link'}</span>
-            </button>
-
-            {/* Tasto Membri (Membri Gruppo o Membri Sottogruppo) */}
+            {/* Tasto Membri: solo piccola icona con il numero nei membri di fianco */}
             <button
               type="button"
               onClick={onOpenMembersModal}
-              className="px-3 py-1.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
+              className="px-2.5 py-1.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95 shrink-0"
+              title="Visualizza Membri, Codice e Link"
+              aria-label={`Membri: ${activeSubgroup ? (activeSubgroup.members?.length || 1) : activeGroup.members.length}`}
             >
               <Users className="w-3.5 h-3.5 text-[#f23e2e]" />
-              <span>
-                {activeSubgroup
-                  ? `Membri (${activeSubgroup.members?.length || 1})`
-                  : `Membri (${activeGroup.members.length})`}
+              <span className="font-mono font-bold text-xs">
+                {activeSubgroup ? (activeSubgroup.members?.length || 1) : activeGroup.members.length}
               </span>
             </button>
 
-            {/* Tasto Elimina (Sottogruppo per Responsabile/Creatore, o Gruppo Principale per Creatore) */}
+            {/* Tasto Elimina (visibile solo a chi è autorizzato) */}
             {canManageCurrent && (activeSubgroup ? Boolean(onDeleteSubgroup) : Boolean(onDeleteGroup)) && (
               <button
                 type="button"
                 onClick={() => setShowDeleteConfirm(true)}
-                className="p-2 rounded-xl bg-red-50 hover:bg-red-100 dark:bg-red-950/50 dark:hover:bg-red-900/60 text-red-600 dark:text-red-400 text-xs font-bold transition-all cursor-pointer shadow-2xs active:scale-95 border border-red-200/50 dark:border-red-900/40"
+                className="p-2 rounded-xl bg-red-50 hover:bg-red-100 dark:bg-red-950/50 dark:hover:bg-red-900/60 text-red-600 dark:text-red-400 text-xs font-bold transition-all cursor-pointer shadow-2xs active:scale-95 border border-red-200/50 dark:border-red-900/40 shrink-0"
                 title={activeSubgroup ? 'Elimina questo sottogruppo' : 'Elimina questo gruppo'}
+                aria-label="Elimina"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -492,9 +482,12 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
           <div className="bg-white dark:bg-neutral-900 w-full max-w-md rounded-3xl p-6 border border-neutral-200 dark:border-neutral-800 shadow-2xl space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-neutral-100 dark:border-neutral-800">
               <div className="flex items-center gap-2">
-                <span className="text-2xl p-1 bg-purple-100 dark:bg-purple-950/60 rounded-xl">
-                  {editSubAvatar}
-                </span>
+                <GroupAvatar
+                  avatar={editSubAvatar}
+                  name={editSubName || 'Sottogruppo'}
+                  size="sm"
+                  fallbackEmoji="📁"
+                />
                 <div>
                   <h3 className="text-base font-black text-neutral-900 dark:text-white">
                     Personalizza Sottogruppo
@@ -514,12 +507,55 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
             </div>
 
             <form onSubmit={handleSaveSubgroupCustomization} className="space-y-4">
-              {/* Selezione Icona Preset */}
+              {/* Selezione Icona o Immagine Sottogruppo */}
               <div>
-                <label className="block text-xs font-bold text-neutral-700 dark:text-neutral-300 mb-1.5">
-                  Icona del Sottogruppo
-                </label>
+                <input
+                  ref={subImageInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleSubgroupImageChange}
+                  className="hidden"
+                />
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-neutral-700 dark:text-neutral-300">
+                    Icona o Immagine
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => subImageInputRef.current?.click()}
+                    className="text-[11px] text-purple-600 hover:underline font-bold flex items-center gap-1 cursor-pointer"
+                  >
+                    <Upload className="w-3 h-3" />
+                    <span>Carica foto</span>
+                  </button>
+                </div>
+
                 <div className="flex items-center gap-1.5 flex-wrap">
+                  {(editSubAvatar.startsWith('data:image/') || editSubAvatar.startsWith('http')) && (
+                    <div className="relative shrink-0 mr-1">
+                      <div className="w-9 h-9 rounded-xl overflow-hidden border-2 border-purple-600 shadow-xs">
+                        <img src={editSubAvatar} alt="Avatar" className="w-full h-full object-cover" />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEditSubAvatar('📁')}
+                        title="Rimuovi foto"
+                        className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-neutral-800 text-white flex items-center justify-center text-[10px] cursor-pointer hover:bg-red-600"
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => subImageInputRef.current?.click()}
+                    title="Carica foto da file"
+                    className="w-9 h-9 rounded-xl flex items-center justify-center bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-600 dark:text-neutral-300 border border-dashed border-neutral-300 dark:border-neutral-600 cursor-pointer"
+                  >
+                    <ImageIcon className="w-4 h-4 text-purple-600" />
+                  </button>
+
                   {PRESET_ICONS.map((icon) => (
                     <button
                       key={icon}

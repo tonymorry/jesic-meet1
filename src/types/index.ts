@@ -173,6 +173,8 @@ export interface ChatMessage {
   content: string;
   attachment?: ChatAttachment;
   replyTo?: ChatReplyTo;
+  isEdited?: boolean;
+  editedAt?: string;
   createdAt: string;
 }
 

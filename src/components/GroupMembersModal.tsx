@@ -7,8 +7,9 @@
  */
 
 import React, { useState } from 'react';
-import { Group, User, GroupMemberRole } from '../types';
+import { Group, User, GroupMemberRole, Subgroup } from '../types';
 import { UserAvatar } from './UserAvatar';
+import { GroupAvatar } from './GroupAvatar';
 import {
   X,
   Users,
@@ -20,10 +21,13 @@ import {
   Mail,
   UserMinus,
   AlertCircle,
+  Link2,
 } from 'lucide-react';
 
 export interface GroupMembersModalProps {
   group: Group;
+  activeSubgroup?: Subgroup | null;
+  isClientAdmin?: boolean;
   currentUser: User;
   allUsers: User[];
   onClose: () => void;
@@ -34,6 +38,8 @@ export interface GroupMembersModalProps {
 
 export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
   group,
+  activeSubgroup,
+  isClientAdmin = false,
   currentUser,
   allUsers,
   onClose,
@@ -43,23 +49,33 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
 }) => {
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedB2b, setCopiedB2b] = useState(false);
   const [inviteEmailInput, setInviteEmailInput] = useState('');
   const [inviteMsg, setInviteMsg] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [updatingRoleId, setUpdatingRoleId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  const currentCode = activeSubgroup?.code || group.code;
+
   const handleCopyCode = () => {
-    navigator.clipboard.writeText(group.code);
+    navigator.clipboard.writeText(currentCode);
     setCopiedCode(true);
     setTimeout(() => setCopiedCode(false), 2000);
   };
 
   const handleCopyLink = () => {
-    const link = `${window.location.origin}/?join=${group.code}`;
+    const link = `${window.location.origin}/?join=${currentCode}`;
     navigator.clipboard.writeText(link);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  const handleCopyB2b = () => {
+    const link = `${window.location.origin}/prenota-call?groupId=${group.id}`;
+    navigator.clipboard.writeText(link);
+    setCopiedB2b(true);
+    setTimeout(() => setCopiedB2b(false), 2000);
   };
 
   const handleInviteSubmit = async (e: React.FormEvent) => {
@@ -101,13 +117,20 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
         {/* Header Modale */}
         <div className="flex items-center justify-between pb-2 border-b border-neutral-100 dark:border-neutral-800">
           <div className="flex items-center gap-2.5">
-            <span className="text-2xl">{group.avatar || '👥'}</span>
+            <GroupAvatar
+              avatar={activeSubgroup ? (activeSubgroup.avatar || '📁') : (group.avatar || '👥')}
+              name={activeSubgroup ? activeSubgroup.name : group.name}
+              size="md"
+              fallbackEmoji={activeSubgroup ? '📁' : '👥'}
+            />
             <div>
               <h3 className="text-base font-black text-neutral-900 dark:text-white">
-                Membri di {group.name}
+                Membri di {activeSubgroup ? activeSubgroup.name : group.name}
               </h3>
               <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                {group.members.length} {group.members.length === 1 ? 'persona' : 'persone'} in questo gruppo
+                {activeSubgroup
+                  ? `${activeSubgroup.members?.length || 1} membri in questo sottogruppo (${activeSubgroup.isPublic ? 'Pubblico' : 'Privato'})`
+                  : `${group.members.length} ${group.members.length === 1 ? 'persona' : 'persone'} in questo gruppo`}
                 {isCreator && ' • Tu sei il Creatore'}
               </p>
             </div>
@@ -140,17 +163,17 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200 flex items-center gap-1.5">
               <UserPlus className="w-4 h-4 text-[#f23e2e]" />
-              <span>Invita colleghi in questo gruppo</span>
+              <span>{activeSubgroup ? 'Codice & Link Sottogruppo' : 'Codice & Link Invito'}</span>
             </span>
             <span className="text-[10px] font-mono text-neutral-400 uppercase">
-              Codice Gruppo
+              {activeSubgroup ? 'Sottogruppo' : 'Codice Gruppo'}
             </span>
           </div>
 
           <div className="flex items-center gap-2">
             <div className="flex-1 bg-white dark:bg-neutral-900 px-3 py-2 rounded-xl border border-neutral-200 dark:border-neutral-700 flex items-center justify-between">
               <span className="text-xs font-mono font-black text-neutral-900 dark:text-white tracking-wider">
-                {group.code}
+                {currentCode}
               </span>
               <button
                 type="button"
@@ -173,27 +196,24 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
               <span>{copiedLink ? 'Link Copiato' : 'Copia Link'}</span>
             </button>
           </div>
-        </div>
 
-        {/* Guida Gerarchia Ruoli */}
-        <div className="p-3 bg-red-50/70 dark:bg-red-950/30 border border-red-200/60 dark:border-red-900/40 rounded-2xl space-y-1.5 text-xs">
-          <p className="font-bold text-neutral-900 dark:text-white flex items-center gap-1.5 text-[11px]">
-            <span>🛡️</span> Gerarchia Ruoli nel Gruppo:
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 text-[10px]">
-            <div className="p-1.5 rounded-xl bg-white/80 dark:bg-neutral-800/80 border border-neutral-200/60 dark:border-neutral-700/60">
-              <span className="font-black text-neutral-800 dark:text-neutral-200 block">1. Membro Semplice</span>
-              <span className="text-neutral-500 dark:text-neutral-400">Entra nel gruppo, crea SOLO sondaggi</span>
+          {/* Link B2B (solo se Admin Clienti e nel gruppo principale) */}
+          {!activeSubgroup && isClientAdmin && (
+            <div className="pt-2 border-t border-neutral-200/70 dark:border-neutral-700/70 flex items-center justify-between">
+              <span className="text-[11px] font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1">
+                <Link2 className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                <span>Link Modulo Prenotazione Clienti B2B:</span>
+              </span>
+              <button
+                type="button"
+                onClick={handleCopyB2b}
+                className="text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                {copiedB2b ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                <span>{copiedB2b ? 'Copiato!' : 'Copia Link B2B'}</span>
+              </button>
             </div>
-            <div className="p-1.5 rounded-xl bg-white/80 dark:bg-neutral-800/80 border border-neutral-200/60 dark:border-neutral-700/60">
-              <span className="font-black text-[#f23e2e] block">2. Admin</span>
-              <span className="text-neutral-500 dark:text-neutral-400">Membro + crea eventi ufficiali</span>
-            </div>
-            <div className="p-1.5 rounded-xl bg-white/80 dark:bg-neutral-800/80 border border-neutral-200/60 dark:border-neutral-700/60">
-              <span className="font-black text-amber-600 dark:text-amber-400 block">3. Admin Clienti</span>
-              <span className="text-neutral-500 dark:text-neutral-400">Admin + form B2B & richieste</span>
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Lista Membri */}

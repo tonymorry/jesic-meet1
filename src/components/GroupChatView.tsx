@@ -31,6 +31,8 @@ import {
   Volume2,
   CheckCheck,
   Maximize2,
+  Edit2,
+  Check,
 } from 'lucide-react';
 
 export interface GroupChatViewProps {
@@ -50,6 +52,12 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
+
+  // Modifica e Cancellazione Messaggio (Stile WhatsApp - Elimina per tutti)
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null);
 
   // Risposta / Richiamo a un messaggio (WhatsApp Quote)
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
@@ -301,6 +309,73 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
     }
   };
 
+  // Modifica messaggio (Stile WhatsApp)
+  const handleStartEdit = (msg: ChatMessage) => {
+    setEditingMessageId(msg.id);
+    setEditingText(msg.content || '');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingMessageId(null);
+    setEditingText('');
+  };
+
+  const handleSaveEdit = async (messageId: string) => {
+    const trimmed = editingText.trim();
+    if (!trimmed) return;
+    setIsSavingEdit(true);
+    try {
+      // Aggiornamento ottimistico in tempo reale
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId
+            ? { ...m, content: trimmed, isEdited: true, editedAt: new Date().toISOString() }
+            : m
+        )
+      );
+      setEditingMessageId(null);
+
+      await fetch(`/api/groups/${activeGroup.id}/chat/${messageId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          content: trimmed,
+        }),
+      });
+    } catch (err) {
+      console.error('Errore modifica messaggio chat:', err);
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  // Cancellazione messaggio per tutti (Stile WhatsApp)
+  const handleDeleteMessage = async (messageId: string) => {
+    const confirmed = window.confirm(
+      'Vuoi davvero eliminare questo messaggio per tutti? Non sarà più visibile a nessun membro.'
+    );
+    if (!confirmed) return;
+
+    setDeletingMessageId(messageId);
+    try {
+      // Rimozione ottimistica immediata per tutti
+      setMessages((prev) => prev.filter((m) => m.id !== messageId));
+
+      await fetch(`/api/groups/${activeGroup.id}/chat/${messageId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: currentUser.id,
+        }),
+      });
+    } catch (err) {
+      console.error('Errore eliminazione messaggio chat:', err);
+    } finally {
+      setDeletingMessageId(null);
+    }
+  };
+
   // Scroll al messaggio citato quando si clicca sul quote
   const scrollToMessage = (messageId: string) => {
     const el = document.getElementById(`chat-msg-${messageId}`);
@@ -509,15 +584,39 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
                         : 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 rounded-bl-xs border border-neutral-200/80 dark:border-neutral-800'
                     }`}
                   >
-                    {/* Pulsante Reply / Richiama Messaggio (visibile su hover o tap) */}
-                    <button
-                      type="button"
-                      onClick={() => setReplyingTo(msg)}
-                      title="Rispondi / Richiama questo messaggio"
-                      className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 p-1 rounded-md bg-black/10 dark:bg-white/10 hover:bg-black/20 text-neutral-600 dark:text-neutral-300 transition-opacity cursor-pointer"
-                    >
-                      <CornerUpLeft className="w-3.5 h-3.5" />
-                    </button>
+                    {/* Pulsanti Azione Messaggio: Rispondi, e se autore Modifica ed Elimina per tutti */}
+                    <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 flex items-center gap-1 p-0.5 rounded-lg bg-black/10 dark:bg-white/10 backdrop-blur-xs transition-opacity z-10 shadow-2xs">
+                      <button
+                        type="button"
+                        onClick={() => setReplyingTo(msg)}
+                        title="Rispondi / Richiama questo messaggio"
+                        className="p-1 rounded-md hover:bg-black/20 text-neutral-600 dark:text-neutral-200 transition-colors cursor-pointer"
+                      >
+                        <CornerUpLeft className="w-3.5 h-3.5" />
+                      </button>
+
+                      {isMe && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleStartEdit(msg)}
+                            title="Modifica messaggio"
+                            className="p-1 rounded-md hover:bg-black/20 text-neutral-600 dark:text-neutral-200 transition-colors cursor-pointer"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteMessage(msg.id)}
+                            disabled={deletingMessageId === msg.id}
+                            title="Elimina per tutti"
+                            className="p-1 rounded-md hover:bg-red-500 hover:text-white text-neutral-600 dark:text-neutral-200 transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
+                    </div>
 
                     {/* BOX CITAZIONE / RICHIAMO MESSAGGIO (WhatsApp Style Quote) */}
                     {msg.replyTo && (
@@ -641,19 +740,64 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
                       </div>
                     )}
 
-                    {/* Contenuto di testo del messaggio */}
-                    {msg.content && (
-                      <p className="whitespace-pre-wrap leading-relaxed">
-                        {msg.content}
-                      </p>
+                    {/* Contenuto di testo del messaggio o Editor Inline */}
+                    {editingMessageId === msg.id ? (
+                      <div className="space-y-1.5 py-1 min-w-[200px]">
+                        <textarea
+                          value={editingText}
+                          onChange={(e) => setEditingText(e.target.value)}
+                          disabled={isSavingEdit}
+                          rows={2}
+                          className="w-full text-xs p-2 rounded-xl border border-[#00a884] bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white focus:outline-none resize-none"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              handleSaveEdit(msg.id);
+                            } else if (e.key === 'Escape') {
+                              handleCancelEdit();
+                            }
+                          }}
+                        />
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={handleCancelEdit}
+                            disabled={isSavingEdit}
+                            className="px-2 py-1 rounded-lg text-[10px] font-bold bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-300 cursor-pointer"
+                          >
+                            Annulla
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSaveEdit(msg.id)}
+                            disabled={isSavingEdit || !editingText.trim()}
+                            className="px-2.5 py-1 rounded-lg text-[10px] font-black bg-[#00a884] hover:bg-[#008f6f] text-white flex items-center gap-1 cursor-pointer shadow-xs disabled:opacity-50"
+                          >
+                            <Check className="w-3 h-3 stroke-[3px]" />
+                            <span>Salva</span>
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      msg.content && (
+                        <p className="whitespace-pre-wrap leading-relaxed">
+                          {msg.content}
+                        </p>
+                      )
                     )}
 
-                    {/* Orario e spunta di invio */}
+                    {/* Orario, badge (modificato) e spunta di invio */}
                     <div
                       className={`text-[9px] mt-1 flex items-center gap-1 justify-end select-none ${
                         isMe ? 'text-neutral-600 dark:text-neutral-400' : 'text-neutral-400'
                       }`}
                     >
+                      {msg.isEdited && (
+                        <span className="italic text-[9px] text-neutral-500 dark:text-neutral-400 mr-0.5">
+                          (modificato)
+                        </span>
+                      )}
                       <span>{formatMessageTime(msg.createdAt)}</span>
                       {isMe && (
                         <CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" />

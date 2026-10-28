@@ -1212,6 +1212,8 @@ app.get('/api/groups/:id/chat', async (req: Request, res: Response) => {
       content: m.content || '',
       attachment: m.attachment || undefined,
       replyTo: m.replyTo || undefined,
+      isEdited: Boolean(m.isEdited),
+      editedAt: m.editedAt || undefined,
       createdAt: m.createdAt,
     }));
 
@@ -1237,7 +1239,7 @@ app.post('/api/groups/:id/chat', async (req: Request, res: Response) => {
         ? String(subgroupId)
         : null;
 
-    const created = await ChatMessageModel.create({
+    const created: any = await ChatMessageModel.create({
       groupId: id,
       subgroupId: cleanSubgroupId,
       authorId,
@@ -1247,6 +1249,8 @@ app.post('/api/groups/:id/chat', async (req: Request, res: Response) => {
       content: content ? content.trim() : '',
       attachment: attachment || undefined,
       replyTo: replyTo || undefined,
+      isEdited: false,
+      editedAt: undefined,
     });
 
     const mapped = {
@@ -1260,6 +1264,8 @@ app.post('/api/groups/:id/chat', async (req: Request, res: Response) => {
       content: created.content,
       attachment: created.attachment,
       replyTo: created.replyTo,
+      isEdited: false,
+      editedAt: undefined,
       createdAt: created.createdAt,
     };
 
@@ -1267,6 +1273,99 @@ app.post('/api/groups/:id/chat', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('Errore invio messaggio chat MongoDB:', err.message);
     return res.status(500).json({ error: 'Errore durante il salvataggio del messaggio in MongoDB' });
+  }
+});
+
+// PATCH /api/groups/:id/chat/:messageId - Modifica il testo di un messaggio (solo l'autore)
+app.patch('/api/groups/:id/chat/:messageId', async (req: Request, res: Response) => {
+  const { id, messageId } = req.params;
+  const { userId, content } = req.body;
+
+  if (!userId || !content || !content.trim()) {
+    return res.status(400).json({ error: 'ID utente e nuovo testo obbligatori' });
+  }
+
+  try {
+    const msg = await ChatMessageModel.findOne({
+      groupId: id,
+      $or: [{ _id: messageId }, { id: messageId }],
+    });
+
+    if (!msg) {
+      return res.status(404).json({ error: 'Messaggio non trovato in MongoDB' });
+    }
+
+    if (msg.authorId !== userId) {
+      return res.status(403).json({ error: 'Puoi modificare solo i messaggi inviati da te' });
+    }
+
+    msg.content = content.trim();
+    (msg as any).isEdited = true;
+    (msg as any).editedAt = new Date().toISOString();
+    await msg.save();
+
+    const mapped = {
+      id: msg._id || msg.id,
+      groupId: msg.groupId,
+      subgroupId: msg.subgroupId || null,
+      authorId: msg.authorId,
+      authorName: msg.authorName,
+      authorSurname: msg.authorSurname,
+      authorAvatar: msg.authorAvatar,
+      content: msg.content,
+      attachment: msg.attachment,
+      replyTo: msg.replyTo,
+      isEdited: true,
+      editedAt: (msg as any).editedAt,
+      createdAt: msg.createdAt,
+    };
+
+    return res.json({ success: true, message: mapped });
+  } catch (err: any) {
+    console.error('Errore modifica messaggio chat MongoDB:', err.message);
+    return res.status(500).json({ error: 'Errore modifica messaggio in MongoDB' });
+  }
+});
+
+// DELETE /api/groups/:id/chat/:messageId - Cancella il messaggio per tutti
+app.delete('/api/groups/:id/chat/:messageId', async (req: Request, res: Response) => {
+  const { id, messageId } = req.params;
+  const userId = (req.body?.userId || req.query?.userId) as string;
+
+  if (!userId) {
+    return res.status(400).json({ error: 'ID utente obbligatorio per eliminare il messaggio' });
+  }
+
+  try {
+    const msg = await ChatMessageModel.findOne({
+      groupId: id,
+      $or: [{ _id: messageId }, { id: messageId }],
+    });
+
+    if (!msg) {
+      return res.status(404).json({ error: 'Messaggio non trovato in MongoDB' });
+    }
+
+    // L'autore del messaggio, o il creatore del gruppo o l'admin possono cancellare
+    if (msg.authorId !== userId) {
+      const group = await GroupModel.findOne({ $or: [{ _id: id }, { id }] });
+      const isCreator = group?.creatorId === userId;
+      const isAdmin = group?.members?.some((m: any) => m.userId === userId && m.role === 'admin');
+      if (!isCreator && !isAdmin) {
+        return res.status(403).json({ error: 'Puoi eliminare solo i tuoi messaggi' });
+      }
+    }
+
+    await ChatMessageModel.deleteOne({ _id: msg._id });
+
+    return res.json({
+      success: true,
+      message: 'Messaggio eliminato per tutti con successo',
+      deletedMessageId: messageId,
+    });
+  } catch (err: any) {
+    console.error('Errore eliminazione messaggio chat MongoDB:', err.message);
+    return res.status(500).json({ error: 'Errore eliminazione messaggio in MongoDB' });
   }
 });
 

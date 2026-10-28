@@ -584,27 +584,6 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </span>
         </div>
 
-        {/* Guida Gerarchia Permessi nei Gruppi */}
-        <div className="p-3 bg-neutral-100/80 dark:bg-neutral-800/60 rounded-2xl border border-neutral-200/80 dark:border-neutral-700/60 text-[11px] space-y-1">
-          <p className="font-bold text-neutral-800 dark:text-neutral-200 flex items-center gap-1">
-            <span>🛡️</span> Gerarchia ruoli e permessi nei gruppi:
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 pt-0.5 text-[10px]">
-            <div className="p-1.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700">
-              <span className="font-bold text-neutral-800 dark:text-neutral-200 block">1. Membro Semplice</span>
-              <span className="text-neutral-500">Può creare solo i sondaggi</span>
-            </div>
-            <div className="p-1.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700">
-              <span className="font-bold text-[#f23e2e] block">2. Admin</span>
-              <span className="text-neutral-500">Membro + crea eventi</span>
-            </div>
-            <div className="p-1.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700">
-              <span className="font-bold text-amber-600 dark:text-amber-400 block">3. Admin Clienti</span>
-              <span className="text-neutral-500">Admin + form B2B & richieste clienti</span>
-            </div>
-          </div>
-        </div>
-
         {userGroups.length === 0 ? (
           <p className="text-xs text-neutral-400 italic p-3 bg-neutral-50 dark:bg-neutral-800/50 rounded-2xl">
             Non fai ancora parte di alcun gruppo di lavoro. Cerca un gruppo nella Home o unisciti tramite codice.

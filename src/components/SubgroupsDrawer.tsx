@@ -10,8 +10,9 @@
  * - I sottogruppi pubblici sono aperti a tutti i membri, quelli privati richiedono il codice
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Group, Subgroup, User } from '../types';
+import { GroupAvatar } from './GroupAvatar';
 import {
   X,
   Folder,
@@ -25,6 +26,8 @@ import {
   Copy,
   Edit2,
   Settings,
+  Image as ImageIcon,
+  Upload,
 } from 'lucide-react';
 
 export interface SubgroupsDrawerProps {
@@ -69,6 +72,45 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
   const [newSubgroupIsPublic, setNewSubgroupIsPublic] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const createSubImageRef = useRef<HTMLInputElement>(null);
+
+  const handleCreateImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) {
+      alert("L'immagine non può superare 8MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_SIZE = 160;
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height = Math.round((height * MAX_SIZE) / width);
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width = Math.round((width * MAX_SIZE) / height);
+            height = MAX_SIZE;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        setNewSubgroupAvatar(dataUrl);
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Stato Modifica Sottogruppo
   const [editingSubgroup, setEditingSubgroup] = useState<Subgroup | null>(null);
@@ -364,12 +406,55 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
                     </button>
                   </div>
 
-                  {/* Scelta Icona Preset */}
+                  {/* Scelta Icona o Immagine Sottogruppo */}
                   <div>
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-600 dark:text-neutral-400 mb-1">
-                      Icona del Sottogruppo
-                    </label>
+                    <input
+                      ref={createSubImageRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleCreateImageUpload}
+                      className="hidden"
+                    />
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-600 dark:text-neutral-400">
+                        Icona o Immagine
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => createSubImageRef.current?.click()}
+                        className="text-[10px] text-purple-600 hover:underline font-bold flex items-center gap-1 cursor-pointer"
+                      >
+                        <Upload className="w-3 h-3" />
+                        <span>Carica foto</span>
+                      </button>
+                    </div>
+
                     <div className="flex items-center gap-1.5 flex-wrap">
+                      {(newSubgroupAvatar.startsWith('data:image/') || newSubgroupAvatar.startsWith('http')) && (
+                        <div className="relative shrink-0 mr-1">
+                          <div className="w-8 h-8 rounded-xl overflow-hidden border-2 border-purple-600 shadow-xs">
+                            <img src={newSubgroupAvatar} alt="Avatar" className="w-full h-full object-cover" />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setNewSubgroupAvatar('📁')}
+                            title="Rimuovi foto"
+                            className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-neutral-800 text-white flex items-center justify-center text-[9px] cursor-pointer hover:bg-red-600"
+                          >
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => createSubImageRef.current?.click()}
+                        title="Carica foto da file"
+                        className="w-8 h-8 rounded-xl flex items-center justify-center bg-white dark:bg-neutral-800 border border-dashed border-neutral-300 dark:border-neutral-600 cursor-pointer"
+                      >
+                        <ImageIcon className="w-3.5 h-3.5 text-purple-600" />
+                      </button>
+
                       {PRESET_ICONS.map((icon) => (
                         <button
                           key={icon}
@@ -679,17 +764,12 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
                           className="w-full p-3 flex items-center justify-between gap-2.5 cursor-pointer hover:bg-neutral-50/50 dark:hover:bg-neutral-800/50 transition-colors"
                         >
                           <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                            <div
-                              className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0 ${
-                                isSelected
-                                  ? 'bg-purple-600 text-white shadow-xs'
-                                  : hasAccess
-                                  ? 'bg-purple-100 dark:bg-purple-950/60'
-                                  : 'bg-neutral-100 dark:bg-neutral-700'
-                              }`}
-                            >
-                              {subgroup.avatar || '📁'}
-                            </div>
+                            <GroupAvatar
+                              avatar={subgroup.avatar}
+                              name={subgroup.name}
+                              size="sm"
+                              fallbackEmoji="📁"
+                            />
 
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5 flex-wrap">

@@ -12,6 +12,8 @@
  */
 
 import React from 'react';
+import { User } from '../types';
+import { UserAvatar } from './UserAvatar';
 import {
   Users,
   Inbox,
@@ -30,6 +32,7 @@ export type NavTab = 'groups' | 'polls' | 'profile' | 'dashboard' | 'events' | '
 interface BottomNavProps {
   currentTab: NavTab;
   onSelectTab: (tab: NavTab) => void;
+  currentUser: User;
   onOpenCreateMenu?: () => void;
   onToggleSubgroupsMenu?: () => void;
   pendingInvitesCount?: number;
@@ -42,6 +45,7 @@ interface BottomNavProps {
 export const BottomNav: React.FC<BottomNavProps> = ({
   currentTab,
   onSelectTab,
+  currentUser,
   onOpenCreateMenu,
   onToggleSubgroupsMenu,
   pendingInvitesCount = 0,
@@ -153,7 +157,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
 
 
 
-            {/* 5. "Profilo" */}
+            {/* 4. "Profilo" (In basso a destra con immagine profilo) */}
             <button
               type="button"
               onClick={() => onSelectTab('profile')}
@@ -164,13 +168,15 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               }`}
               aria-label="Profilo personale"
             >
-              <UserIcon
-                className={`w-5 h-5 transition-transform ${
-                  currentTab === 'profile' ? 'stroke-[2.5px] scale-110' : 'stroke-[1.8px]'
+              <div
+                className={`p-0.5 rounded-full transition-all ${
+                  currentTab === 'profile' ? 'ring-2 ring-[#f23e2e]' : ''
                 }`}
-              />
+              >
+                <UserAvatar user={currentUser} size="xs" />
+              </div>
               <span
-                className={`text-[10px] mt-1 tracking-tight leading-none ${
+                className={`text-[10px] mt-0.5 tracking-tight leading-none ${
                   currentTab === 'profile'
                     ? 'font-black text-[#f23e2e]'
                     : 'font-semibold text-neutral-500 dark:text-neutral-400'
@@ -334,7 +340,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               </span>
             </button>
 
-            {/* 6. Chat (dedicata al Gruppo Generale o al Sottogruppo attivo - sostituisce Profilo) */}
+            {/* 6. Chat (dedicata al Gruppo Generale o al Sottogruppo attivo) */}
             <button
               type="button"
               onClick={() => onSelectTab('chat')}
@@ -358,6 +364,35 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                 }`}
               >
                 Chat
+              </span>
+            </button>
+
+            {/* 7. Profilo (In basso a destra con immagine profilo) */}
+            <button
+              type="button"
+              onClick={() => onSelectTab('profile')}
+              className={`flex-1 flex flex-col items-center justify-center py-1 transition-all active:scale-95 cursor-pointer ${
+                currentTab === 'profile'
+                  ? 'text-[#f23e2e] dark:text-[#f23e2e]'
+                  : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
+              }`}
+              aria-label="Profilo personale"
+            >
+              <div
+                className={`p-0.5 rounded-full transition-all ${
+                  currentTab === 'profile' ? 'ring-2 ring-[#f23e2e]' : ''
+                }`}
+              >
+                <UserAvatar user={currentUser} size="xs" />
+              </div>
+              <span
+                className={`text-[10px] mt-0.5 tracking-tight leading-none ${
+                  currentTab === 'profile'
+                    ? 'font-black text-[#f23e2e]'
+                    : 'font-semibold text-neutral-500 dark:text-neutral-400'
+                }`}
+              >
+                Profilo
               </span>
             </button>
           </div>

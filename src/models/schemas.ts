@@ -810,6 +810,8 @@ export interface IChatMessage {
   content: string;
   attachment?: IChatAttachment;
   replyTo?: IChatReplyTo;
+  isEdited?: boolean;
+  editedAt?: string | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -869,6 +871,14 @@ const ChatMessageSchema: Schema<IChatMessage> = new Schema(
       authorName: String,
       content: String,
       attachmentType: String,
+    },
+    isEdited: {
+      type: Boolean,
+      default: false,
+    },
+    editedAt: {
+      type: String,
+      default: null,
     },
   },
   {

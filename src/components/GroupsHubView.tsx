@@ -11,9 +11,10 @@
  * 4. La logica del codice univoco e del link di invito rimane al 100% invariata e pienamente funzionante.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Group, User } from '../types';
 import { UserAvatar } from './UserAvatar';
+import { GroupAvatar } from './GroupAvatar';
 import {
   Users,
   Plus,
@@ -30,6 +31,8 @@ import {
   Lock,
   UserCheck,
   ExternalLink,
+  Image as ImageIcon,
+  Upload,
 } from 'lucide-react';
 
 interface GroupsHubViewProps {
@@ -64,6 +67,45 @@ export const GroupsHubView: React.FC<GroupsHubViewProps> = ({
   const [isPublicGroup, setIsPublicGroup] = useState(false); // Default: Privato
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const groupImageInputRef = useRef<HTMLInputElement>(null);
+
+  const handleGroupImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) {
+      alert("L'immagine non può superare 8MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_SIZE = 160;
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height = Math.round((height * MAX_SIZE) / width);
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width = Math.round((width * MAX_SIZE) / height);
+            height = MAX_SIZE;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        setSelectedIcon(dataUrl);
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Form Entra con Codice
   const [joinCodeInput, setJoinCodeInput] = useState('');
@@ -317,16 +359,11 @@ export const GroupsHubView: React.FC<GroupsHubViewProps> = ({
                       {/* Top Header Card con Avatar, Nome e Badge Visibilità */}
                       <div className="flex items-start justify-between gap-2.5">
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-12 h-12 rounded-2xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200/80 dark:border-neutral-700/80 flex items-center justify-center text-2xl shadow-xs shrink-0">
-                            {group.avatar || '👥'}
-                          </div>
+                          <GroupAvatar avatar={group.avatar} name={group.name} size="lg" />
                           <div className="min-w-0">
                             <h3 className="text-sm font-black text-neutral-900 dark:text-white truncate">
                               {group.name}
                             </h3>
-                            <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
-                              {group.members.length} {group.members.length === 1 ? 'membro' : 'membri'}
-                            </p>
                           </div>
                         </div>
 
@@ -527,16 +564,13 @@ export const GroupsHubView: React.FC<GroupsHubViewProps> = ({
                       {/* Riga Superiore: Avatar + Titolo + Badge Visibilità & Ruolo */}
                       <div className="flex items-start justify-between gap-2.5">
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-12 h-12 rounded-2xl bg-neutral-100 dark:bg-neutral-800 border border-neutral-200/80 dark:border-neutral-700/80 flex items-center justify-center text-2xl shadow-xs group-hover:scale-105 transition-transform shrink-0">
-                            {group.avatar || '👥'}
+                          <div className="group-hover:scale-105 transition-transform shrink-0">
+                            <GroupAvatar avatar={group.avatar} name={group.name} size="lg" />
                           </div>
                           <div className="min-w-0">
                             <h3 className="text-sm font-black text-neutral-900 dark:text-white group-hover:text-[#f23e2e] transition-colors leading-tight truncate">
                               {group.name}
                             </h3>
-                            <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5">
-                              {group.members.length} {group.members.length === 1 ? 'membro' : 'membri'}
-                            </p>
                           </div>
                         </div>
 
@@ -668,12 +702,57 @@ export const GroupsHubView: React.FC<GroupsHubViewProps> = ({
             </div>
 
             <form onSubmit={handleCreateSubmit} className="space-y-3.5">
-              {/* Icona Gruppo */}
+              {/* Icona o Immagine Gruppo */}
               <div>
-                <label className="block text-[11px] font-bold text-neutral-700 dark:text-neutral-300 uppercase tracking-wider mb-1.5">
-                  Icona / Avatar Gruppo
-                </label>
+                <input
+                  ref={groupImageInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleGroupImageChange}
+                  className="hidden"
+                />
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-[11px] font-bold text-neutral-700 dark:text-neutral-300 uppercase tracking-wider">
+                    Icona o Immagine Gruppo
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => groupImageInputRef.current?.click()}
+                    className="text-[11px] text-[#f23e2e] hover:underline font-bold flex items-center gap-1 cursor-pointer"
+                  >
+                    <Upload className="w-3 h-3" />
+                    <span>Carica foto</span>
+                  </button>
+                </div>
+
                 <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                  {/* Se è stata caricata un'immagine personalizzata */}
+                  {(selectedIcon.startsWith('data:image/') || selectedIcon.startsWith('http')) && (
+                    <div className="relative shrink-0 mr-1">
+                      <div className="w-10 h-10 rounded-2xl overflow-hidden border-2 border-[#f23e2e] ring-2 ring-red-500/20 shadow-xs">
+                        <img src={selectedIcon} alt="Avatar gruppo" className="w-full h-full object-cover" />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedIcon('👥')}
+                        title="Rimuovi foto e usa icona"
+                        className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-neutral-800 text-white flex items-center justify-center text-[10px] cursor-pointer hover:bg-red-600 transition-colors"
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Tasto rapido apri file picker */}
+                  <button
+                    type="button"
+                    onClick={() => groupImageInputRef.current?.click()}
+                    title="Carica foto/immagine da file"
+                    className="w-9 h-9 rounded-xl flex items-center justify-center bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-600 dark:text-neutral-300 border border-dashed border-neutral-300 dark:border-neutral-600 transition-all shrink-0 cursor-pointer"
+                  >
+                    <ImageIcon className="w-4 h-4 text-[#f23e2e]" />
+                  </button>
+
                   {PRESET_ICONS.map((icon) => (
                     <button
                       key={icon}

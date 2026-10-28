@@ -1967,6 +1967,7 @@ export default function App() {
           <BottomNav
             currentTab={currentTab}
             onSelectTab={setCurrentTab}
+            currentUser={currentUser}
             onOpenCreateMenu={handlePlusButtonClick}
             pendingInvitesCount={pendingInvitesCount}
             pendingOfficialEventsCount={pendingOfficialEventsCount}
@@ -1980,6 +1981,8 @@ export default function App() {
           {isGroupMembersModalOpen && activeGroup && (
             <GroupMembersModal
               group={activeGroup}
+              activeSubgroup={activeSubgroup}
+              isClientAdmin={isClientAdmin}
               currentUser={currentUser}
               allUsers={users}
               onClose={() => setIsGroupMembersModalOpen(false)}
