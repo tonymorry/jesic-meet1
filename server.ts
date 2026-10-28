@@ -917,7 +917,7 @@ app.post('/api/groups/:id/members/:memberId/role', handleUpdateGroupMemberRole);
 // POST /api/groups/:id/subgroups - Creazione Sottogruppo (Solo Responsabile o Creatore del gruppo)
 app.post('/api/groups/:id/subgroups', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, description } = req.body;
+  const { name, description, avatar, isPublic } = req.body;
   const requesterId = req.body?.requesterId || req.body?.creatorId || req.body?.userId;
 
   if (!name || !name.trim()) {
@@ -946,13 +946,16 @@ app.post('/api/groups/:id/subgroups', async (req: Request, res: Response) => {
 
     const subgroupId = `subgrp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const subCode = 'SUB-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+    const isPub = Boolean(isPublic);
     const newSubgroup = {
       _id: subgroupId,
       id: subgroupId,
       name: name.trim(),
       description: description ? description.trim() : '',
+      avatar: avatar || '📁',
+      isPublic: isPub,
       code: subCode,
-      members: [requesterId],
+      members: isPub ? group.members.map((m: any) => m.userId) : [requesterId],
       createdBy: requesterId,
       createdAt: new Date().toISOString(),
     };
@@ -1108,6 +1111,75 @@ app.delete('/api/groups/:id/subgroups/:subgroupId', async (req: Request, res: Re
   } catch (err: any) {
     console.error('Errore eliminazione sottogruppo MongoDB:', err.message);
     return res.status(500).json({ error: 'Errore eliminazione sottogruppo in MongoDB' });
+  }
+});
+
+// PATCH /api/groups/:id/subgroups/:subgroupId - Modifica e personalizzazione Sottogruppo (Responsabile o Creatore)
+app.patch('/api/groups/:id/subgroups/:subgroupId', async (req: Request, res: Response) => {
+  const { id, subgroupId } = req.params;
+  const { name, description, avatar, isPublic, requesterId } = req.body;
+
+  try {
+    const group = await GroupModel.findOne({ $or: [{ _id: id }, { id }] });
+    if (!group) {
+      return res.status(404).json({ error: 'Gruppo principale non trovato' });
+    }
+
+    if (requesterId) {
+      const member = group.members.find((m: any) => m.userId === requesterId);
+      const isResponsabile = member && member.role === 'responsabile';
+      const isCreator = group.creatorId === requesterId;
+      if (!isResponsabile && !isCreator) {
+        return res.status(403).json({ error: 'Non sei autorizzato a modificare questo sottogruppo' });
+      }
+    }
+
+    const subgroup = group.subgroups?.find((s: any) => s._id === subgroupId || s.id === subgroupId);
+    if (!subgroup) {
+      return res.status(404).json({ error: 'Sottogruppo non trovato' });
+    }
+
+    if (name && name.trim()) subgroup.name = name.trim();
+    if (description !== undefined) subgroup.description = description.trim();
+    if (avatar) subgroup.avatar = avatar;
+    if (typeof isPublic === 'boolean') {
+      subgroup.isPublic = isPublic;
+      if (isPublic && group.members) {
+        // Se diventa pubblico, assicura che tutti i membri abbiano accesso
+        const currentMembers = new Set(subgroup.members || []);
+        group.members.forEach((m: any) => currentMembers.add(m.userId));
+        subgroup.members = Array.from(currentMembers);
+      }
+    }
+
+    group.markModified('subgroups');
+    await group.save();
+
+    const mappedGroup = {
+      id: group._id || group.id,
+      name: group.name,
+      description: group.description,
+      code: group.code,
+      inviteLink: group.inviteLink,
+      creatorId: group.creatorId,
+      members: group.members,
+      subgroups: group.subgroups,
+      avatar: group.avatar,
+      isPublic: group.isPublic ?? false,
+      createdAt: group.createdAt,
+      updatedAt: group.updatedAt,
+    };
+
+    return res.json({
+      success: true,
+      message: 'Sottogruppo personalizzato con successo in MongoDB',
+      subgroup,
+      group: mappedGroup,
+      subgroups: group.subgroups,
+    });
+  } catch (err: any) {
+    console.error('Errore aggiornamento sottogruppo MongoDB:', err.message);
+    return res.status(500).json({ error: 'Errore aggiornamento sottogruppo in MongoDB' });
   }
 });
 

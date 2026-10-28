@@ -4,8 +4,10 @@
  * Aperto dal tasto con l'icona a 3 lineette (menu hamburger) quando si è dentro un gruppo:
  * - Mostra la Cartella Generale (Gruppo Principale - accessibile a tutti)
  * - Mostra l'elenco dei Sottogruppi di lavoro (sottocartelle)
- * - REQUISITO: I sottogruppi spuntano a tutti i membri, ma l'accesso avviene solo tramite codice (come nel gruppo generale)
- * - Solo chi ha il ruolo di "Responsabile" in quel gruppo (o il creatore) può creare nuovi sottogruppi
+ * - Creazione e personalizzazione completa identica a quella del gruppo principale:
+ *   - Nome, Descrizione, Icona Preset, Privacy (Privato con codice vs Pubblico)
+ * - Solo chi ha il ruolo di "Responsabile" in quel gruppo (o il creatore) può creare/modificare nuovi sottogruppi
+ * - I sottogruppi pubblici sono aperti a tutti i membri, quelli privati richiedono il codice
  */
 
 import React, { useState } from 'react';
@@ -19,11 +21,10 @@ import {
   Plus,
   Trash2,
   Lock,
-  Unlock,
   KeyRound,
   Copy,
-  Layers,
-  ArrowRight,
+  Edit2,
+  Settings,
 } from 'lucide-react';
 
 export interface SubgroupsDrawerProps {
@@ -33,10 +34,21 @@ export interface SubgroupsDrawerProps {
   activeSubgroupId: string | null;
   onSelectSubgroup: (subgroupId: string | null) => void;
   currentUser: User;
-  onCreateSubgroup: (name: string, description?: string) => Promise<boolean | void>;
+  onCreateSubgroup: (
+    name: string,
+    description?: string,
+    avatar?: string,
+    isPublic?: boolean
+  ) => Promise<boolean | void>;
+  onUpdateSubgroup?: (
+    subgroupId: string,
+    data: { name: string; description?: string; avatar?: string; isPublic?: boolean }
+  ) => Promise<boolean | void>;
   onDeleteSubgroup?: (subgroupId: string) => Promise<boolean | void>;
   onJoinSubgroup?: (subgroupId: string, code: string) => Promise<{ success: boolean; error?: string }>;
 }
+
+const PRESET_ICONS = ['📁', '🚀', '💡', '💻', '📊', '🎯', '⚡', '🏢', '🔥', '🎓', '🎨', '💼', '⭐', '🛠️', '👥'];
 
 export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
   isOpen,
@@ -46,14 +58,27 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
   onSelectSubgroup,
   currentUser,
   onCreateSubgroup,
+  onUpdateSubgroup,
   onDeleteSubgroup,
   onJoinSubgroup,
 }) => {
   const [isCreating, setIsCreating] = useState(false);
   const [newSubgroupName, setNewSubgroupName] = useState('');
   const [newSubgroupDesc, setNewSubgroupDesc] = useState('');
+  const [newSubgroupAvatar, setNewSubgroupAvatar] = useState('📁');
+  const [newSubgroupIsPublic, setNewSubgroupIsPublic] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Stato Modifica Sottogruppo
+  const [editingSubgroup, setEditingSubgroup] = useState<Subgroup | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [editAvatar, setEditAvatar] = useState('📁');
+  const [editIsPublic, setEditIsPublic] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Stato per sblocco sottogruppo con codice
@@ -82,14 +107,53 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
     setIsSubmitting(true);
     setErrorMsg(null);
     try {
-      await onCreateSubgroup(newSubgroupName.trim(), newSubgroupDesc.trim());
+      await onCreateSubgroup(
+        newSubgroupName.trim(),
+        newSubgroupDesc.trim(),
+        newSubgroupAvatar,
+        newSubgroupIsPublic
+      );
       setNewSubgroupName('');
       setNewSubgroupDesc('');
+      setNewSubgroupAvatar('📁');
+      setNewSubgroupIsPublic(false);
       setIsCreating(false);
+      onClose();
     } catch (err: any) {
       setErrorMsg(err?.message || 'Errore durante la creazione del sottogruppo');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleStartEdit = (subgroup: Subgroup, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingSubgroup(subgroup);
+    setEditName(subgroup.name);
+    setEditDesc(subgroup.description || '');
+    setEditAvatar(subgroup.avatar || '📁');
+    setEditIsPublic(Boolean(subgroup.isPublic));
+    setEditError(null);
+  };
+
+  const handleSaveEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSubgroup || !onUpdateSubgroup || !editName.trim()) return;
+
+    setIsSavingEdit(true);
+    setEditError(null);
+    try {
+      await onUpdateSubgroup(editingSubgroup.id, {
+        name: editName.trim(),
+        description: editDesc.trim(),
+        avatar: editAvatar,
+        isPublic: editIsPublic,
+      });
+      setEditingSubgroup(null);
+    } catch (err: any) {
+      setEditError(err?.message || 'Errore durante la personalizzazione');
+    } finally {
+      setIsSavingEdit(false);
     }
   };
 
@@ -159,21 +223,18 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
       <div className="fixed inset-y-0 left-0 max-w-full flex pr-10">
         <div className="w-screen max-w-md bg-white dark:bg-neutral-900 border-r border-neutral-200 dark:border-neutral-800 shadow-2xl flex flex-col animate-in slide-in-from-left duration-250">
           
-          {/* Header Drawer */}
-          <div className="p-4 sm:p-5 border-b border-neutral-200/80 dark:border-neutral-800 bg-neutral-50/80 dark:bg-neutral-900/80 flex items-center justify-between">
+          {/* Header del Pannello */}
+          <div className="p-4 sm:p-5 border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between">
             <div className="flex items-center gap-2.5 min-w-0">
-              <span className="text-2xl p-1 bg-white dark:bg-neutral-800 rounded-xl border border-neutral-200/80 dark:border-neutral-700/80 shrink-0">
+              <span className="text-2xl p-1 bg-neutral-100 dark:bg-neutral-800 rounded-xl">
                 {activeGroup.avatar || '👥'}
               </span>
               <div className="min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <h3 className="text-base font-black text-neutral-900 dark:text-white truncate">
-                    {activeGroup.name}
-                  </h3>
-                </div>
-                <p className="text-[11px] text-neutral-500 dark:text-neutral-400 font-medium truncate flex items-center gap-1">
-                  <Layers className="w-3 h-3 text-[#f23e2e]" />
-                  <span>Cartelle e Sottogruppi di Lavoro</span>
+                <h3 className="text-sm sm:text-base font-black text-neutral-900 dark:text-white truncate">
+                  {activeGroup.name}
+                </h3>
+                <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
+                  Cartelle & Sottogruppi
                 </p>
               </div>
             </div>
@@ -181,22 +242,22 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-xl hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 cursor-pointer transition-colors"
-              aria-label="Chiudi menu sottogruppi"
+              className="p-1.5 rounded-xl hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors"
+              title="Chiudi menu"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
-          {/* Badge Ruolo Utente */}
-          <div className="px-4 sm:px-5 py-2.5 bg-neutral-100/70 dark:bg-neutral-800/50 border-b border-neutral-200/60 dark:border-neutral-800/60 flex items-center justify-between text-xs">
-            <span className="text-[11px] font-semibold text-neutral-600 dark:text-neutral-300">
-              Il tuo ruolo in questo gruppo:
+          {/* Badge del Ruolo nel Gruppo */}
+          <div className="px-4 sm:px-5 py-2.5 bg-neutral-50 dark:bg-neutral-800/40 border-b border-neutral-200/70 dark:border-neutral-800 flex items-center justify-between">
+            <span className="text-[11px] text-neutral-500 dark:text-neutral-400 font-medium">
+              Tuo ruolo nel gruppo:
             </span>
             <span
-              className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full ${
+              className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
                 isResponsabile
-                  ? 'bg-purple-100 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
+                  ? 'bg-purple-100 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300'
                   : userMembership?.role === 'admin'
                   ? 'bg-red-100 dark:bg-red-950/70 text-[#f23e2e]'
                   : userMembership?.role === 'admin_clienti'
@@ -264,14 +325,14 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
               </div>
             </div>
 
-            {/* 2. SEZIONE: SOTTOGRUPPI (SOTTOCARTELLE PROTETTE DA CODICE) */}
+            {/* 2. SEZIONE: SOTTOGRUPPI (SOTTOCARTELLE) */}
             <div className="space-y-2 pt-2">
               <div className="flex items-center justify-between px-1">
                 <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
                   Sottogruppi ({subgroups.length})
                 </span>
 
-                {isResponsabile && !isCreating && (
+                {isResponsabile && !isCreating && !editingSubgroup && (
                   <button
                     type="button"
                     onClick={() => setIsCreating(true)}
@@ -283,16 +344,16 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
                 )}
               </div>
 
-              {/* Form Creazione Nuovo Sottogruppo (Visibile SOLO a Responsabile/Creatore) */}
+              {/* Form Creazione Nuovo Sottogruppo (Identico e personalizzabile come un gruppo) */}
               {isCreating && (
                 <form
                   onSubmit={handleCreateSubmit}
-                  className="p-3.5 rounded-2xl bg-purple-50/70 dark:bg-purple-950/20 border-2 border-purple-300 dark:border-purple-800/70 space-y-3 animate-in fade-in"
+                  className="p-4 rounded-2xl bg-purple-50/70 dark:bg-purple-950/20 border-2 border-purple-300 dark:border-purple-800/70 space-y-3.5 animate-in fade-in"
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black text-purple-900 dark:text-purple-200 flex items-center gap-1.5">
                       <FolderPlus className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                      <span>Crea Sottocartella (genera codice di accesso)</span>
+                      <span>Crea & Personalizza Sottogruppo</span>
                     </span>
                     <button
                       type="button"
@@ -303,6 +364,30 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
                     </button>
                   </div>
 
+                  {/* Scelta Icona Preset */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-600 dark:text-neutral-400 mb-1">
+                      Icona del Sottogruppo
+                    </label>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {PRESET_ICONS.map((icon) => (
+                        <button
+                          key={icon}
+                          type="button"
+                          onClick={() => setNewSubgroupAvatar(icon)}
+                          className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm transition-all cursor-pointer ${
+                            newSubgroupAvatar === icon
+                              ? 'bg-purple-200 dark:bg-purple-900 border-2 border-purple-600 scale-105'
+                              : 'bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700'
+                          }`}
+                        >
+                          {icon}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Nome */}
                   <div>
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-600 dark:text-neutral-400 mb-1">
                       Nome Sottogruppo *
@@ -318,6 +403,7 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
                     />
                   </div>
 
+                  {/* Descrizione */}
                   <div>
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-600 dark:text-neutral-400 mb-1">
                       Descrizione (Opzionale)
@@ -329,6 +415,48 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
                       onChange={(e) => setNewSubgroupDesc(e.target.value)}
                       className="w-full px-3 py-1.5 text-xs bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-neutral-900 dark:text-white focus:outline-none"
                     />
+                  </div>
+
+                  {/* Privacy: Pubblico vs Privato */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-600 dark:text-neutral-400 mb-1">
+                      Visibilità
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setNewSubgroupIsPublic(false)}
+                        className={`p-2 rounded-xl border text-left cursor-pointer transition-all ${
+                          !newSubgroupIsPublic
+                            ? 'bg-purple-100 dark:bg-purple-950/60 border-purple-500 shadow-2xs'
+                            : 'bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'
+                        }`}
+                      >
+                        <span className="text-[11px] font-bold block text-neutral-900 dark:text-white">
+                          🔒 Privato
+                        </span>
+                        <span className="text-[9px] text-neutral-500 dark:text-neutral-400 block">
+                          Solo con codice univoco
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setNewSubgroupIsPublic(true)}
+                        className={`p-2 rounded-xl border text-left cursor-pointer transition-all ${
+                          newSubgroupIsPublic
+                            ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-500 shadow-2xs'
+                            : 'bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'
+                        }`}
+                      >
+                        <span className="text-[11px] font-bold block text-neutral-900 dark:text-white">
+                          🌐 Pubblico
+                        </span>
+                        <span className="text-[9px] text-neutral-500 dark:text-neutral-400 block">
+                          Tutti i membri del gruppo
+                        </span>
+                      </button>
+                    </div>
                   </div>
 
                   {errorMsg && (
@@ -350,7 +478,140 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
                       disabled={isSubmitting || !newSubgroupName.trim()}
                       className="px-4 py-1.5 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                     >
-                      {isSubmitting ? 'Creazione...' : 'Crea & Genera Codice'}
+                      {isSubmitting ? 'Creazione...' : 'Crea Sottogruppo'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Form Modifica / Personalizzazione Sottogruppo Esistente */}
+              {editingSubgroup && (
+                <form
+                  onSubmit={handleSaveEditSubmit}
+                  className="p-4 rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 border-2 border-amber-300 dark:border-amber-800/70 space-y-3.5 animate-in fade-in"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                      <Settings className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                      <span>Personalizza: {editingSubgroup.name}</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setEditingSubgroup(null)}
+                      className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-600 dark:text-neutral-400 mb-1">
+                      Icona
+                    </label>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {PRESET_ICONS.map((icon) => (
+                        <button
+                          key={icon}
+                          type="button"
+                          onClick={() => setEditAvatar(icon)}
+                          className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm transition-all cursor-pointer ${
+                            editAvatar === icon
+                              ? 'bg-amber-200 dark:bg-amber-900 border-2 border-amber-600 scale-105'
+                              : 'bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700'
+                          }`}
+                        >
+                          {icon}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-600 dark:text-neutral-400 mb-1">
+                      Nome Sottogruppo *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      className="w-full px-3 py-2 text-xs font-semibold bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-neutral-900 dark:text-white focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-600 dark:text-neutral-400 mb-1">
+                      Descrizione
+                    </label>
+                    <input
+                      type="text"
+                      value={editDesc}
+                      onChange={(e) => setEditDesc(e.target.value)}
+                      className="w-full px-3 py-1.5 text-xs bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-neutral-900 dark:text-white focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-600 dark:text-neutral-400 mb-1">
+                      Visibilità
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditIsPublic(false)}
+                        className={`p-2 rounded-xl border text-left cursor-pointer ${
+                          !editIsPublic
+                            ? 'bg-amber-100 dark:bg-amber-950/60 border-amber-500 shadow-2xs'
+                            : 'bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'
+                        }`}
+                      >
+                        <span className="text-[11px] font-bold block text-neutral-900 dark:text-white">
+                          🔒 Privato
+                        </span>
+                        <span className="text-[9px] text-neutral-500 dark:text-neutral-400 block">
+                          Solo con codice
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setEditIsPublic(true)}
+                        className={`p-2 rounded-xl border text-left cursor-pointer ${
+                          editIsPublic
+                            ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-500 shadow-2xs'
+                            : 'bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700'
+                        }`}
+                      >
+                        <span className="text-[11px] font-bold block text-neutral-900 dark:text-white">
+                          🌐 Pubblico
+                        </span>
+                        <span className="text-[9px] text-neutral-500 dark:text-neutral-400 block">
+                          Tutti i membri
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {editError && (
+                    <p className="text-[11px] font-semibold text-red-600 dark:text-red-400">
+                      {editError}
+                    </p>
+                  )}
+
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setEditingSubgroup(null)}
+                      className="px-3 py-1.5 rounded-xl text-xs font-bold text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700 cursor-pointer"
+                    >
+                      Annulla
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSavingEdit || !editName.trim()}
+                      className="px-4 py-1.5 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      {isSavingEdit ? 'Salvataggio...' : 'Salva Modifiche'}
                     </button>
                   </div>
                 </form>
@@ -366,7 +627,7 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
                     <button
                       type="button"
                       onClick={() => setIsCreating(true)}
-                      className="text-xs font-bold text-purple-600 dark:text-purple-400 hover:underline inline-flex items-center gap-1"
+                      className="text-xs font-bold text-purple-600 dark:text-purple-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>Crea il primo sottogruppo come Responsabile</span>
@@ -381,11 +642,16 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
                 <div className="space-y-2">
                   {subgroups.map((subgroup) => {
                     const isSelected = activeSubgroupId === subgroup.id;
+                    const canManageSubgroup = (isResponsabile || isCreator) && onUpdateSubgroup;
                     const canDelete = isResponsabile && onDeleteSubgroup;
-                    // L'accesso è garantito a chi ha creato il sottogruppo, al creatore del gruppo principale,
-                    // oppure a chi ha inserito il codice ed è in subgroup.members
+                    
+                    // L'accesso è garantito se:
+                    // 1. È pubblico (isPublic)
+                    // 2. È creatore del gruppo o del sottogruppo
+                    // 3. Ha inserito il codice ed è in subgroup.members
                     const hasAccess =
                       isCreator ||
+                      Boolean(subgroup.isPublic) ||
                       subgroup.createdBy === currentUser.id ||
                       (Array.isArray(subgroup.members) && subgroup.members.includes(currentUser.id));
                     const isUnlockingThis = unlockingSubgroupId === subgroup.id;
@@ -414,25 +680,31 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
                         >
                           <div className="flex items-center gap-2.5 min-w-0 flex-1">
                             <div
-                              className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                              className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0 ${
                                 isSelected
                                   ? 'bg-purple-600 text-white shadow-xs'
                                   : hasAccess
-                                  ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300'
-                                  : 'bg-neutral-100 dark:bg-neutral-700 text-neutral-400'
+                                  ? 'bg-purple-100 dark:bg-purple-950/60'
+                                  : 'bg-neutral-100 dark:bg-neutral-700'
                               }`}
                             >
-                              {hasAccess ? (
-                                <FolderOpen className="w-4 h-4 stroke-[2.2px]" />
-                              ) : (
-                                <Lock className="w-4 h-4 stroke-[2.2px] text-amber-500" />
-                              )}
+                              {subgroup.avatar || '📁'}
                             </div>
+
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <p className="text-xs font-bold text-neutral-900 dark:text-white truncate">
                                   {subgroup.name}
                                 </p>
+                                <span
+                                  className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-full border ${
+                                    subgroup.isPublic
+                                      ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                                      : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
+                                  }`}
+                                >
+                                  {subgroup.isPublic ? '🌐 Pubblico' : '🔒 Privato'}
+                                </span>
                                 {!hasAccess && (
                                   <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
                                     🔒 Codice richiesto
@@ -458,7 +730,7 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
                               </span>
                             )}
 
-                            {/* Mostra / Copia codice se l'utente ha accesso (per condividerlo) */}
+                            {/* Mostra / Copia codice se l'utente ha accesso */}
                             {hasAccess && subgroup.code && (
                               <button
                                 type="button"
@@ -496,6 +768,19 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
                               </button>
                             )}
 
+                            {/* Tasto Modifica / Personalizza */}
+                            {canManageSubgroup && (
+                              <button
+                                type="button"
+                                onClick={(e) => handleStartEdit(subgroup, e)}
+                                title="Personalizza sottogruppo"
+                                className="p-1.5 rounded-lg text-neutral-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/50 transition-colors"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
+                            {/* Tasto Elimina */}
                             {canDelete && (
                               <button
                                 type="button"
@@ -518,13 +803,6 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
                           >
                             <div className="flex items-center justify-between text-[11px] font-bold text-amber-900 dark:text-amber-200">
                               <span>Inserisci il codice di accesso per {subgroup.name}:</span>
-                              <button
-                                type="button"
-                                onClick={() => setUnlockingSubgroupId(null)}
-                                className="text-neutral-400 hover:text-neutral-600"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
                             </div>
 
                             <div className="flex items-center gap-2">
@@ -535,20 +813,19 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
                                 placeholder="es. SUB-A1B2"
                                 value={enteredCode}
                                 onChange={(e) => setEnteredCode(e.target.value.toUpperCase())}
-                                className="flex-1 px-3 py-1.5 text-xs font-mono font-bold uppercase bg-white dark:bg-neutral-800 border border-amber-300 dark:border-amber-700 rounded-xl text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                                className="flex-1 px-3 py-1.5 text-xs font-mono font-bold bg-white dark:bg-neutral-800 border border-amber-300 dark:border-amber-700 rounded-xl text-neutral-900 dark:text-white uppercase focus:outline-none"
                               />
                               <button
                                 type="submit"
                                 disabled={isUnlocking || !enteredCode.trim()}
-                                className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-2xs flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold cursor-pointer disabled:opacity-50"
                               >
-                                {isUnlocking ? 'Verifica...' : 'Conferma'}
-                                <ArrowRight className="w-3.5 h-3.5" />
+                                {isUnlocking ? 'Verifica...' : 'Sblocca'}
                               </button>
                             </div>
 
                             {unlockError && (
-                              <p className="text-[10px] font-semibold text-red-600 dark:text-red-400">
+                              <p className="text-[10px] font-bold text-red-600 dark:text-red-400">
                                 {unlockError}
                               </p>
                             )}
@@ -560,21 +837,7 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
                 </div>
               )}
             </div>
-
           </div>
-
-          {/* Footer Informativo */}
-          <div className="p-4 border-t border-neutral-200/80 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/90 text-xs text-neutral-500 dark:text-neutral-400 space-y-1">
-            <p className="flex items-center gap-1.5 text-[11px] font-semibold text-neutral-700 dark:text-neutral-300">
-              <span className="w-2 h-2 rounded-full bg-[#f23e2e] shrink-0" />
-              <span>Calendario Unico: tutti gli eventi di gruppo e sottogruppi insieme.</span>
-            </p>
-            <p className="flex items-center gap-1.5 text-[11px] font-semibold text-neutral-700 dark:text-neutral-300">
-              <span className="w-2 h-2 rounded-full bg-purple-500 shrink-0" />
-              <span>Sondaggi e Chat: isolati e dedicati al sottogruppo selezionato.</span>
-            </p>
-          </div>
-
         </div>
       </div>
     </div>

@@ -331,10 +331,10 @@ export default function App() {
   // Stato Evento in Modifica (Sondaggio o Evento Ufficiale)
   const [eventToEdit, setEventToEdit] = useState<MeetingEvent | undefined>(undefined);
 
-  // Gestione Temi: 'light' (Sole / Bianco), 'dark' (Luna / Nero), 'brand' (Logo JESic / Rosso Brand Identity)
+  // Gestione Temi: 'light' (Sole / Bianco) e 'dark' (Luna / Nero)
   const [theme, setTheme] = useState<AppTheme>(() => {
     const saved = localStorage.getItem('jesic_meet_theme');
-    if (saved === 'light' || saved === 'dark' || saved === 'brand') {
+    if (saved === 'light' || saved === 'dark') {
       return saved as AppTheme;
     }
     const oldDark = localStorage.getItem('jesic_meet_dark_mode');
@@ -352,8 +352,6 @@ export default function App() {
 
     if (theme === 'dark') {
       root.classList.add('dark');
-    } else if (theme === 'brand') {
-      root.classList.add('theme-brand');
     }
 
     localStorage.setItem('jesic_meet_theme', theme);
@@ -361,11 +359,7 @@ export default function App() {
   }, [theme]);
 
   const cycleTheme = () => {
-    setTheme((prev) => {
-      if (prev === 'light') return 'dark';
-      if (prev === 'dark') return 'brand';
-      return 'light';
-    });
+    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
   };
 
   // Ruolo dell'utente all'interno del gruppo specifico (RBAC per Gruppo)
@@ -1097,7 +1091,12 @@ export default function App() {
   };
 
   // GESTIONE SOTTOGRUPPI (CARTELLE)
-  const handleCreateSubgroup = async (name: string, description?: string) => {
+  const handleCreateSubgroup = async (
+    name: string,
+    description?: string,
+    avatar?: string,
+    isPublic?: boolean
+  ) => {
     if (!activeGroup || !currentUser) return;
     try {
       const res = await fetch(`/api/groups/${activeGroup.id}/subgroups`, {
@@ -1106,6 +1105,8 @@ export default function App() {
         body: JSON.stringify({
           name: name.trim(),
           description: description?.trim() || '',
+          avatar: avatar || '📁',
+          isPublic: Boolean(isPublic),
           requesterId: currentUser.id,
           creatorId: currentUser.id,
         }),
@@ -1120,6 +1121,31 @@ export default function App() {
       }
     } catch (err: any) {
       console.error('[handleCreateSubgroup error]', err);
+      throw err;
+    }
+  };
+
+  const handleUpdateSubgroup = async (
+    subgroupId: string,
+    data: { name: string; description?: string; avatar?: string; isPublic?: boolean }
+  ) => {
+    if (!activeGroup || !currentUser) return;
+    try {
+      const res = await fetch(`/api/groups/${activeGroup.id}/subgroups/${subgroupId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...data,
+          requesterId: currentUser.id,
+        }),
+      });
+      const resData = await res.json();
+      if (!res.ok || !resData.group) {
+        throw new Error(resData?.error || 'Errore nella modifica del sottogruppo');
+      }
+      setGroups((prev) => prev.map((g) => (g.id === activeGroup.id ? resData.group : g)));
+    } catch (err: any) {
+      console.error('[handleUpdateSubgroup error]', err);
       throw err;
     }
   };
@@ -1832,9 +1858,12 @@ export default function App() {
                   currentUser={currentUser}
                   allUsers={users}
                   onBackToGroups={handleBackToGroups}
+                  onBackToMainGroup={() => setActiveSubgroupId(null)}
                   onOpenMembersModal={() => setIsGroupMembersModalOpen(true)}
                   onUpdateGroupName={handleUpdateGroupName}
                   onDeleteGroup={handleDeleteGroup}
+                  onUpdateSubgroup={handleUpdateSubgroup}
+                  onDeleteSubgroup={handleDeleteSubgroup}
                   onToggleSubgroupsMenu={() => setIsSubgroupsDrawerOpen(true)}
                 />
 
@@ -2045,6 +2074,7 @@ export default function App() {
               }}
               currentUser={currentUser}
               onCreateSubgroup={handleCreateSubgroup}
+              onUpdateSubgroup={handleUpdateSubgroup}
               onDeleteSubgroup={handleDeleteSubgroup}
               onJoinSubgroup={handleJoinSubgroup}
             />
