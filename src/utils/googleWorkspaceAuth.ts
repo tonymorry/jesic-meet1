@@ -4,6 +4,7 @@
  */
 
 import { MeetingEvent, User } from '../types';
+import { formatRomeDateTimeRFC3339 } from './dateUtils';
 
 export interface SyncCalendarEventParams {
   title: string;
@@ -32,8 +33,8 @@ export async function insertEventToGoogleCalendar(
     };
   }
 
-  const startDateTime = new Date(`${params.date}T${params.startTime}:00`).toISOString();
-  const endDateTime = new Date(`${params.date}T${params.endTime}:00`).toISOString();
+  const startDateTime = formatRomeDateTimeRFC3339(params.date, params.startTime);
+  const endDateTime = formatRomeDateTimeRFC3339(params.date, params.endTime);
 
   const descriptionParts = [
     params.description || '',

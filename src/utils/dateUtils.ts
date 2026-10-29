@@ -68,3 +68,39 @@ export const formatDateShort = (dateStr: string): string => {
     return dateStr;
   }
 };
+
+/**
+ * Converte una data 'YYYY-MM-DD' e un'ora 'HH:mm' nella stringa RFC3339 corretta
+ * con l'offset per il fuso orario 'Europe/Rome' (es. +01:00 d'inverno, +02:00 in estate/ora legale).
+ * Previene che Google Calendar interpreti l'orario come UTC e lo sposti avanti di 1 o 2 ore.
+ */
+export const formatRomeDateTimeRFC3339 = (dateStr: string, timeStr: string): string => {
+  if (!dateStr) return '';
+  const cleanDate = dateStr.trim().split('T')[0];
+  const timeParts = (timeStr || '09:00').trim().split(':');
+  const h = (timeParts[0] || '09').padStart(2, '0');
+  const m = (timeParts[1] || '00').padStart(2, '0');
+  const s = (timeParts[2] || '00').padStart(2, '0');
+  const cleanTime = `${h}:${m}:${s}`;
+
+  try {
+    const refDate = new Date(`${cleanDate}T12:00:00Z`);
+    const dtf = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/Rome',
+      timeZoneName: 'longOffset',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    });
+    const tzPart = dtf.formatToParts(refDate).find((p) => p.type === 'timeZoneName')?.value;
+    const offset = tzPart ? tzPart.replace('GMT', '') : '+01:00';
+    return `${cleanDate}T${cleanTime}${offset}`;
+  } catch {
+    return `${cleanDate}T${cleanTime}+01:00`;
+  }
+};
+

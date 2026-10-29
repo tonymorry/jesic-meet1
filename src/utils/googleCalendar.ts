@@ -57,6 +57,41 @@ export interface GoogleCalendarEventResult {
 }
 
 /**
+ * Converte una data 'YYYY-MM-DD' e un'ora 'HH:mm' nella stringa RFC3339 corretta
+ * con l'offset preciso per il fuso orario 'Europe/Rome' (es. +01:00 d'inverno, +02:00 con ora legale).
+ * Impedisce a Google Calendar di interpretare l'orario come UTC e spostarlo avanti di 1 o 2 ore.
+ */
+export function formatRomeDateTimeRFC3339(dateStr: string, timeStr: string): string {
+  if (!dateStr) return '';
+  const cleanDate = dateStr.trim().split('T')[0];
+  const timeParts = (timeStr || '09:00').trim().split(':');
+  const h = (timeParts[0] || '09').padStart(2, '0');
+  const m = (timeParts[1] || '00').padStart(2, '0');
+  const s = (timeParts[2] || '00').padStart(2, '0');
+  const cleanTime = `${h}:${m}:${s}`;
+
+  try {
+    const refDate = new Date(`${cleanDate}T12:00:00Z`);
+    const dtf = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/Rome',
+      timeZoneName: 'longOffset',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    });
+    const tzPart = dtf.formatToParts(refDate).find((p) => p.type === 'timeZoneName')?.value;
+    const offset = tzPart ? tzPart.replace('GMT', '') : '+01:00';
+    return `${cleanDate}T${cleanTime}${offset}`;
+  } catch {
+    return `${cleanDate}T${cleanTime}+01:00`;
+  }
+}
+
+/**
  * Crea silente ed automaticamente l'evento su Google Calendar con conferenza Google Meet
  * tramite la vera libreria googleapis (nessun setTimeout né link finti).
  */
@@ -96,9 +131,9 @@ export async function createGoogleCalendarEvent(
     }
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
-    // Format ISO standard con Timezone Europe/Rome
-    const startDateTime = new Date(`${date}T${startTime}:00`).toISOString();
-    const endDateTime = new Date(`${date}T${endTime}:00`).toISOString();
+    // Format RFC3339 con offset Europe/Rome esatto per evitare slittamento di 1 ora
+    const startDateTime = formatRomeDateTimeRFC3339(date, startTime);
+    const endDateTime = formatRomeDateTimeRFC3339(date, endTime);
 
     const descriptionParts = [
       description || '',
@@ -248,11 +283,11 @@ export async function updateGoogleCalendarEvent(
 
     if (eventData.date && eventData.startTime && eventData.endTime) {
       patchBody.start = {
-        dateTime: new Date(`${eventData.date}T${eventData.startTime}:00`).toISOString(),
+        dateTime: formatRomeDateTimeRFC3339(eventData.date, eventData.startTime),
         timeZone: 'Europe/Rome',
       };
       patchBody.end = {
-        dateTime: new Date(`${eventData.date}T${eventData.endTime}:00`).toISOString(),
+        dateTime: formatRomeDateTimeRFC3339(eventData.date, eventData.endTime),
         timeZone: 'Europe/Rome',
       };
     }
