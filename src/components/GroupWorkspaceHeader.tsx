@@ -126,18 +126,29 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
 
   const userMembership = activeGroup.members?.find((m) => m.userId === currentUser.id);
   const isGroupCreator = activeGroup.creatorId === currentUser.id;
-  const currentGroupRole = userMembership?.role || (isGroupCreator ? 'admin' : 'member');
+  const currentGroupRole = isGroupCreator ? 'admin' : (userMembership?.role || 'member');
   const isGroupAdmin = isGroupCreator || currentGroupRole === 'admin';
   const isGroupAdminClienti = currentGroupRole === 'admin_clienti';
-  const isGroupResponsabile = isGroupCreator || currentGroupRole === 'responsabile';
+  const isGroupResponsabile = currentGroupRole === 'responsabile';
+  const isSubgroupCreator = Boolean(activeSubgroup && activeSubgroup.createdBy === currentUser.id);
+  const isSubgroupCreatorAdmin = Boolean(activeSubgroup && isSubgroupCreator && currentGroupRole === 'responsabile');
 
-  // Autorizzazioni
+  // Autorizzazioni: nel sottogruppo possono gestire l'admin del gruppo, il creatore del gruppo, o il creatore di quel sottogruppo
   const canManageCurrent = activeSubgroup
-    ? isGroupResponsabile || isGroupAdmin || isGroupCreator || activeSubgroup.createdBy === currentUser.id
+    ? isGroupAdmin || isGroupCreator || isSubgroupCreator
     : isGroupAdmin || isGroupCreator;
 
   // Ruolo formattato con badge colorato
   const getRoleBadge = (role: string) => {
+    // Se l'utente è un Responsabile all'interno del sottogruppo da lui creato, è l'Admin di quel sottogruppo
+    if (activeSubgroup && isSubgroupCreatorAdmin) {
+      return {
+        label: 'Admin Sottogruppo',
+        badgeClass: 'bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 font-bold',
+        icon: '⚡',
+      };
+    }
+
     switch (role) {
       case 'responsabile':
         return {
@@ -147,7 +158,7 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
         };
       case 'admin':
         return {
-          label: 'Admin',
+          label: isGroupCreator ? 'Admin (Creatore)' : 'Admin',
           badgeClass: 'bg-red-100 dark:bg-red-950/70 text-[#f23e2e] border-red-200 dark:border-red-800',
           icon: '⚡',
         };

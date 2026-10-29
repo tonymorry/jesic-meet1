@@ -8,7 +8,7 @@
  */
 
 import React, { useState } from 'react';
-import { User, MeetingEvent, InviteeConfig, ParticipantResponse, Group } from '../types';
+import { User, MeetingEvent, InviteeConfig, ParticipantResponse, Group, Subgroup } from '../types';
 import { UserAvatar } from './UserAvatar';
 import {
   X,
@@ -40,6 +40,7 @@ interface CreateOfficialEventModalProps {
   eventToEdit?: MeetingEvent;
   onUpdateOfficialEvent?: (updatedEvent: MeetingEvent) => void;
   activeGroup?: Group;
+  activeSubgroup?: Subgroup | null;
 }
 
 export const CreateOfficialEventModal: React.FC<CreateOfficialEventModalProps> = ({
@@ -50,6 +51,7 @@ export const CreateOfficialEventModal: React.FC<CreateOfficialEventModalProps> =
   eventToEdit,
   onUpdateOfficialEvent,
   activeGroup,
+  activeSubgroup,
 }) => {
   const [title, setTitle] = useState(eventToEdit?.title || '');
   const [description, setDescription] = useState(eventToEdit?.description || '');
@@ -346,6 +348,7 @@ export const CreateOfficialEventModal: React.FC<CreateOfficialEventModalProps> =
         invitees: allInviteesList,
         participants: updatedParticipants,
         groupId: activeGroup?.id || eventToEdit.groupId,
+        subgroupId: activeSubgroup?.id || eventToEdit.subgroupId,
         externalInviteEmails: externalInviteEmails.length > 0 ? externalInviteEmails : eventToEdit.externalInviteEmails,
       });
       onClose();
@@ -373,6 +376,7 @@ export const CreateOfficialEventModal: React.FC<CreateOfficialEventModalProps> =
       invitees: allInviteesList,
       participants: initialParticipants,
       groupId: activeGroup?.id,
+      subgroupId: activeSubgroup?.id,
       externalInviteEmails: externalInviteEmails.length > 0 ? externalInviteEmails : undefined,
     });
   };
@@ -392,17 +396,24 @@ export const CreateOfficialEventModal: React.FC<CreateOfficialEventModalProps> =
               <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base font-black tracking-tight">
                   {eventToEdit ? 'Modifica Evento Associativo' : 'Crea Evento Associativo'}
                 </h2>
                 <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-950/60 text-[#f23e2e]">
-                  Admin
+                  {activeSubgroup ? 'Admin Sottogruppo' : 'Admin'}
                 </span>
+                {activeSubgroup && (
+                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                    📁 {activeSubgroup.name}
+                  </span>
+                )}
               </div>
               <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
                 {eventToEdit
                   ? 'Aggiorna dettagli, orari o partecipanti di questo evento'
+                  : activeSubgroup
+                  ? `Pubblica un invito ufficiale per il sottogruppo "${activeSubgroup.name}"`
                   : 'Pubblica un invito ufficiale sulla bacheca di tutti gli associati'}
               </p>
             </div>

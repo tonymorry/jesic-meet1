@@ -14,6 +14,8 @@ import { CalendarRange, Sparkles, X, ShieldAlert, Award } from 'lucide-react';
 
 interface CreateActionChoiceModalProps {
   currentUser: User;
+  isSubgroupAdmin?: boolean;
+  subgroupName?: string;
   onClose: () => void;
   onSelectCreatePoll: () => void;
   onSelectCreateOfficialEvent: () => void;
@@ -21,6 +23,8 @@ interface CreateActionChoiceModalProps {
 
 export const CreateActionChoiceModal: React.FC<CreateActionChoiceModalProps> = ({
   currentUser,
+  isSubgroupAdmin = false,
+  subgroupName,
   onClose,
   onSelectCreatePoll,
   onSelectCreateOfficialEvent,
@@ -36,13 +40,19 @@ export const CreateActionChoiceModal: React.FC<CreateActionChoiceModalProps> = (
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-red-100 dark:bg-red-950/60 text-[#f23e2e] flex items-center justify-center font-black">
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black ${
+              isSubgroupAdmin 
+                ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400' 
+                : 'bg-red-100 dark:bg-red-950/60 text-[#f23e2e]'
+            }`}>
               <Award className="w-4 h-4" />
             </div>
             <div>
               <h2 className="text-sm font-black tracking-tight">Crea Nuovo</h2>
               <p className="text-[11px] text-neutral-500 dark:text-neutral-400">
-                Pannello Amministratore JESic
+                {isSubgroupAdmin
+                  ? `Admin Sottogruppo: ${subgroupName || 'Tuo Sottogruppo'}`
+                  : 'Pannello Amministratore JESic'}
               </p>
             </div>
           </div>
@@ -84,7 +94,7 @@ export const CreateActionChoiceModal: React.FC<CreateActionChoiceModalProps> = (
             </div>
           </button>
 
-          {/* Opzione B: Crea Evento Associativo (Solo Admin) */}
+          {/* Opzione B: Crea Evento Associativo (Solo Admin o Admin del Sottogruppo) */}
           <button
             type="button"
             onClick={() => {
@@ -102,18 +112,20 @@ export const CreateActionChoiceModal: React.FC<CreateActionChoiceModalProps> = (
                   Crea Evento Associativo
                 </h3>
                 <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-[#f23e2e] text-white">
-                  Solo Admin
+                  {isSubgroupAdmin ? 'Admin Sottogruppo' : 'Solo Admin'}
                 </span>
               </div>
               <p className="text-[11px] text-neutral-600 dark:text-neutral-300 mt-0.5 leading-snug">
-                Data e orari definitivi. Compare nella bacheca degli associati con "Partecipa" / "Non Partecipo" e sincronizzazione Google Calendar.
+                Data e orari definitivi. Compare nella bacheca con "Partecipa" / "Non Partecipo" e sincronizzazione Google Calendar.
               </p>
             </div>
           </button>
         </div>
 
         <p className="text-[10px] text-center text-neutral-400 dark:text-neutral-500 pt-1">
-          Creazione eventi ufficiali abilitata per Admin e Admin Clienti del gruppo.
+          {isSubgroupAdmin
+            ? `Creazione eventi ufficiali abilitata come Admin del sottogruppo "${subgroupName || ''}".`
+            : 'Creazione eventi ufficiali abilitata per Admin e Admin Clienti del gruppo.'}
         </p>
 
       </div>

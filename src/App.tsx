@@ -353,45 +353,110 @@ export default function App() {
         setIsAuthDetermined(true);
       });
 
-    // 2. Carica Gruppi dal Database
-    fetch('/api/groups')
+    // 2. Carica Gruppi dal Database (Sincronizzazione reale: se un gruppo è stato eliminato dal DB, scompare subito)
+    fetch('/api/groups', { cache: 'no-store' })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data && Array.isArray(data.groups) && data.groups.length > 0) {
+        if (data && Array.isArray(data.groups)) {
           setGroups(data.groups);
+          localStorage.setItem(STORAGE_GROUPS_KEY, JSON.stringify(data.groups));
+
+          // Se il gruppo attivo memorizzato in precedenza è stato eliminato dal DB, resettalo
+          setActiveGroupId((prevActiveId) => {
+            if (prevActiveId && !data.groups.some((g: any) => g.id === prevActiveId)) {
+              setActiveSubgroupId(null);
+              localStorage.removeItem(STORAGE_ACTIVE_GROUP_KEY);
+              return null;
+            }
+            return prevActiveId;
+          });
+
+          // Pulisci i riferimenti orfani dai memberships dell'utente corrente
+          const validGroupIds = new Set(data.groups.map((g: any) => g.id));
+          setCurrentUser((prevUser) => {
+            if (!prevUser) return null;
+            const currentMemberships = prevUser.groupMemberships || [];
+            const sanitized = currentMemberships.filter((m) => validGroupIds.has(m.groupId));
+            if (sanitized.length !== currentMemberships.length) {
+              const updated = { ...prevUser, groupMemberships: sanitized };
+              localStorage.setItem(STORAGE_CURRENT_USER_KEY, JSON.stringify(updated));
+              return updated;
+            }
+            return prevUser;
+          });
+
+          // Pulisci eventuali eventi appartenenti a gruppi non più esistenti
+          setEvents((prevEvents) =>
+            prevEvents.filter((ev) => !ev.groupId || validGroupIds.has(ev.groupId))
+          );
         }
       })
       .catch((e) => console.log('[Sync /api/groups]', e));
 
     // 3. Carica Eventi (Sondaggi e Ufficiali) dal Database
-    fetch('/api/events')
+    fetch('/api/events', { cache: 'no-store' })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data && Array.isArray(data.events) && data.events.length > 0) {
+        if (data && Array.isArray(data.events)) {
           setEvents(data.events);
+          localStorage.setItem(STORAGE_EVENTS_KEY, JSON.stringify(data.events));
         }
       })
       .catch((e) => console.log('[Sync /api/events]', e));
 
     // 4. Carica Risposte Disponibilità (When2meet) dal Database
-    fetch('/api/responses')
+    fetch('/api/responses', { cache: 'no-store' })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data && Array.isArray(data.responses) && data.responses.length > 0) {
+        if (data && Array.isArray(data.responses)) {
           setResponses(data.responses);
+          localStorage.setItem(STORAGE_RESPONSES_KEY, JSON.stringify(data.responses));
         }
       })
       .catch((e) => console.log('[Sync /api/responses]', e));
 
     // 5. Carica Richieste Clienti B2B dal Database
-    fetch('/api/client-requests')
+    fetch('/api/client-requests', { cache: 'no-store' })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data && Array.isArray(data.requests) && data.requests.length > 0) {
+        if (data && Array.isArray(data.requests)) {
           setClientRequests(data.requests);
+          localStorage.setItem(STORAGE_CLIENT_REQUESTS_KEY, JSON.stringify(data.requests));
         }
       })
       .catch((e) => console.log('[Sync /api/client-requests]', e));
+  }, []);
+
+  // Ri-sincronizza istantaneamente i gruppi quando l'utente torna sulla pagina (es. dopo aver modificato MongoDB)
+  useEffect(() => {
+    const handleReSyncOnFocus = () => {
+      if (document.visibilityState === 'visible') {
+        fetch('/api/groups', { cache: 'no-store' })
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (data && Array.isArray(data.groups)) {
+              setGroups(data.groups);
+              localStorage.setItem(STORAGE_GROUPS_KEY, JSON.stringify(data.groups));
+              setActiveGroupId((prevActiveId) => {
+                if (prevActiveId && !data.groups.some((g: any) => g.id === prevActiveId)) {
+                  setActiveSubgroupId(null);
+                  localStorage.removeItem(STORAGE_ACTIVE_GROUP_KEY);
+                  return null;
+                }
+                return prevActiveId;
+              });
+            }
+          })
+          .catch(() => {});
+      }
+    };
+
+    window.addEventListener('focus', handleReSyncOnFocus);
+    document.addEventListener('visibilitychange', handleReSyncOnFocus);
+    return () => {
+      window.removeEventListener('focus', handleReSyncOnFocus);
+      document.removeEventListener('visibilitychange', handleReSyncOnFocus);
+    };
   }, []);
 
 

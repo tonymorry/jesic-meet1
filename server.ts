@@ -95,10 +95,19 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Disabilita caching HTTP per tutte le API REST per garantire sincronizzazione istantanea
+app.use('/api', (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
+
 /* ==========================================================================
    CONNESSIONE MONGOOSE A MONGODB ATLAS
    ========================================================================== */
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/jesic_meet';
+mongoose.set('bufferTimeoutMS', 3000);
 
 async function connectToDatabase() {
   try {
@@ -834,6 +843,16 @@ app.delete('/api/groups/:id', async (req: Request, res: Response) => {
     }
 
     await GroupModel.deleteOne({ $or: [{ _id: id }, { id }] });
+
+    // Pulisci in cascata eventi, messaggi chat e riferimenti nei profili utente
+    await EventModel.deleteMany({ groupId: id }).catch(() => {});
+    await ChatMessageModel.deleteMany({ groupId: id }).catch(() => {});
+    await ClientRequestModel.deleteMany({ groupId: id }).catch(() => {});
+    await UserModel.updateMany(
+      { 'groupMemberships.groupId': id },
+      { $pull: { groupMemberships: { groupId: id } } }
+    ).catch(() => {});
+
     broadcastRealtimeEvent('group:deleted', { groupId: id });
     return res.json({ success: true, message: 'Gruppo eliminato definitivamente con successo da MongoDB' });
   } catch (err: any) {
@@ -1631,16 +1650,36 @@ app.post('/api/events', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Titolo e creatore sono obbligatori' });
   }
 
-  // Verifica permessi ruolo per eventi ufficiali nel gruppo (solo admin e admin_clienti del gruppo specifico)
+  // Verifica permessi ruolo per eventi ufficiali nel gruppo:
+  // - Nel gruppo generale: solo Admin (e Creatore del gruppo) o Admin Clienti. Un responsabile NON può creare eventi nel gruppo generale.
+  // - In un sottogruppo: l'Admin del gruppo, l'Admin Clienti, OPPURE il Responsabile che ha creato quel determinato sottogruppo (è admin del suo sottogruppo).
   if (eventData.eventType === 'official' && eventData.groupId) {
     try {
       const group = (await GroupModel.findOne({ $or: [{ _id: eventData.groupId }, { id: eventData.groupId }] } as any)) as any;
       if (group) {
         const isCreator = group.creatorId === eventData.creatorId;
         const member = group.members?.find((m: any) => m.userId === eventData.creatorId);
-        const hasRole = member && (member.role === 'admin' || member.role === 'admin_clienti');
-        if (!isCreator && !hasRole) {
-          return res.status(403).json({ error: 'Solo admin o admin_clienti di questo gruppo possono creare eventi ufficiali' });
+        const isGroupAdmin = isCreator || (member && (member.role === 'admin' || member.role === 'admin_clienti'));
+
+        let isSubgroupCreatorAdmin = false;
+        if (eventData.subgroupId && member && member.role === 'responsabile') {
+          const targetSub = (group.subgroups || []).find(
+            (s: any) => s.id === eventData.subgroupId || s._id === eventData.subgroupId
+          );
+          if (targetSub && targetSub.createdBy === eventData.creatorId) {
+            isSubgroupCreatorAdmin = true;
+          }
+        }
+
+        if (!isGroupAdmin && !isSubgroupCreatorAdmin) {
+          if (member?.role === 'responsabile' && !eventData.subgroupId) {
+            return res.status(403).json({
+              error: 'Un responsabile non può creare eventi ufficiali nel gruppo generale, ma solo nei sottogruppi da lui creati.',
+            });
+          }
+          return res.status(403).json({
+            error: 'Solo gli admin del gruppo o il responsabile creatore di questo sottogruppo possono creare eventi ufficiali.',
+          });
         }
       }
     } catch (err: any) {
