@@ -41,14 +41,18 @@ export interface SubgroupsDrawerProps {
     name: string,
     description?: string,
     avatar?: string,
-    isPublic?: boolean
+    isPublic?: boolean,
+    code?: string
   ) => Promise<boolean | void>;
   onUpdateSubgroup?: (
     subgroupId: string,
     data: { name: string; description?: string; avatar?: string; isPublic?: boolean }
   ) => Promise<boolean | void>;
   onDeleteSubgroup?: (subgroupId: string) => Promise<boolean | void>;
-  onJoinSubgroup?: (subgroupId: string, code: string) => Promise<{ success: boolean; error?: string }>;
+  onJoinSubgroup?: (
+    subgroupIdOrCode: string,
+    code?: string
+  ) => Promise<{ success: boolean; error?: string; subgroup?: any }>;
 }
 
 const PRESET_ICONS = ['📁', '🚀', '💡', '💻', '📊', '🎯', '⚡', '🏢', '🔥', '🎓', '🎨', '💼', '⭐', '🛠️', '👥'];
@@ -70,9 +74,16 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
   const [newSubgroupDesc, setNewSubgroupDesc] = useState('');
   const [newSubgroupAvatar, setNewSubgroupAvatar] = useState('📁');
   const [newSubgroupIsPublic, setNewSubgroupIsPublic] = useState(false);
+  const [newSubgroupCustomCode, setNewSubgroupCustomCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const createSubImageRef = useRef<HTMLInputElement>(null);
+
+  // Stato per accesso rapido con codice
+  const [showQuickJoin, setShowQuickJoin] = useState(false);
+  const [quickJoinCode, setQuickJoinCode] = useState('');
+  const [isQuickJoining, setIsQuickJoining] = useState(false);
+  const [quickJoinError, setQuickJoinError] = useState<string | null>(null);
 
   const handleCreateImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -153,18 +164,43 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
         newSubgroupName.trim(),
         newSubgroupDesc.trim(),
         newSubgroupAvatar,
-        newSubgroupIsPublic
+        newSubgroupIsPublic,
+        newSubgroupCustomCode.trim() ? newSubgroupCustomCode.trim().toUpperCase() : undefined
       );
       setNewSubgroupName('');
       setNewSubgroupDesc('');
       setNewSubgroupAvatar('📁');
       setNewSubgroupIsPublic(false);
+      setNewSubgroupCustomCode('');
       setIsCreating(false);
       onClose();
     } catch (err: any) {
       setErrorMsg(err?.message || 'Errore durante la creazione del sottogruppo');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleQuickJoinSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickJoinCode.trim() || !onJoinSubgroup) return;
+
+    setIsQuickJoining(true);
+    setQuickJoinError(null);
+    try {
+      const res = await onJoinSubgroup(quickJoinCode.trim());
+      if (res.success && res.subgroup) {
+        setShowQuickJoin(false);
+        setQuickJoinCode('');
+        onSelectSubgroup(res.subgroup.id || res.subgroup._id);
+        onClose();
+      } else {
+        setQuickJoinError(res.error || 'Nessun sottogruppo trovato con questo codice.');
+      }
+    } catch (err: any) {
+      setQuickJoinError(err?.message || 'Errore durante l\'accesso al sottogruppo');
+    } finally {
+      setIsQuickJoining(false);
     }
   };
 
@@ -367,8 +403,67 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
               </div>
             </div>
 
+            {/* Sezione Accesso Rapido con Codice Sottogruppo */}
+            <div className="p-3 bg-neutral-50 dark:bg-neutral-800/60 rounded-2xl border border-neutral-200 dark:border-neutral-700 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-neutral-700 dark:text-neutral-300 flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Hai un codice d'accesso?</span>
+                </span>
+                {!showQuickJoin ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickJoin(true)}
+                    className="text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:underline cursor-pointer"
+                  >
+                    Entra con Codice
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowQuickJoin(false);
+                      setQuickJoinError(null);
+                      setQuickJoinCode('');
+                    }}
+                    className="text-[11px] text-neutral-400 hover:text-neutral-600 cursor-pointer"
+                  >
+                    Chiudi
+                  </button>
+                )}
+              </div>
+
+              {showQuickJoin && (
+                <form onSubmit={handleQuickJoinSubmit} className="space-y-2 pt-1 animate-in fade-in">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      required
+                      autoFocus
+                      placeholder="es. SUB-A1B2 o A1B2"
+                      value={quickJoinCode}
+                      onChange={(e) => setQuickJoinCode(e.target.value.toUpperCase())}
+                      className="flex-1 px-3 py-1.5 text-xs font-mono font-bold bg-white dark:bg-neutral-800 border border-amber-300 dark:border-amber-700 rounded-xl text-neutral-900 dark:text-white uppercase focus:outline-none"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isQuickJoining || !quickJoinCode.trim()}
+                      className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold cursor-pointer disabled:opacity-50 shrink-0"
+                    >
+                      {isQuickJoining ? '...' : 'Sblocca'}
+                    </button>
+                  </div>
+                  {quickJoinError && (
+                    <p className="text-[10px] font-bold text-red-600 dark:text-red-400">
+                      {quickJoinError}
+                    </p>
+                  )}
+                </form>
+              )}
+            </div>
+
             {/* 2. SEZIONE: SOTTOGRUPPI (SOTTOCARTELLE) */}
-            <div className="space-y-2 pt-2">
+            <div className="space-y-2 pt-1">
               <div className="flex items-center justify-between px-1">
                 <span className="text-[10px] font-black uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
                   Sottogruppi ({subgroups.length})
@@ -543,6 +638,30 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
                       </button>
                     </div>
                   </div>
+
+                  {/* Codice di Accesso Personalizzato (Opzionale per Sottogruppi Privati) */}
+                  {!newSubgroupIsPublic && (
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-600 dark:text-neutral-400">
+                          Codice Sottogruppo (Opzionale)
+                        </label>
+                        <span className="text-[9px] text-neutral-400 font-mono">
+                          Auto-generato se vuoto
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="es. MARKETING o SUB-MARKETING"
+                        value={newSubgroupCustomCode}
+                        onChange={(e) => setNewSubgroupCustomCode(e.target.value.toUpperCase())}
+                        className="w-full px-3 py-1.5 text-xs font-mono font-bold bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-neutral-900 dark:text-white uppercase focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                      />
+                      <p className="text-[10px] text-neutral-500 dark:text-neutral-400 mt-1">
+                        I colleghi potranno accedere inserendo questo codice.
+                      </p>
+                    </div>
+                  )}
 
                   {errorMsg && (
                     <p className="text-[11px] font-semibold text-red-600 dark:text-red-400">

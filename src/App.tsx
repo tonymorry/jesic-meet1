@@ -41,6 +41,7 @@ import { SplashScreen } from './components/SplashScreen';
 import { PrivacyPolicyView } from './components/PrivacyPolicyView';
 import { TermsOfServiceView } from './components/TermsOfServiceView';
 import { autoSyncMeetingEventToCalendar } from './utils/googleWorkspaceAuth';
+import { realtimeClient, useRealtimeSubscription } from './utils/realtime';
 
 // Chiavi LocalStorage versione pulita V3
 const STORAGE_USERS_KEY = 'jesic_meet_v3_users';
@@ -231,6 +232,96 @@ export default function App() {
       localStorage.removeItem(STORAGE_ACTIVE_GROUP_KEY);
     }
   }, [activeGroupId]);
+
+  // Sincronizzazione WebSocket in tempo reale (Presenza e Aggiornamento automatico)
+  useEffect(() => {
+    if (currentUser?.id) {
+      realtimeClient.identify(
+        currentUser.id,
+        `${currentUser.name} ${currentUser.surname || ''}`.trim()
+      );
+    }
+  }, [currentUser?.id, currentUser?.name, currentUser?.surname]);
+
+  useRealtimeSubscription('group:member_joined', (data) => {
+    if (data?.group) {
+      setGroups((prev) => {
+        const exists = prev.some((g) => g.id === data.group.id);
+        if (exists) {
+          return prev.map((g) => (g.id === data.group.id ? data.group : g));
+        }
+        return [data.group, ...prev];
+      });
+    }
+  });
+
+  useRealtimeSubscription('group:created', (data) => {
+    if (data?.group) {
+      setGroups((prev) => {
+        const exists = prev.some((g) => g.id === data.group.id);
+        if (exists) return prev;
+        return [data.group, ...prev];
+      });
+    }
+  });
+
+  useRealtimeSubscription('group:updated', (data) => {
+    if (data?.group) {
+      setGroups((prev) => prev.map((g) => (g.id === data.group.id ? data.group : g)));
+    }
+  });
+
+  useRealtimeSubscription('group:deleted', (data) => {
+    if (data?.groupId) {
+      setGroups((prev) => prev.filter((g) => g.id !== data.groupId));
+      if (activeGroupId === data.groupId) {
+        setActiveGroupId(null);
+      }
+    }
+  });
+
+  useRealtimeSubscription('group:member_removed', (data) => {
+    if (data?.group) {
+      setGroups((prev) => prev.map((g) => (g.id === data.group.id ? data.group : g)));
+    }
+  });
+
+  useRealtimeSubscription('group:member_role_updated', (data) => {
+    if (data?.group) {
+      setGroups((prev) => prev.map((g) => (g.id === data.group.id ? data.group : g)));
+    }
+  });
+
+  useRealtimeSubscription('group:subgroups_updated', (data) => {
+    if (data?.group) {
+      setGroups((prev) => prev.map((g) => (g.id === data.group.id ? data.group : g)));
+    }
+  });
+
+  useRealtimeSubscription('event:created', (data) => {
+    if (data?.event) {
+      setEvents((prev) => {
+        const exists = prev.some((e) => e.id === data.event.id);
+        if (exists) return prev;
+        return [data.event, ...prev];
+      });
+    }
+  });
+
+  useRealtimeSubscription('event:updated', (data) => {
+    if (data?.event) {
+      setEvents((prev) => prev.map((e) => (e.id === data.event.id ? { ...e, ...data.event } : e)));
+    }
+  });
+
+  useRealtimeSubscription('event:deleted', (data) => {
+    if (data?.eventId) {
+      setEvents((prev) => prev.filter((e) => e.id !== data.eventId));
+      if (selectedEventId === data.eventId) {
+        setSelectedEventId(null);
+      }
+    }
+  });
 
   // Sincronizzazione Dati da MongoDB Atlas tramite Express API
   useEffect(() => {
@@ -1095,7 +1186,8 @@ export default function App() {
     name: string,
     description?: string,
     avatar?: string,
-    isPublic?: boolean
+    isPublic?: boolean,
+    code?: string
   ) => {
     if (!activeGroup || !currentUser) return;
     try {
@@ -1107,6 +1199,7 @@ export default function App() {
           description: description?.trim() || '',
           avatar: avatar || '📁',
           isPublic: Boolean(isPublic),
+          code: code ? code.trim().toUpperCase() : undefined,
           requesterId: currentUser.id,
           creatorId: currentUser.id,
         }),
@@ -1117,7 +1210,7 @@ export default function App() {
       }
       setGroups((prev) => prev.map((g) => (g.id === activeGroup.id ? data.group : g)));
       if (data.subgroup) {
-        setActiveSubgroupId(data.subgroup.id);
+        setActiveSubgroupId(data.subgroup.id || data.subgroup._id);
       }
     } catch (err: any) {
       console.error('[handleCreateSubgroup error]', err);
@@ -1151,22 +1244,33 @@ export default function App() {
   };
 
   const handleJoinSubgroup = async (
-    subgroupId: string,
-    code: string
-  ): Promise<{ success: boolean; error?: string }> => {
+    subgroupIdOrCode: string,
+    optionalCode?: string
+  ): Promise<{ success: boolean; error?: string; subgroup?: Subgroup }> => {
     if (!activeGroup || !currentUser) return { success: false, error: 'Non autorizzato' };
     try {
-      const res = await fetch(`/api/groups/${activeGroup.id}/subgroups/${subgroupId}/join`, {
+      const isDirectSpecific = Boolean(optionalCode);
+      const subgroupId = isDirectSpecific ? subgroupIdOrCode : null;
+      const code = isDirectSpecific ? optionalCode! : subgroupIdOrCode;
+
+      const url = subgroupId
+        ? `/api/groups/${activeGroup.id}/subgroups/${subgroupId}/join`
+        : `/api/groups/${activeGroup.id}/subgroups/join`;
+
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code: code.trim().toUpperCase(), userId: currentUser.id }),
       });
       const data = await res.json();
       if (!res.ok || !data.group) {
-        return { success: false, error: data?.error || 'Codice errato. Riprova.' };
+        return { success: false, error: data?.error || 'Codice errato. Verifica e riprova.' };
       }
       setGroups((prev) => prev.map((g) => (g.id === activeGroup.id ? data.group : g)));
-      return { success: true };
+      if (data.subgroup) {
+        setActiveSubgroupId(data.subgroup.id || data.subgroup._id);
+      }
+      return { success: true, subgroup: data.subgroup };
     } catch (err: any) {
       return { success: false, error: err?.message || 'Errore durante l\'accesso al sottogruppo' };
     }
@@ -1935,9 +2039,10 @@ export default function App() {
                   />
                 )}
 
-                {/* 5. Chat del Gruppo (dedicata per Sottogruppo selezionato o Generale) */}
+                {/* 5. Chat del Gruppo (dedicata per Sottogruppo selezionato o Generale - 100% isolata) */}
                 {currentTab === 'chat' && (
                   <GroupChatView
+                    key={`${activeGroup.id}-${activeSubgroupId || 'general'}`}
                     activeGroup={activeGroup}
                     activeSubgroup={activeSubgroup}
                     currentUser={currentUser}

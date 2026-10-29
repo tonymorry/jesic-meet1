@@ -1010,7 +1010,14 @@ app.post('/api/groups/:id/subgroups', async (req: Request, res: Response) => {
     }
 
     const subgroupId = `subgrp-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-    const subCode = 'SUB-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+    const requestedSubCode = req.body?.code;
+    let subCode = requestedSubCode ? String(requestedSubCode).toUpperCase().replace(/[^A-Z0-9-]/g, '').trim() : '';
+    if (!subCode || subCode.length < 3) {
+      subCode = 'SUB-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+    } else if (!subCode.startsWith('SUB-') && !subCode.startsWith('JES-')) {
+      subCode = 'SUB-' + subCode;
+    }
+
     const isPub = Boolean(isPublic);
     const newSubgroup = {
       _id: subgroupId,
@@ -1066,7 +1073,81 @@ app.post('/api/groups/:id/subgroups', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/groups/:id/subgroups/:subgroupId/join - Entra in un sottogruppo tramite codice d'invito
+// POST /api/groups/:id/subgroups/join - Entra in qualsiasi sottogruppo del gruppo tramite codice (SUB-XXXX o XXXX)
+app.post('/api/groups/:id/subgroups/join', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { code, userId } = req.body;
+
+  if (!code || !String(code).trim()) {
+    return res.status(400).json({ error: 'Codice di accesso al sottogruppo obbligatorio' });
+  }
+  if (!userId) {
+    return res.status(400).json({ error: 'ID utente obbligatorio' });
+  }
+
+  try {
+    const group = await GroupModel.findOne({ $or: [{ _id: id }, { id }] });
+    if (!group) {
+      return res.status(404).json({ error: 'Gruppo non trovato nel database' });
+    }
+
+    const cleanInputCode = String(code).trim().toUpperCase();
+    const bareInputCode = cleanInputCode.replace(/^SUB-?/i, '').replace(/^JES-?/i, '');
+    const candidateCodes = [cleanInputCode, `SUB-${bareInputCode}`, bareInputCode];
+
+    const subgroup = group.subgroups?.find((s: any) => {
+      const sCode = (s.code || '').trim().toUpperCase();
+      const sBare = sCode.replace(/^SUB-?/i, '').replace(/^JES-?/i, '');
+      return candidateCodes.includes(sCode) || candidateCodes.includes(sBare) || sBare === bareInputCode;
+    });
+
+    if (!subgroup) {
+      return res.status(404).json({ error: `Nessun sottogruppo trovato con il codice "${code}". Verifica e riprova.` });
+    }
+
+    if (!subgroup.members) {
+      subgroup.members = [];
+    }
+    if (!subgroup.members.includes(userId)) {
+      subgroup.members.push(userId);
+      group.markModified('subgroups');
+      await group.save();
+    }
+
+    const mappedGroup = {
+      id: group._id || group.id,
+      name: group.name,
+      description: group.description,
+      code: group.code,
+      inviteLink: group.inviteLink,
+      creatorId: group.creatorId,
+      members: group.members,
+      subgroups: group.subgroups,
+      avatar: group.avatar,
+      isPublic: group.isPublic ?? false,
+      createdAt: group.createdAt,
+      updatedAt: group.updatedAt,
+    };
+
+    broadcastRealtimeEvent('group:subgroups_updated', {
+      groupId: mappedGroup.id,
+      group: mappedGroup,
+      subgroups: group.subgroups,
+    });
+
+    return res.json({
+      success: true,
+      message: `Accesso al sottogruppo "${subgroup.name}" effettuato con successo!`,
+      subgroup,
+      group: mappedGroup,
+    });
+  } catch (err: any) {
+    console.error('Errore join generico sottogruppo MongoDB:', err.message);
+    return res.status(500).json({ error: 'Errore durante l\'accesso al sottogruppo in MongoDB' });
+  }
+});
+
+// POST /api/groups/:id/subgroups/:subgroupId/join - Entra in un sottogruppo specifico tramite codice d'invito
 app.post('/api/groups/:id/subgroups/:subgroupId/join', async (req: Request, res: Response) => {
   const { id, subgroupId } = req.params;
   const { code, userId } = req.body;
@@ -1090,9 +1171,11 @@ app.post('/api/groups/:id/subgroups/:subgroupId/join', async (req: Request, res:
     }
 
     const cleanInputCode = code.trim().toUpperCase();
+    const bareInputCode = cleanInputCode.replace(/^SUB-?/i, '').replace(/^JES-?/i, '');
     const subgroupCode = (subgroup.code || '').trim().toUpperCase();
+    const subgroupBare = subgroupCode.replace(/^SUB-?/i, '').replace(/^JES-?/i, '');
 
-    if (cleanInputCode !== subgroupCode) {
+    if (cleanInputCode !== subgroupCode && bareInputCode !== subgroupBare) {
       return res.status(400).json({ error: 'Codice errato. Verifica il codice e riprova.' });
     }
 
@@ -1282,11 +1365,30 @@ app.get('/api/groups/:id/chat', async (req: Request, res: Response) => {
   const { subgroupId } = req.query;
 
   try {
-    let filter: any = { groupId: id };
-    if (subgroupId && subgroupId !== 'null' && subgroupId !== 'undefined') {
-      filter.subgroupId = String(subgroupId);
+    const cleanSub =
+      subgroupId &&
+      subgroupId !== 'null' &&
+      subgroupId !== 'undefined' &&
+      String(subgroupId).trim() !== ''
+        ? String(subgroupId).trim()
+        : null;
+
+    let filter: any;
+    if (cleanSub) {
+      filter = {
+        groupId: id,
+        subgroupId: cleanSub,
+      };
     } else {
-      filter.$or = [{ subgroupId: null }, { subgroupId: '' }, { subgroupId: { $exists: false } }];
+      filter = {
+        groupId: id,
+        $or: [
+          { subgroupId: null },
+          { subgroupId: '' },
+          { subgroupId: 'null' },
+          { subgroupId: { $exists: false } },
+        ],
+      };
     }
 
     const messages = await ChatMessageModel.find(filter).sort({ createdAt: 1 }).limit(300).lean();
@@ -1324,8 +1426,11 @@ app.post('/api/groups/:id/chat', async (req: Request, res: Response) => {
 
   try {
     const cleanSubgroupId =
-      subgroupId && subgroupId !== 'null' && subgroupId !== 'undefined'
-        ? String(subgroupId)
+      subgroupId &&
+      subgroupId !== 'null' &&
+      subgroupId !== 'undefined' &&
+      String(subgroupId).trim() !== ''
+        ? String(subgroupId).trim()
         : null;
 
     const created: any = await ChatMessageModel.create({
@@ -1604,11 +1709,15 @@ app.post('/api/events', async (req: Request, res: Response) => {
       _id: generatedId,
     });
 
+    const mappedEvent = {
+      ...created.toObject(),
+      id: created._id || created.id,
+    };
+
+    broadcastRealtimeEvent('event:created', { event: mappedEvent });
+
     return res.status(201).json({
-      event: {
-        ...created.toObject(),
-        id: created._id || created.id,
-      },
+      event: mappedEvent,
     });
   } catch (err: any) {
     console.error('Errore salvataggio EventModel MongoDB:', err.message);
@@ -1674,15 +1783,16 @@ app.post('/api/polls', async (req: Request, res: Response) => {
       eventType: pollData.eventType || 'poll',
     });
 
+    const mappedPoll = {
+      ...created.toObject(),
+      id: created._id || created.id,
+    };
+
+    broadcastRealtimeEvent('event:created', { event: mappedPoll });
+
     return res.status(201).json({
-      poll: {
-        ...created.toObject(),
-        id: created._id || created.id,
-      },
-      event: {
-        ...created.toObject(),
-        id: created._id || created.id,
-      },
+      poll: mappedPoll,
+      event: mappedPoll,
     });
   } catch (err: any) {
     console.error('Errore creazione sondaggio MongoDB:', err.message);
@@ -1856,7 +1966,10 @@ app.patch('/api/events/:id', async (req: Request, res: Response) => {
       }
     }
 
-    return res.json({ success: true, event: { ...updated.toObject(), id: updated._id || updated.id } });
+    const mappedUpdated = { ...updated.toObject(), id: updated._id || updated.id };
+    broadcastRealtimeEvent('event:updated', { event: mappedUpdated });
+
+    return res.json({ success: true, event: mappedUpdated });
   } catch (err: any) {
     console.error('Errore aggiornamento EventModel MongoDB:', err.message);
     return res.status(500).json({ error: 'Errore aggiornamento evento in MongoDB' });
@@ -1924,6 +2037,8 @@ const handleDeleteEventOrPoll = async (req: Request, res: Response) => {
       { pollEventId: id },
       { $set: { status: 'pending', pollEventId: null } }
     );
+
+    broadcastRealtimeEvent('event:deleted', { eventId: id });
 
     return res.json({
       success: true,

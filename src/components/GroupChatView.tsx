@@ -12,6 +12,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Group, Subgroup, User, ChatMessage, ChatAttachment, ChatReplyTo } from '../types';
 import { UserAvatar } from './UserAvatar';
+import { useRealtimeSubscription } from '../utils/realtime';
 import {
   Send,
   MessageSquare,
@@ -108,12 +109,66 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
     }
   };
 
+  // Reset immediato al cambio di gruppo o sottogruppo: MAI mostrare messaggi di un'altra chat
   useEffect(() => {
+    setMessages([]);
     setIsLoading(true);
     fetchMessages();
-    const interval = setInterval(fetchMessages, 3500);
-    return () => clearInterval(interval);
   }, [activeGroup.id, subgroupId]);
+
+  // Ascolto real-time via WebSocket: Nuovi messaggi con isolamento rigoroso
+  useRealtimeSubscription('chat:message_created', (payload) => {
+    if (!payload || payload.groupId !== activeGroup.id) return;
+
+    const currentSub = subgroupId ? String(subgroupId).trim() : null;
+    const msgSub = payload.subgroupId && payload.subgroupId !== 'null' ? String(payload.subgroupId).trim() : null;
+
+    // ISOLAMENTO ASSOLUTO: Se il messaggio non appartiene a questa specifica vista, scartalo!
+    if (currentSub !== msgSub) return;
+
+    if (payload.message) {
+      setMessages((prev) => {
+        // Evita duplicazione se già presente
+        const alreadyInList = prev.some((m) => m.id === payload.message.id);
+        if (alreadyInList) return prev;
+
+        // Se l'autore ha un messaggio ottimistico temporaneo, rimpiazzalo con quello confermato da MongoDB
+        const optIdx = prev.findIndex(
+          (m) => m.id.startsWith('msg-opt-') && m.authorId === payload.message.authorId && m.content === payload.message.content
+        );
+        if (optIdx >= 0) {
+          const next = [...prev];
+          next[optIdx] = payload.message;
+          return next;
+        }
+
+        return [...prev, payload.message];
+      });
+    }
+  });
+
+  // Ascolto real-time: Messaggio modificato
+  useRealtimeSubscription('chat:message_updated', (payload) => {
+    if (!payload || payload.groupId !== activeGroup.id) return;
+    const currentSub = subgroupId ? String(subgroupId).trim() : null;
+    const msgSub = payload.subgroupId && payload.subgroupId !== 'null' ? String(payload.subgroupId).trim() : null;
+
+    if (currentSub !== msgSub) return;
+
+    if (payload.message) {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === payload.message.id ? { ...m, ...payload.message } : m))
+      );
+    }
+  });
+
+  // Ascolto real-time: Messaggio cancellato per tutti
+  useRealtimeSubscription('chat:message_deleted', (payload) => {
+    if (!payload || payload.groupId !== activeGroup.id) return;
+    if (payload.messageId) {
+      setMessages((prev) => prev.filter((m) => m.id !== payload.messageId));
+    }
+  });
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

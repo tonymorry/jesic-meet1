@@ -397,12 +397,7 @@ export const GroupsHubView: React.FC<GroupsHubViewProps> = ({
                         </div>
                       </div>
 
-                      {/* Descrizione */}
-                      {group.description && (
-                        <p className="text-xs text-neutral-600 dark:text-neutral-300 line-clamp-2 leading-relaxed">
-                          {group.description}
-                        </p>
-                      )}
+
 
                       {/* Membri Avatars preview */}
                       <div className="flex items-center gap-2 pt-0.5">
@@ -608,12 +603,7 @@ export const GroupsHubView: React.FC<GroupsHubViewProps> = ({
                         </div>
                       </div>
 
-                      {/* Descrizione */}
-                      {group.description && (
-                        <p className="text-xs text-neutral-600 dark:text-neutral-300 line-clamp-2 leading-relaxed">
-                          {group.description}
-                        </p>
-                      )}
+
 
                       {/* Membri Avatars preview */}
                       <div className="flex items-center gap-2 pt-1">
