@@ -853,14 +853,24 @@ const handleRemoveMemberFromGroup = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Gruppo non trovato nel database' });
     }
 
-    if (memberId === group.creatorId) {
+    const isSelfLeaving = requesterId && requesterId === memberId;
+
+    if (!isSelfLeaving && memberId === group.creatorId) {
       return res.status(400).json({ error: 'Non puoi espellere il creatore del gruppo' });
     }
 
-    if (requesterId && group.creatorId !== requesterId) {
+    if (requesterId && !isSelfLeaving && group.creatorId !== requesterId) {
       const member = group.members.find((m: any) => m.userId === requesterId);
       if (!member || (member.role !== 'admin' && member.role !== 'admin_clienti')) {
         return res.status(403).json({ error: 'Solo il creatore del gruppo o un admin di questo gruppo può espellere membri' });
+      }
+    }
+
+    // Se il creatore stesso abbandona il gruppo, trasferisci la proprietà al prossimo membro
+    if (isSelfLeaving && memberId === group.creatorId) {
+      const remainingMember = group.members.find((m: any) => m.userId !== memberId);
+      if (remainingMember) {
+        group.creatorId = remainingMember.userId;
       }
     }
 

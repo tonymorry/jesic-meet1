@@ -1141,6 +1141,39 @@ export default function App() {
     }
   };
 
+  const handleLeaveCurrentGroup = async () => {
+    if (!currentUser || !activeGroup) return;
+
+    const groupId = activeGroup.id;
+    // Rimuovi localmente dai membri del gruppo
+    const updatedMembers = activeGroup.members.filter((m) => m.userId !== currentUser.id);
+    const updatedGroup: Group = { ...activeGroup, members: updatedMembers };
+    setGroups((prev) => prev.map((g) => (g.id === groupId ? updatedGroup : g)));
+
+    // Rimuovi da currentUser memberships
+    setCurrentUser((prev) => {
+      if (!prev) return prev;
+      const filtered = (prev.groupMemberships || []).filter((m) => m.groupId !== groupId);
+      return { ...prev, groupMemberships: filtered };
+    });
+
+    // Chiudi modale e torna alla schermata principale dei gruppi
+    setIsGroupMembersModalOpen(false);
+    setActiveGroupId(null);
+    setActiveSubgroupId(null);
+    setCurrentTab('groups');
+
+    try {
+      await fetch(`/api/groups/${groupId}/members/${currentUser.id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requesterId: currentUser.id }),
+      });
+    } catch (e) {
+      console.warn('[API leave group error]', e);
+    }
+  };
+
   const handleUpdateMemberRole = async (
     memberId: string,
     newRole: GroupMemberRole
@@ -2114,7 +2147,7 @@ export default function App() {
                 return true;
               }}
               onRemoveMember={handleRemoveMemberFromGroup}
-              onUpdateMemberRole={handleUpdateMemberRole}
+              onLeaveGroup={handleLeaveCurrentGroup}
             />
           )}
 

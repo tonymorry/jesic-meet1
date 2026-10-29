@@ -319,12 +319,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                     </>
                   )}
                 </span>
-              ) : (
-                <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 bg-neutral-200 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200">
-                  <Award className="w-3 h-3 text-[#f23e2e]" />
-                  <span>👤 Utente Normale</span>
-                </span>
-              )}
+              ) : null}
             </div>
 
             {/* Nome Utente con anteprima immagine profilo accanto */}

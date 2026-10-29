@@ -22,6 +22,7 @@ import {
   UserMinus,
   AlertCircle,
   Link2,
+  LogOut,
 } from 'lucide-react';
 
 export interface GroupMembersModalProps {
@@ -33,6 +34,7 @@ export interface GroupMembersModalProps {
   onClose: () => void;
   onAddMemberEmail?: (email: string) => Promise<boolean>;
   onRemoveMember?: (memberId: string) => Promise<boolean | void>;
+  onLeaveGroup?: () => Promise<void> | void;
   onUpdateMemberRole?: (memberId: string, newRole: GroupMemberRole) => Promise<void> | void;
 }
 
@@ -45,7 +47,7 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
   onClose,
   onAddMemberEmail,
   onRemoveMember,
-  onUpdateMemberRole,
+  onLeaveGroup,
 }) => {
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -53,8 +55,26 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
   const [inviteEmailInput, setInviteEmailInput] = useState('');
   const [inviteMsg, setInviteMsg] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
-  const [updatingRoleId, setUpdatingRoleId] = useState<string | null>(null);
+  const [isLeavingGroup, setIsLeavingGroup] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const handleLeaveGroupClick = async () => {
+    if (!onLeaveGroup) return;
+    const confirmMsg = activeSubgroup
+      ? `Sei sicuro di voler uscire dal sottogruppo "${activeSubgroup.name}"?`
+      : `Sei sicuro di voler abbandonare il gruppo "${group.name}"?`;
+    const confirmed = window.confirm(confirmMsg);
+    if (!confirmed) return;
+
+    setIsLeavingGroup(true);
+    setErrorMsg(null);
+    try {
+      await onLeaveGroup();
+    } catch (err: any) {
+      setErrorMsg(err?.message || "Errore durante l'uscita dal gruppo");
+      setIsLeavingGroup(false);
+    }
+  };
 
   const currentCode = activeSubgroup?.code || group.code;
 
@@ -224,7 +244,7 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
             </p>
             {isCreator && (
               <span className="text-[10px] font-semibold text-neutral-400">
-                Puoi modificare ruoli o espellere
+                Puoi espellere membri
               </span>
             )}
           </div>
@@ -237,7 +257,6 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
               const isGroupAdmin = isGroupCreator || membership.role === 'admin';
               const isGroupAdminClienti = membership.role === 'admin_clienti';
               const canExpel = isCreator && !isMe && !isGroupCreator;
-              const canChangeRole = isCreator && !isGroupCreator && onUpdateMemberRole;
               const memberName = user ? `${user.name} ${user.surname}` : 'Utente Membro';
 
               return (
@@ -267,64 +286,30 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    {/* Selezionatore Ruolo interattivo per il creatore, altrimenti badge fisso */}
-                    {canChangeRole ? (
-                      <select
-                        value={membership.role}
-                        disabled={updatingRoleId === membership.userId}
-                        onChange={async (e) => {
-                          const newRole = e.target.value as GroupMemberRole;
-                          setUpdatingRoleId(membership.userId);
-                          try {
-                            await onUpdateMemberRole(membership.userId, newRole);
-                          } catch (err: any) {
-                            setErrorMsg(err?.message || 'Errore aggiornamento ruolo');
-                            setTimeout(() => setErrorMsg(null), 3000);
-                          } finally {
-                            setUpdatingRoleId(null);
-                          }
-                        }}
-                        aria-label={`Ruolo di ${memberName}`}
-                        className={`text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-xl cursor-pointer border outline-hidden transition-all ${
-                          membership.role === 'responsabile'
-                            ? 'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border-purple-300 dark:border-purple-800'
-                            : membership.role === 'admin'
-                            ? 'bg-red-50 dark:bg-red-950/60 text-[#f23e2e] border-red-300 dark:border-red-800'
-                            : membership.role === 'admin_clienti'
-                            ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-800'
-                            : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border-neutral-300 dark:border-neutral-700'
-                        }`}
-                      >
-                        <option value="member">👤 Membro (Solo Sondaggi)</option>
-                        <option value="responsabile">⭐ Responsabile (+ Crea Sottogruppi)</option>
-                        <option value="admin">⚡ Admin (+ Eventi Ufficiali)</option>
-                        <option value="admin_clienti">🏢 Admin Clienti (+ Form B2B & Richieste)</option>
-                      </select>
-                    ) : (
-                      <span
-                        className={`text-[9px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full shrink-0 ${
-                          isGroupCreator
-                            ? 'bg-red-100 dark:bg-red-950/60 text-[#f23e2e] border border-red-200/60 dark:border-red-900/40'
-                            : membership.role === 'responsabile'
-                            ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200/60 dark:border-purple-800'
-                            : isGroupAdmin
-                            ? 'bg-red-100 dark:bg-red-950/60 text-[#f23e2e]'
-                            : isGroupAdminClienti
-                            ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400'
-                            : 'bg-neutral-100 dark:bg-neutral-700/60 text-neutral-600 dark:text-neutral-300'
-                        }`}
-                      >
-                        {isGroupCreator
-                          ? '👑 Creatore'
+                    {/* Badge Ruolo statico (modificabile unicamente via MongoDB) */}
+                    <span
+                      className={`text-[9px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full shrink-0 ${
+                        isGroupCreator
+                          ? 'bg-red-100 dark:bg-red-950/60 text-[#f23e2e] border border-red-200/60 dark:border-red-900/40'
                           : membership.role === 'responsabile'
-                          ? '⭐ Responsabile'
+                          ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200/60 dark:border-purple-800'
                           : isGroupAdmin
-                          ? '⚡ Admin'
+                          ? 'bg-red-100 dark:bg-red-950/60 text-[#f23e2e]'
                           : isGroupAdminClienti
-                          ? '🏢 Admin Clienti'
-                          : '👤 Membro'}
-                      </span>
-                    )}
+                          ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400'
+                          : 'bg-neutral-100 dark:bg-neutral-700/60 text-neutral-600 dark:text-neutral-300'
+                      }`}
+                    >
+                      {isGroupCreator
+                        ? '👑 Creatore'
+                        : membership.role === 'responsabile'
+                        ? '⭐ Responsabile'
+                        : isGroupAdmin
+                        ? '⚡ Admin'
+                        : isGroupAdminClienti
+                        ? '🏢 Admin Clienti'
+                        : '👤 Membro'}
+                    </span>
 
                     {/* Iconcina a forma di "X" per espellere il membro (visibile solo al creatore) */}
                     {canExpel && onRemoveMember && (
@@ -350,8 +335,21 @@ export const GroupMembersModal: React.FC<GroupMembersModalProps> = ({
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800 text-right">
+        {/* Footer con pulsante Abbandona Gruppo e Chiudi */}
+        <div className="pt-3 border-t border-neutral-100 dark:border-neutral-800 flex items-center justify-between gap-3">
+          {onLeaveGroup ? (
+            <button
+              type="button"
+              onClick={handleLeaveGroupClick}
+              disabled={isLeavingGroup}
+              className="px-3.5 py-2 rounded-xl border border-red-200 dark:border-red-900/60 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/60 text-red-600 dark:text-red-400 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+              title="Abbandona questo gruppo"
+            >
+              <LogOut className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>{isLeavingGroup ? 'Uscita in corso...' : 'Abbandona Gruppo'}</span>
+            </button>
+          ) : <div />}
+
           <button
             type="button"
             onClick={onClose}
