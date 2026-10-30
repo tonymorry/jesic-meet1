@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { ImageCropModal } from './ImageCropModal';
 import { UserAvatar } from './UserAvatar';
+import { PushNotificationCard } from './PushNotificationCard';
 
 interface ProfileViewProps {
   currentUser: User;
@@ -693,6 +694,12 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </p>
         </div>
       </div>
+
+      {/* Scheda Gestione Notifiche Push Reali (Stile WhatsApp) */}
+      <PushNotificationCard
+        currentUser={currentUser}
+        onNotificationFeedback={(msg) => showNotification(msg)}
+      />
 
       {/* Trasparenza & Informazioni Legali (Google OAuth & GDPR) */}
       <div className="bg-white dark:bg-neutral-900 rounded-3xl p-5 border border-neutral-200/90 dark:border-neutral-800 shadow-xs space-y-3">

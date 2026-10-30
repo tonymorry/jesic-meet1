@@ -65,8 +65,17 @@ import {
   ClientRequestModel,
   EventResponseModel,
   ChatMessageModel,
+  PushSubscriptionModel,
   UserRole,
 } from './src/models/schemas';
+import {
+  getVapidPublicKey,
+  sendPushNotification,
+  sendChatPushNotification,
+  sendPollPushNotification,
+  sendEventConfirmedPushNotification,
+  sendTestPushNotification,
+} from './src/services/pushNotifications';
 import {
   createGoogleCalendarEvent,
   updateGoogleCalendarEvent,
@@ -1498,6 +1507,17 @@ app.post('/api/groups/:id/chat', async (req: Request, res: Response) => {
       message: mapped,
     });
 
+    // Invia notifica Push reale in background (stile WhatsApp) a tutti i membri del gruppo/sottogruppo
+    sendChatPushNotification({
+      groupId: id,
+      subgroupId: cleanSubgroupId,
+      authorId,
+      authorName: authorName || 'Utente',
+      authorSurname: authorSurname || '',
+      content: content ? content.trim() : '',
+      attachment: attachment || undefined,
+    }).catch((pushErr: any) => console.warn('[Push] Errore trigger chat push:', pushErr?.message || pushErr));
+
     return res.status(201).json({ success: true, message: mapped });
   } catch (err: any) {
     console.error('Errore invio messaggio chat MongoDB:', err.message);
@@ -1765,6 +1785,32 @@ app.post('/api/events', async (req: Request, res: Response) => {
 
     broadcastRealtimeEvent('event:created', { event: mappedEvent });
 
+    // Invia notifica Push reale
+    if (mappedEvent.eventType === 'official') {
+      sendEventConfirmedPushNotification({
+        eventId: mappedEvent.id,
+        title: mappedEvent.title,
+        creatorId: mappedEvent.creatorId,
+        date: mappedEvent.finalizedSlot?.date || mappedEvent.dates?.[0] || new Date().toISOString().split('T')[0],
+        startTime: mappedEvent.finalizedSlot?.startTime || `${String(mappedEvent.startHour || 9).padStart(2, '0')}:00`,
+        endTime: mappedEvent.finalizedSlot?.endTime || `${String(mappedEvent.endHour || 10).padStart(2, '0')}:00`,
+        type: mappedEvent.type,
+        location: mappedEvent.location,
+        groupId: mappedEvent.groupId,
+        participantUserIds: (mappedEvent.invitees || []).map((i: any) => i.userId),
+        isOfficial: true,
+      }).catch((pushErr: any) => console.warn('[Push] Errore trigger official event push:', pushErr?.message || pushErr));
+    } else {
+      sendPollPushNotification({
+        pollId: mappedEvent.id,
+        title: mappedEvent.title,
+        creatorId: mappedEvent.creatorId,
+        groupId: mappedEvent.groupId,
+        subgroupId: mappedEvent.subgroupId,
+        inviteeUserIds: (mappedEvent.invitees || []).map((i: any) => i.userId),
+      }).catch((pushErr: any) => console.warn('[Push] Errore trigger poll push:', pushErr?.message || pushErr));
+    }
+
     return res.status(201).json({
       event: mappedEvent,
     });
@@ -1838,6 +1884,16 @@ app.post('/api/polls', async (req: Request, res: Response) => {
     };
 
     broadcastRealtimeEvent('event:created', { event: mappedPoll });
+
+    // Invia notifica Push reale per il nuovo sondaggio
+    sendPollPushNotification({
+      pollId: mappedPoll.id,
+      title: mappedPoll.title,
+      creatorId: mappedPoll.creatorId,
+      groupId: mappedPoll.groupId,
+      subgroupId: mappedPoll.subgroupId,
+      inviteeUserIds: (mappedPoll.invitees || []).map((i: any) => i.userId),
+    }).catch((pushErr: any) => console.warn('[Push] Errore trigger poll push:', pushErr?.message || pushErr));
 
     return res.status(201).json({
       poll: mappedPoll,
@@ -2017,6 +2073,25 @@ app.patch('/api/events/:id', async (req: Request, res: Response) => {
 
     const mappedUpdated = { ...updated.toObject(), id: updated._id || updated.id };
     broadcastRealtimeEvent('event:updated', { event: mappedUpdated });
+
+    if (mappedUpdated.status === 'confirmed' && mappedUpdated.finalizedSlot) {
+      sendEventConfirmedPushNotification({
+        eventId: mappedUpdated.id,
+        title: mappedUpdated.title,
+        creatorId: mappedUpdated.creatorId,
+        date: mappedUpdated.finalizedSlot.date,
+        startTime: mappedUpdated.finalizedSlot.startTime,
+        endTime: mappedUpdated.finalizedSlot.endTime,
+        type: mappedUpdated.type,
+        location: mappedUpdated.location,
+        groupId: mappedUpdated.groupId,
+        participantUserIds: [
+          ...(mappedUpdated.invitees || []).map((i: any) => i.userId),
+          ...(mappedUpdated.participants || []).map((p: any) => p.userId),
+        ],
+        isOfficial: mappedUpdated.eventType === 'official',
+      }).catch((pushErr: any) => console.warn('[Push] Errore trigger confirmed event push:', pushErr?.message || pushErr));
+    }
 
     return res.json({ success: true, event: mappedUpdated });
   } catch (err: any) {
@@ -2297,6 +2372,26 @@ const handleUpdatePollConfirmedDate = async (req: Request, res: Response) => {
       status: 'confirmed',
       ...(effectiveGoogleEventId ? { googleEventId: effectiveGoogleEventId, googleCalendarEventId: effectiveGoogleEventId } : {}),
     };
+
+    broadcastRealtimeEvent('event:updated', { event: mapped });
+
+    // Invia notifica push reale per la conferma della riunione
+    sendEventConfirmedPushNotification({
+      eventId: mapped.id,
+      title: mapped.title,
+      creatorId: mapped.creatorId,
+      date: targetDate,
+      startTime: targetStartTime,
+      endTime: targetEndTime,
+      type: mapped.type,
+      location: mapped.location,
+      groupId: mapped.groupId,
+      participantUserIds: [
+        ...(mapped.invitees || []).map((i: any) => i.userId),
+        ...(mapped.participants || []).map((p: any) => p.userId),
+      ],
+      isOfficial: mapped.eventType === 'official',
+    }).catch((pushErr: any) => console.warn('[Push] Errore trigger confirmed poll push:', pushErr?.message || pushErr));
 
     return res.json({
       success: true,
@@ -2596,6 +2691,118 @@ app.post('/api/client-requests/:id/confirm-final', async (req: Request, res: Res
   } catch (err: any) {
     console.error('Errore confirm-final ClientRequestModel MongoDB:', err.message);
     return res.status(500).json({ error: 'Errore conferma call cliente in MongoDB' });
+  }
+});
+
+/* ==========================================================================
+   6. WEB PUSH NOTIFICATIONS API (Web Push Protocol & VAPID)
+   ========================================================================== */
+
+// GET /api/push/public-key - Restituisce la VAPID public key per iscrivere il browser
+app.get('/api/push/public-key', async (_req: Request, res: Response) => {
+  try {
+    const publicKey = await getVapidPublicKey();
+    return res.json({ publicKey });
+  } catch (err: any) {
+    console.error('Errore recupero VAPID public key:', err.message);
+    return res.status(500).json({ error: 'Errore recupero VAPID public key' });
+  }
+});
+
+// POST /api/push/subscribe - Salva l'iscrizione push del dispositivo in MongoDB
+app.post('/api/push/subscribe', async (req: Request, res: Response) => {
+  const { userId, subscription, userAgent } = req.body;
+
+  if (!userId || !subscription?.endpoint || !subscription?.keys) {
+    return res.status(400).json({ error: 'Dati sottoscrizione non validi o userId mancante' });
+  }
+
+  try {
+    const saved = await PushSubscriptionModel.findOneAndUpdate(
+      { endpoint: subscription.endpoint },
+      {
+        $set: {
+          userId,
+          endpoint: subscription.endpoint,
+          keys: {
+            p256dh: subscription.keys.p256dh,
+            auth: subscription.keys.auth,
+          },
+          userAgent: userAgent || req.headers['user-agent'] || '',
+        },
+      },
+      { upsert: true, new: true }
+    );
+
+    console.log(`[Push] Dispositivo registrato per utente ${userId}: ${subscription.endpoint.slice(0, 45)}...`);
+    return res.json({ success: true, message: 'Dispositivo registrato con successo per le notifiche push', id: saved._id });
+  } catch (err: any) {
+    console.error('Errore registrazione sottoscrizione push:', err.message);
+    return res.status(500).json({ error: 'Errore salvataggio sottoscrizione push in MongoDB' });
+  }
+});
+
+// POST /api/push/unsubscribe - Rimuove la sottoscrizione push del dispositivo da MongoDB
+app.post('/api/push/unsubscribe', async (req: Request, res: Response) => {
+  const { endpoint, userId } = req.body;
+
+  if (!endpoint) {
+    return res.status(400).json({ error: 'Endpoint obbligatorio per la disiscrizione' });
+  }
+
+  try {
+    const filter: any = { endpoint };
+    if (userId) filter.userId = userId;
+    await PushSubscriptionModel.deleteMany(filter);
+    console.log(`[Push] Dispositivo rimosso dalle notifiche: ${endpoint.slice(0, 45)}...`);
+    return res.json({ success: true, message: 'Dispositivo disiscritto con successo' });
+  } catch (err: any) {
+    console.error('Errore disiscrizione push:', err.message);
+    return res.status(500).json({ error: 'Errore rimozione sottoscrizione push' });
+  }
+});
+
+// GET /api/push/status - Verifica se il dispositivo/endpoint o utente è registrato
+app.get('/api/push/status', async (req: Request, res: Response) => {
+  const { userId, endpoint } = req.query;
+
+  try {
+    if (endpoint) {
+      const exists = await PushSubscriptionModel.exists({ endpoint: String(endpoint) });
+      return res.json({ subscribed: Boolean(exists) });
+    }
+
+    if (userId) {
+      const count = await PushSubscriptionModel.countDocuments({ userId: String(userId) });
+      return res.json({ subscribed: count > 0, deviceCount: count });
+    }
+
+    return res.json({ subscribed: false });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Errore verifica stato push' });
+  }
+});
+
+// POST /api/push/test - Invia una notifica di prova immediata al dispositivo dell'utente
+app.post('/api/push/test', async (req: Request, res: Response) => {
+  const { userId } = req.body;
+
+  if (!userId) {
+    return res.status(400).json({ error: 'userId obbligatorio per la notifica di test' });
+  }
+
+  try {
+    const result = await sendTestPushNotification(userId);
+    return res.json({
+      success: true,
+      message: result.sent > 0
+        ? `Notifica di prova inviata con successo a ${result.sent} dispositivo/i!`
+        : 'Nessun dispositivo registrato trovato per questo utente. Attiva prima le notifiche nel browser!',
+      ...result,
+    });
+  } catch (err: any) {
+    console.error('Errore invio notifica test push:', err.message);
+    return res.status(500).json({ error: 'Errore invio notifica push di test' });
   }
 });
 

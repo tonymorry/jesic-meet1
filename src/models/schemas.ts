@@ -915,7 +915,113 @@ export const ChatMessageModel: Model<IChatMessage> =
 export const ChatMessage: Model<IChatMessage> = ChatMessageModel;
 
 /* ==========================================================================
-   7. DOCUMENTAZIONE PER CODE VIEW MODAL
+   7. WEB PUSH NOTIFICATIONS & VAPID KEYS SCHEMAS
+   ========================================================================== */
+export interface IPushSubscription {
+  _id?: string;
+  id?: string;
+  userId: string;
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+  userAgent?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+export interface IVapidKey {
+  _id?: string;
+  id?: string;
+  publicKey: string;
+  privateKey: string;
+  subject: string;
+  createdAt?: Date;
+}
+
+const PushSubscriptionSchema = new Schema<IPushSubscription>(
+  {
+    _id: {
+      type: String,
+      default: () => `push-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    },
+    userId: {
+      type: String,
+      required: true,
+      index: true,
+    },
+    endpoint: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
+    },
+    keys: {
+      p256dh: { type: String, required: true },
+      auth: { type: String, required: true },
+    },
+    userAgent: {
+      type: String,
+      default: '',
+    },
+  },
+  {
+    timestamps: true,
+    toJSON: {
+      virtuals: true,
+      transform: (_doc, ret: any) => {
+        ret.id = ret._id ? ret._id.toString() : ret.id;
+        delete ret.__v;
+        return ret;
+      },
+    },
+    toObject: {
+      virtuals: true,
+      transform: (_doc, ret: any) => {
+        ret.id = ret._id ? ret._id.toString() : ret.id;
+        return ret;
+      },
+    },
+  }
+);
+
+PushSubscriptionSchema.virtual('id').get(function (this: any) {
+  return this._id ? this._id.toString() : undefined;
+});
+
+export const PushSubscriptionModel: Model<IPushSubscription> =
+  mongoose.models.PushSubscription || mongoose.model<IPushSubscription>('PushSubscription', PushSubscriptionSchema);
+
+const VapidKeySchema = new Schema<IVapidKey>(
+  {
+    _id: {
+      type: String,
+      default: 'vapid-primary-keys',
+    },
+    publicKey: {
+      type: String,
+      required: true,
+    },
+    privateKey: {
+      type: String,
+      required: true,
+    },
+    subject: {
+      type: String,
+      default: 'mailto:notifiche@jesic.it',
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+export const VapidKeyModel: Model<IVapidKey> =
+  mongoose.models.VapidKey || mongoose.model<IVapidKey>('VapidKey', VapidKeySchema);
+
+/* ==========================================================================
+   8. DOCUMENTAZIONE PER CODE VIEW MODAL
    ========================================================================== */
 export const MONGOOSE_SCHEMAS_CODE = `
 import mongoose, { Schema, Document, Model } from 'mongoose';
@@ -931,4 +1037,6 @@ export const PollModel = EventModel;
 export const OfficialEventModel = EventModel;
 export const ClientRequestModel = mongoose.model('ClientRequest', ClientRequestSchema);
 export const EventResponseModel = mongoose.model('Response', ResponseSchema);
+export const PushSubscriptionModel = mongoose.model('PushSubscription', PushSubscriptionSchema);
+export const VapidKeyModel = mongoose.model('VapidKey', VapidKeySchema);
 `;

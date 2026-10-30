@@ -40,6 +40,7 @@ import { ClientRequestsDashboard } from './components/ClientRequestsDashboard';
 import { SplashScreen } from './components/SplashScreen';
 import { PrivacyPolicyView } from './components/PrivacyPolicyView';
 import { TermsOfServiceView } from './components/TermsOfServiceView';
+import { PushBanner } from './components/PushBanner';
 import { autoSyncMeetingEventToCalendar } from './utils/googleWorkspaceAuth';
 import { realtimeClient, useRealtimeSubscription } from './utils/realtime';
 
@@ -612,6 +613,44 @@ export default function App() {
       }
     });
   }, [currentUser, pendingInviteCode]);
+
+  // Gestione apertura da Notifica Push o Deep Link URL (?tab=...&groupId=...&subgroupId=...&eventId=...)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleDeepLinkParams = () => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const qTab = params.get('tab') as NavTab | null;
+        const qGroupId = params.get('groupId');
+        const qSubgroupId = params.get('subgroupId');
+        const qEventId = params.get('eventId');
+
+        if (qGroupId) {
+          setActiveGroupId(qGroupId);
+          localStorage.setItem(STORAGE_ACTIVE_GROUP_KEY, qGroupId);
+        }
+
+        if (qSubgroupId !== undefined && qSubgroupId !== null) {
+          setActiveSubgroupId(qSubgroupId && qSubgroupId !== 'null' ? qSubgroupId : null);
+        }
+
+        if (qEventId) {
+          setSelectedEventId(qEventId);
+        }
+
+        if (qTab) {
+          setCurrentTab(qTab);
+        }
+      } catch (err) {
+        console.warn('Errore parsing parametri deep link:', err);
+      }
+    };
+
+    handleDeepLinkParams();
+    window.addEventListener('popstate', handleDeepLinkParams);
+    return () => window.removeEventListener('popstate', handleDeepLinkParams);
+  }, []);
 
   // Navigazione alla pagina pubblica /prenota-call
   const navigateToPublicBooking = () => {
@@ -1952,6 +1991,9 @@ export default function App() {
             activeSubgroupName={activeSubgroup ? activeSubgroup.name : undefined}
             onToggleSubgroupsMenu={() => setIsSubgroupsDrawerOpen(true)}
           />
+
+          {/* Banner Rapido Attivazione Notifiche Push Reali */}
+          <PushBanner currentUser={currentUser} />
 
           {/* Banner scorrevole rapido per aprire o testare la rotta esterna /prenota-call (Visibile SOLO all'interno del gruppo per Admin e Admin Clienti di questo gruppo) */}
           {isInsideGroup && isClientAdmin && activeGroup && (
