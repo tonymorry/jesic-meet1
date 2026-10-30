@@ -47,6 +47,7 @@ export const AvailabilityGrid: React.FC<AvailabilityGridProps> = ({
   }, [mySelectedSlots]);
 
   const allSlots = generateAllEventSlots(event);
+  const validSlotKeys = new Set(allSlots.map((s) => s.slotKey));
   const slotAnalysisMap = new Map<string, SlotAnalysis>(
     allRankedSlots.map((s) => [s.slotKey, s])
   );
@@ -310,6 +311,20 @@ export const AvailabilityGrid: React.FC<AvailabilityGridProps> = ({
                     {/* Slot delle date (adattati dinamicamente in larghezza per non uscire mai dai bordi) */}
                     {uniqueDates.map((dateStr) => {
                       const slotKey = `${dateStr}T${timeStr}`;
+
+                      // Se questo orario non fa parte della fascia prevista per questo giorno
+                      if (!validSlotKeys.has(slotKey)) {
+                        return (
+                          <div
+                            key={slotKey}
+                            className={`${slotHeightClass} rounded-lg border border-transparent bg-neutral-100/60 dark:bg-neutral-800/25 flex items-center justify-center opacity-30 select-none cursor-not-allowed`}
+                            title="Fascia oraria non prevista per questo giorno"
+                          >
+                            <span className="text-[10px] text-neutral-400 dark:text-neutral-600 font-mono">-</span>
+                          </div>
+                        );
+                      }
+
                       const analysis = slotAnalysisMap.get(slotKey);
                       const isSelectedSlot = activeSlotKey === slotKey;
                       const totalPresent = analysis ? analysis.mandatoryPresent + analysis.optionalPresent : 0;

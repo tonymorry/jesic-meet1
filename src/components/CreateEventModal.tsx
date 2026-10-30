@@ -31,6 +31,7 @@ import {
   RotateCcw,
   Lock,
   Mail,
+  Pencil,
 } from 'lucide-react';
 
 export interface PreFillClientData {
@@ -134,6 +135,51 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
   const [endHour, setEndHour] = useState<number>(eventToEdit?.endHour ?? 18);
   const [slotInterval, setSlotInterval] = useState<30 | 60>((eventToEdit?.slotIntervalMinutes as 30 | 60) ?? 60);
 
+  // Fascia Oraria Personalizzata per Giorno (es. Martedì 21 dalle 16 alle 18 e Mercoledì 22 dalle 10 alle 12)
+  const [dayTimeRanges, setDayTimeRanges] = useState<
+    Record<string, { startHour: number; endHour: number }>
+  >(eventToEdit?.dayTimeRanges || {});
+
+  // Stato per la modifica dell'orario di un giorno specifico (apertura popup matita)
+  const [editingDateForHours, setEditingDateForHours] = useState<string | null>(null);
+  const [tempDayStartHour, setTempDayStartHour] = useState<number>(9);
+  const [tempDayEndHour, setTempDayEndHour] = useState<number>(18);
+
+  // Riconoscimento conversione richiesta cliente B2B (minimo 2 slot già scelti dal cliente)
+  const isClientConversion = Boolean(
+    prefillData?.fixedSlots && prefillData.fixedSlots.length >= 2
+  );
+
+  const handleOpenEditDayHours = (dateStr: string) => {
+    const existing = dayTimeRanges[dateStr];
+    setTempDayStartHour(existing ? existing.startHour : startHour);
+    setTempDayEndHour(existing ? existing.endHour : endHour);
+    setEditingDateForHours(dateStr);
+  };
+
+  const handleSaveDayHours = () => {
+    if (!editingDateForHours) return;
+    setDayTimeRanges((prev) => ({
+      ...prev,
+      [editingDateForHours]: {
+        startHour: tempDayStartHour,
+        endHour: tempDayEndHour,
+      },
+    }));
+    setEditingDateForHours(null);
+  };
+
+  const handleResetDayHours = (dateStr: string) => {
+    setDayTimeRanges((prev) => {
+      const next = { ...prev };
+      delete next[dateStr];
+      return next;
+    });
+    if (editingDateForHours === dateStr) {
+      setEditingDateForHours(null);
+    }
+  };
+
   // Selezione intervallo rapido (da data a data)
   const [showRangePicker, setShowRangePicker] = useState(false);
   const [rangeStart, setRangeStart] = useState(tomorrowStr);
@@ -229,6 +275,11 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
   const handleRemoveDate = (dateToRemove: string) => {
     if (selectedDates.length > 1) {
       setSelectedDates(selectedDates.filter((d) => d !== dateToRemove));
+      setDayTimeRanges((prev) => {
+        const next = { ...prev };
+        delete next[dateToRemove];
+        return next;
+      });
       setDateWarning(null);
     } else {
       setDateWarning('Devi mantenere almeno un giorno selezionato.');
@@ -301,7 +352,11 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
 
     const slots: { slotKey: string; date: string; time: string }[] = [];
     for (const date of selectedDates) {
-      for (let h = startHour; h < endHour; h++) {
+      const dayRange = dayTimeRanges[date];
+      const dStart = dayRange ? dayRange.startHour : startHour;
+      const dEnd = dayRange ? dayRange.endHour : endHour;
+
+      for (let h = dStart; h < dEnd; h++) {
         const minutes = slotInterval === 30 ? [0, 30] : [0];
         for (const m of minutes) {
           const time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
@@ -458,6 +513,7 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
         startHour,
         endHour,
         slotIntervalMinutes: slotInterval,
+        dayTimeRanges: Object.keys(dayTimeRanges).length > 0 ? dayTimeRanges : undefined,
         type: meetingType,
         location: meetingType === 'in_person' ? location : undefined,
         meetLink: meetingType === 'online' ? (eventToEdit.meetLink || meetLink) : undefined,
@@ -482,6 +538,7 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
         startHour,
         endHour,
         slotIntervalMinutes: slotInterval,
+        dayTimeRanges: Object.keys(dayTimeRanges).length > 0 ? dayTimeRanges : undefined,
         type: meetingType,
         location: meetingType === 'in_person' ? location : undefined,
         meetLink,
@@ -500,19 +557,22 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
     );
   };
 
-  const slotsPerDay = (endHour - startHour) * (slotInterval === 30 ? 2 : 1);
-  const totalSlots = selectedDates.length * slotsPerDay;
+  const totalSlots = getAllPossibleSlots().length;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div className="bg-white dark:bg-neutral-900 w-full max-w-xl sm:max-w-2xl md:max-w-3xl max-h-[94vh] rounded-t-3xl sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-200 border dark:border-neutral-800 text-neutral-900 dark:text-neutral-100">
         
-        {/* Header con Step indicator (3 step) */}
+        {/* Header con Step indicator */}
         <div className="p-4 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between bg-neutral-50/50 dark:bg-neutral-800/50">
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[10px] font-extrabold uppercase tracking-wider text-red-600 dark:text-red-400">
-                {eventToEdit ? 'Modifica Sondaggio' : `Step ${step} di 3`}
+                {eventToEdit
+                  ? 'Modifica Sondaggio'
+                  : isClientConversion
+                  ? (step === 1 ? 'Step 1 di 2 (Dettagli)' : 'Step 2 di 2 (Invita Membri)')
+                  : `Step ${step} di 3`}
               </span>
               {activeGroup && (
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700 flex items-center gap-1">
@@ -540,7 +600,11 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
         <div className="h-1 bg-neutral-100 dark:bg-neutral-800 w-full flex">
           <div
             className="h-full bg-red-600 transition-all duration-300"
-            style={{ width: `${(step / 3) * 100}%` }}
+            style={{
+              width: isClientConversion
+                ? (step === 1 ? '50%' : '100%')
+                : `${(step / 3) * 100}%`,
+            }}
           />
         </div>
 
@@ -550,6 +614,20 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
           {/* STEP 1: INFO GENERALI */}
           {step === 1 && (
             <div className="space-y-4 animate-in fade-in">
+              {isClientConversion && prefillData?.fixedSlots && (
+                <div className="p-3 bg-red-50/80 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 rounded-2xl flex items-start gap-2.5 text-xs text-red-950 dark:text-red-200 shadow-2xs">
+                  <Sparkles className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-extrabold text-red-700 dark:text-red-400">
+                      Conversione Richiesta Cliente B2B ({prefillData.clientInfo?.companyName || 'Cliente'})
+                    </p>
+                    <p className="text-[11px] text-neutral-600 dark:text-neutral-300 mt-0.5 leading-relaxed">
+                      Le opzioni di data e orario (<strong>{prefillData.fixedSlots.length} slot</strong> richiesti dal cliente) sono già fissate. Il passaggio di selezione delle date verrà saltato automaticamente: passerai direttamente alla selezione degli invitati del team.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 dark:text-neutral-400 mb-1">
                   Titolo Riunione *
@@ -756,7 +834,13 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
                             type="button"
                             key={dateStr}
                             disabled={isPast}
-                            onClick={() => handleToggleCalendarDate(dateStr)}
+                            onClick={() => {
+                              if (isSelected) {
+                                handleOpenEditDayHours(dateStr);
+                              } else {
+                                handleToggleCalendarDate(dateStr);
+                              }
+                            }}
                             className={`h-7 rounded-xl text-xs font-bold transition-all flex items-center justify-center cursor-pointer relative ${
                               isSelected
                                 ? 'bg-red-600 text-white font-black shadow-xs ring-2 ring-red-400/40 scale-105'
@@ -764,9 +848,27 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
                                 ? 'text-neutral-300 dark:text-neutral-700 cursor-not-allowed opacity-30'
                                 : 'text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700'
                             } ${isToday && !isSelected ? 'border border-red-500 font-extrabold text-red-600 dark:text-red-400' : ''}`}
-                            title={isPast ? 'Data passata' : dateStr}
+                            title={
+                              isPast
+                                ? 'Data passata'
+                                : isSelected
+                                ? `Giorno selezionato (${
+                                    dayTimeRanges[dateStr]
+                                      ? `${dayTimeRanges[dateStr].startHour}:00 - ${dayTimeRanges[dateStr].endHour}:00 (personalizzato)`
+                                      : `${startHour}:00 - ${endHour}:00`
+                                  }). Clicca per modificare l'orario.`
+                                : dateStr
+                            }
                           >
-                            {dayNum}
+                            <span>{dayNum}</span>
+                            {isSelected && (
+                              <span
+                                className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-white dark:bg-neutral-900 text-red-600 shadow-xs border border-red-200 dark:border-red-800 flex items-center justify-center"
+                                title="Personalizza orario"
+                              >
+                                <Pencil className="w-2 h-2" />
+                              </span>
+                            )}
                           </button>
                         );
                       })}
@@ -970,27 +1072,172 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
                 </div>
 
                 <div className="flex flex-wrap gap-1.5">
-                  {selectedDates.map((dateStr) => (
-                    <span
-                      key={dateStr}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-50 dark:bg-red-950/60 text-red-900 dark:text-red-200 border border-red-200 dark:border-red-900 text-xs font-bold shadow-2xs"
-                    >
-                      <Calendar className="w-3.5 h-3.5 text-red-600 dark:text-red-400 shrink-0" />
-                      <span>{formatDateChip(dateStr)}</span>
-                      {selectedDates.length > 1 && (
+                  {selectedDates.map((dateStr) => {
+                    const customRange = dayTimeRanges[dateStr];
+                    return (
+                      <span
+                        key={dateStr}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold shadow-2xs transition-all ${
+                          customRange
+                            ? 'bg-amber-50 dark:bg-amber-950/50 text-amber-900 dark:text-amber-200 border-amber-300 dark:border-amber-800'
+                            : 'bg-red-50 dark:bg-red-950/60 text-red-900 dark:text-red-200 border-red-200 dark:border-red-900'
+                        }`}
+                      >
+                        <Calendar className="w-3.5 h-3.5 text-red-600 dark:text-red-400 shrink-0" />
+                        <span>{formatDateChip(dateStr)}</span>
+
+                        {/* Badge Orario con Matita per modificare */}
                         <button
                           type="button"
-                          onClick={() => handleRemoveDate(dateStr)}
-                          className="hover:text-red-600 dark:hover:text-red-400 ml-0.5 p-0.5 rounded cursor-pointer transition-colors"
-                          title="Rimuovi data"
+                          onClick={() => handleOpenEditDayHours(dateStr)}
+                          className={`flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-extrabold transition-all cursor-pointer ${
+                            customRange
+                              ? 'bg-amber-200/70 dark:bg-amber-900/80 text-amber-900 dark:text-amber-100 hover:bg-amber-300/80'
+                              : 'bg-red-100/70 dark:bg-red-900/50 text-red-800 dark:text-red-200 hover:bg-red-200/80'
+                          }`}
+                          title="Clicca per modificare l'orario di questo giorno"
                         >
-                          <X className="w-3.5 h-3.5 stroke-[2.5px]" />
+                          <Pencil className="w-3 h-3" />
+                          <span>
+                            {customRange
+                              ? `${String(customRange.startHour).padStart(2, '0')}:00 - ${String(customRange.endHour).padStart(2, '0')}:00`
+                              : `${String(startHour).padStart(2, '0')}:00 - ${String(endHour).padStart(2, '0')}:00`}
+                          </span>
                         </button>
-                      )}
-                    </span>
-                  ))}
+
+                        {selectedDates.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveDate(dateStr)}
+                            className="hover:text-red-600 dark:hover:text-red-400 ml-0.5 p-0.5 rounded cursor-pointer transition-colors"
+                            title="Rimuovi data"
+                          >
+                            <X className="w-3.5 h-3.5 stroke-[2.5px]" />
+                          </button>
+                        )}
+                      </span>
+                    );
+                  })}
                 </div>
               </div>
+
+              {/* POPUP/MODALE PER MODIFICARE L'ORARIO DI UN DETERMINATO GIORNO */}
+              {editingDateForHours && (
+                <div className="fixed inset-0 z-60 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-2xl max-w-sm w-full p-4 shadow-2xl space-y-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-xl bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400 flex items-center justify-center">
+                          <Pencil className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-extrabold text-neutral-900 dark:text-white">
+                            Orario personalizzato
+                          </h3>
+                          <p className="text-[11px] text-neutral-500 font-medium">
+                            {formatDateChip(editingDateForHours)}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEditingDateForHours(null)}
+                        className="p-1 rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <p className="text-xs text-neutral-600 dark:text-neutral-300">
+                      Imposta una fascia oraria specifica per questo giorno (es. dalle 16:00 alle 18:00), oppure lascia quella generale del sondaggio ({String(startHour).padStart(2, '0')}:00 - {String(endHour).padStart(2, '0')}:00).
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-2 bg-neutral-50 dark:bg-neutral-800/60 p-3 rounded-xl border border-neutral-200 dark:border-neutral-700">
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase text-neutral-500 mb-1">
+                          Da (Inizio)
+                        </label>
+                        <select
+                          value={tempDayStartHour}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            setTempDayStartHour(val);
+                            if (tempDayEndHour <= val) {
+                              setTempDayEndHour(Math.min(24, val + 1));
+                            }
+                          }}
+                          className="w-full px-2 py-1.5 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-lg text-xs font-bold text-neutral-800 dark:text-neutral-200 cursor-pointer"
+                        >
+                          {Array.from({ length: 20 }, (_, i) => i + 5).map((h) => (
+                            <option key={h} value={h}>
+                              {String(h).padStart(2, '0')}:00
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase text-neutral-500 mb-1">
+                          A (Fine)
+                        </label>
+                        <select
+                          value={tempDayEndHour}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            setTempDayEndHour(val);
+                            if (tempDayStartHour >= val) {
+                              setTempDayStartHour(Math.max(0, val - 1));
+                            }
+                          }}
+                          className="w-full px-2 py-1.5 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-lg text-xs font-bold text-neutral-800 dark:text-neutral-200 cursor-pointer"
+                        >
+                          {Array.from({ length: 20 }, (_, i) => i + 5)
+                            .filter((h) => h > tempDayStartHour)
+                            .map((h) => (
+                              <option key={h} value={h}>
+                                {String(h).padStart(2, '0')}:00
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5 pt-1">
+                      <button
+                        type="button"
+                        onClick={handleSaveDayHours}
+                        className="w-full py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold shadow-sm transition-colors cursor-pointer"
+                      >
+                        Applica orario a questo giorno
+                      </button>
+
+                      {dayTimeRanges[editingDateForHours] && (
+                        <button
+                          type="button"
+                          onClick={() => handleResetDayHours(editingDateForHours)}
+                          className="w-full py-1.5 bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 rounded-xl text-[11px] font-bold transition-colors cursor-pointer"
+                        >
+                          Reimposta a orario generale ({String(startHour).padStart(2, '0')}:00 - {String(endHour).padStart(2, '0')}:00)
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleRemoveDate(editingDateForHours);
+                          setEditingDateForHours(null);
+                        }}
+                        className="w-full py-1 text-neutral-400 hover:text-red-600 text-[11px] transition-colors cursor-pointer"
+                      >
+                        Rimuovi giorno dal sondaggio
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
             </div>
           )}
@@ -998,6 +1245,35 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
           {/* STEP 3: INVITA PERSONE & PRIORITÀ (TENDINA CON RICERCA + INSERIMENTO NOME/EMAIL + PRIORITÀ) */}
           {step === 3 && (
             <div className="space-y-3 animate-in fade-in">
+              {/* Se conversione da cliente B2B: visualizza gli slot bloccati e scelti dal cliente */}
+              {isClientConversion && prefillData?.fixedSlots && (
+                <div className="bg-red-50/80 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 rounded-2xl p-3 space-y-2 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-red-900 dark:text-red-200 flex items-center gap-1.5">
+                      <Clock className="w-4 h-4 text-red-600 dark:text-red-400" />
+                      <span>Slot orari concordati con il cliente ({prefillData.clientInfo?.companyName || 'Cliente'})</span>
+                    </span>
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-red-200 dark:bg-red-900 text-red-800 dark:text-red-200">
+                      {prefillData.fixedSlots.length} opzioni
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {prefillData.fixedSlots.map((s) => (
+                      <span
+                        key={s.slotKey}
+                        className="px-2.5 py-1 rounded-xl bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 border border-red-200 dark:border-red-900/60 text-[11px] font-bold flex items-center gap-1.5 shadow-2xs"
+                      >
+                        <Calendar className="w-3 h-3 text-red-600 dark:text-red-400" />
+                        <span>{s.date} dalle {s.startTime} alle {s.endTime}</span>
+                      </span>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-neutral-500 dark:text-neutral-400">
+                    Il team voterà unicamente tra queste date e orari scelti dal cliente.
+                  </p>
+                </div>
+              )}
+
               <div className="bg-neutral-50 dark:bg-neutral-800/80 border border-neutral-200 dark:border-neutral-700 rounded-2xl p-3 text-xs text-neutral-700 dark:text-neutral-300">
                 <div className="flex items-center gap-1.5 font-bold text-neutral-900 dark:text-white mb-1">
                   <Star className="w-4 h-4 fill-amber-500 text-amber-500" />
@@ -1297,7 +1573,13 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
           {step > 1 ? (
             <button
               type="button"
-              onClick={() => setStep((step - 1) as 1 | 2)}
+              onClick={() => {
+                if (isClientConversion && step === 3) {
+                  setStep(1);
+                } else {
+                  setStep((step - 1) as 1 | 2);
+                }
+              }}
               className="py-2 px-3 text-xs font-bold text-neutral-700 dark:text-neutral-200 bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded-xl flex items-center gap-1 transition-colors cursor-pointer"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
@@ -1311,7 +1593,13 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
             <button
               type="button"
               disabled={step === 1 && !title.trim()}
-              onClick={() => setStep((step + 1) as 2 | 3)}
+              onClick={() => {
+                if (isClientConversion && step === 1) {
+                  setStep(3); // Salta il passaggio 2: le date e orari sono già quelli scelti dal cliente!
+                } else {
+                  setStep((step + 1) as 2 | 3);
+                }
+              }}
               className="py-2 px-4 text-xs font-bold text-white bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl flex items-center gap-1.5 transition-all shadow-md shadow-red-600/30 cursor-pointer"
             >
               <span>Avanti</span>

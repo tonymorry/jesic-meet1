@@ -141,6 +141,7 @@ export interface MeetingEvent {
     companyName: string;
     contactEmail: string;
   };
+  dayTimeRanges?: Record<string, { startHour: number; endHour: number }>; // Fascia oraria personalizzata per data 'YYYY-MM-DD'
   allowedSlots?: string[]; // Se vincolato agli slot specificati dal cliente (es. 2 o 3 slot)
   groupId?: string; // Se legato a un gruppo specifico (null se creato a livello generale)
   subgroupId?: string | null; // Se legato a un sottogruppo specifico (null se gruppo generale)

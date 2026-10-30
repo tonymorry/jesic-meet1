@@ -528,6 +528,7 @@ export interface IEvent {
     contactEmail: string;
   };
   allowedSlots?: string[];
+  dayTimeRanges?: Record<string, { startHour: number; endHour: number }>;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -671,6 +672,10 @@ const EventSchema: Schema<IEvent> = new Schema(
     allowedSlots: {
       type: [String],
       default: [],
+    },
+    dayTimeRanges: {
+      type: Schema.Types.Mixed,
+      default: {},
     },
   },
   {

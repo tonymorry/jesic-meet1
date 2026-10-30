@@ -20,22 +20,52 @@ export function generateAllEventSlots(event: MeetingEvent): { slotKey: string; d
   const slots: { slotKey: string; date: string; startTime: string; endTime: string }[] = [];
   const step = event.slotIntervalMinutes || 60;
 
-  // Determina le ore valide in base alla fascia oraria
-  let hoursList: number[] = [];
-  if (event.timeSlotBand === 'morning') {
-    hoursList = [8, 9, 10, 11]; // Mattina: 8:00 - 12:00
-  } else if (event.timeSlotBand === 'afternoon') {
-    hoursList = [15, 16, 17, 18, 19]; // Pomeriggio: 15:00 - 20:00
-  } else if (event.timeSlotBand === 'morning_afternoon') {
-    hoursList = [8, 9, 10, 11, 15, 16, 17, 18, 19]; // Mattina e Pomeriggio (8-12 e 15-20)
-  } else {
-    for (let h = event.startHour; h < event.endHour; h++) {
-      hoursList.push(h);
+  // Se l'evento è vincolato esclusivamente a determinati slot (es. conversione da richiesta cliente)
+  if (event.allowedSlots && event.allowedSlots.length > 0) {
+    for (const key of event.allowedSlots) {
+      const [d, t] = key.split('T');
+      if (d && t) {
+        const [hStr, mStr] = t.split(':');
+        const h = parseInt(hStr, 10) || 9;
+        const m = parseInt(mStr, 10) || 0;
+        const endTotal = h * 60 + m + step;
+        const endH = Math.floor(endTotal / 60);
+        const endM = endTotal % 60;
+        const endTime = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+        slots.push({
+          slotKey: key,
+          date: d,
+          startTime: t,
+          endTime,
+        });
+      }
     }
+    return slots.sort((a, b) => a.slotKey.localeCompare(b.slotKey));
   }
 
+  // Altrimenti genera gli slot per ciascun giorno, tenendo conto di eventuali orari personalizzati per giorno
   for (const date of event.dates) {
-    for (const hour of hoursList) {
+    let dayHours: number[] = [];
+
+    // Se per questa data specifica è stata impostata una fascia oraria personalizzata
+    if (event.dayTimeRanges && event.dayTimeRanges[date]) {
+      const customRange = event.dayTimeRanges[date];
+      for (let h = customRange.startHour; h < customRange.endHour; h++) {
+        dayHours.push(h);
+      }
+    } else if (event.timeSlotBand === 'morning') {
+      dayHours = [8, 9, 10, 11]; // Mattina: 8:00 - 12:00
+    } else if (event.timeSlotBand === 'afternoon') {
+      dayHours = [15, 16, 17, 18, 19]; // Pomeriggio: 15:00 - 20:00
+    } else if (event.timeSlotBand === 'morning_afternoon') {
+      dayHours = [8, 9, 10, 11, 15, 16, 17, 18, 19]; // Mattina e Pomeriggio (8-12 e 15-20)
+    } else {
+      for (let h = event.startHour; h < event.endHour; h++) {
+        dayHours.push(h);
+      }
+    }
+
+    for (const hour of dayHours) {
       const minutesList = step === 30 ? [0, 30] : [0];
 
       for (const minute of minutesList) {

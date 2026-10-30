@@ -572,7 +572,7 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
       {/* Area Messaggi in stile WhatsApp (Sfondo chat con bolle) */}
       <div
         ref={messagesContainerRef}
-        className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 bg-[#efeae2]/80 dark:bg-neutral-950/80"
+        className="flex-1 overflow-y-auto p-3 sm:p-4 pb-8 space-y-3 bg-[#efeae2]/80 dark:bg-neutral-950/80"
         style={{
           backgroundImage:
             'radial-gradient(circle, rgba(0,0,0,0.04) 1px, transparent 1px)',
@@ -631,50 +631,18 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
                     </span>
                   )}
 
-                  {/* Bolla Messaggio */}
-                  <div
-                    className={`relative rounded-2xl p-2.5 sm:p-3 text-xs shadow-xs transition-shadow break-words ${
-                      isMe
-                        ? 'bg-[#d9fdd3] dark:bg-[#005c4b] text-neutral-900 dark:text-neutral-100 rounded-br-xs'
-                        : 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 rounded-bl-xs border border-neutral-200/80 dark:border-neutral-800'
-                    }`}
-                  >
-                    {/* Pulsanti Azione Messaggio: Rispondi, e se autore Modifica ed Elimina per tutti */}
-                    <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 flex items-center gap-1 p-0.5 rounded-lg bg-black/10 dark:bg-white/10 backdrop-blur-xs transition-opacity z-10 shadow-2xs">
-                      <button
-                        type="button"
-                        onClick={() => setReplyingTo(msg)}
-                        title="Rispondi / Richiama questo messaggio"
-                        className="p-1 rounded-md hover:bg-black/20 text-neutral-600 dark:text-neutral-200 transition-colors cursor-pointer"
-                      >
-                        <CornerUpLeft className="w-3.5 h-3.5" />
-                      </button>
-
-                      {isMe && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => handleStartEdit(msg)}
-                            title="Modifica messaggio"
-                            className="p-1 rounded-md hover:bg-black/20 text-neutral-600 dark:text-neutral-200 transition-colors cursor-pointer"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteMessage(msg.id)}
-                            disabled={deletingMessageId === msg.id}
-                            title="Elimina per tutti"
-                            className="p-1 rounded-md hover:bg-red-500 hover:text-white text-neutral-600 dark:text-neutral-200 transition-colors cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </>
-                      )}
-                    </div>
-
-                    {/* BOX CITAZIONE / RICHIAMO MESSAGGIO (WhatsApp Style Quote) */}
-                    {msg.replyTo && (
+                  {/* Riga con Bolla Messaggio e Pulsanti Azione Affiancati */}
+                  <div className={`flex items-end gap-1.5 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+                    {/* Bolla Messaggio */}
+                    <div
+                      className={`relative rounded-2xl p-2.5 sm:p-3 text-xs shadow-xs transition-shadow break-words ${
+                        isMe
+                          ? 'bg-[#d9fdd3] dark:bg-[#005c4b] text-neutral-900 dark:text-neutral-100 rounded-br-xs'
+                          : 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 rounded-bl-xs border border-neutral-200/80 dark:border-neutral-800'
+                      }`}
+                    >
+                      {/* BOX CITAZIONE / RICHIAMO MESSAGGIO (WhatsApp Style Quote) */}
+                      {msg.replyTo && (
                       <div
                         onClick={() => scrollToMessage(msg.replyTo!.messageId)}
                         className={`mb-2 p-2 rounded-xl text-[11px] border-l-4 cursor-pointer transition-all hover:opacity-90 ${
@@ -859,8 +827,43 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
                       )}
                     </div>
                   </div>
+
+                  {/* Pulsanti Azione Messaggio: posizionati ALL'ESTERNO della bolla, MAI sopra al testo dei messaggi! */}
+                  <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 p-1 rounded-xl bg-white/95 dark:bg-neutral-800/95 border border-neutral-200/70 dark:border-neutral-700/70 shadow-xs transition-opacity shrink-0 mb-1">
+                    <button
+                      type="button"
+                      onClick={() => setReplyingTo(msg)}
+                      title="Rispondi / Richiama questo messaggio"
+                      className="p-1 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-600 dark:text-neutral-300 transition-colors cursor-pointer"
+                    >
+                      <CornerUpLeft className="w-3.5 h-3.5" />
+                    </button>
+
+                    {isMe && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleStartEdit(msg)}
+                          title="Modifica messaggio"
+                          className="p-1 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-700 text-neutral-600 dark:text-neutral-300 transition-colors cursor-pointer"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteMessage(msg.id)}
+                          disabled={deletingMessageId === msg.id}
+                          title="Elimina per tutti"
+                          className="p-1 rounded-lg hover:bg-red-500 hover:text-white text-neutral-600 dark:text-neutral-300 transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
+            </div>
             );
           })
         )}
