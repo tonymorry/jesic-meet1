@@ -1973,7 +1973,7 @@ export default function App() {
           )}
 
           {/* CONTENUTO PRINCIPALE */}
-          <main className="flex-1 overflow-y-auto pb-24 md:pb-8 p-3 sm:p-5">
+          <main className={`flex-1 overflow-y-auto ${currentTab === 'chat' ? 'p-0 md:p-5 pb-0 md:pb-8 overflow-hidden md:overflow-y-auto' : 'p-3 sm:p-5 pb-24 md:pb-8'}`}>
             
             {/* ====================================================================
                 CASO 1: LIVELLO PIATTAFORMA (NON IN UN GRUPPO)
@@ -2053,21 +2053,23 @@ export default function App() {
                   Identico a tutte le funzionalità complete esistenti
                  ==================================================================== */
               <>
-                {/* Header dello Spazio di Lavoro Gruppo */}
-                <GroupWorkspaceHeader
-                  activeGroup={activeGroup}
-                  activeSubgroup={activeSubgroup}
-                  currentUser={currentUser}
-                  allUsers={users}
-                  onBackToGroups={handleBackToGroups}
-                  onBackToMainGroup={() => setActiveSubgroupId(null)}
-                  onOpenMembersModal={() => setIsGroupMembersModalOpen(true)}
-                  onUpdateGroupName={handleUpdateGroupName}
-                  onDeleteGroup={handleDeleteGroup}
-                  onUpdateSubgroup={handleUpdateSubgroup}
-                  onDeleteSubgroup={handleDeleteSubgroup}
-                  onToggleSubgroupsMenu={() => setIsSubgroupsDrawerOpen(true)}
-                />
+                {/* Header dello Spazio di Lavoro Gruppo (Nascosto su mobile quando si è nella chat per non occupare spazio e lasciare la chat fissa a tutto schermo) */}
+                <div className={currentTab === 'chat' ? 'hidden md:block' : ''}>
+                  <GroupWorkspaceHeader
+                    activeGroup={activeGroup}
+                    activeSubgroup={activeSubgroup}
+                    currentUser={currentUser}
+                    allUsers={users}
+                    onBackToGroups={handleBackToGroups}
+                    onBackToMainGroup={() => setActiveSubgroupId(null)}
+                    onOpenMembersModal={() => setIsGroupMembersModalOpen(true)}
+                    onUpdateGroupName={handleUpdateGroupName}
+                    onDeleteGroup={handleDeleteGroup}
+                    onUpdateSubgroup={handleUpdateSubgroup}
+                    onDeleteSubgroup={handleDeleteSubgroup}
+                    onToggleSubgroupsMenu={() => setIsSubgroupsDrawerOpen(true)}
+                  />
+                </div>
 
                 {/* 1. Sondaggi del Gruppo (filtrati per Sottogruppo / Cartella) */}
                 {currentTab === 'dashboard' && (
@@ -2145,6 +2147,7 @@ export default function App() {
                     activeSubgroup={activeSubgroup}
                     currentUser={currentUser}
                     allUsers={users}
+                    onBackToDashboard={() => setCurrentTab('dashboard')}
                   />
                 )}
 
@@ -2166,19 +2169,21 @@ export default function App() {
             ) : null}
           </main>
 
-          {/* Bottom Navigation Bar */}
-          <BottomNav
-            currentTab={currentTab}
-            onSelectTab={setCurrentTab}
-            currentUser={currentUser}
-            onOpenCreateMenu={handlePlusButtonClick}
-            pendingInvitesCount={pendingInvitesCount}
-            pendingOfficialEventsCount={pendingOfficialEventsCount}
-            isClientAdmin={isClientAdmin}
-            pendingClientRequestsCount={pendingClientRequestsCount}
-            isInsideGroup={isInsideGroup}
-            onToggleSubgroupsMenu={() => setIsSubgroupsDrawerOpen(true)}
-          />
+          {/* Bottom Navigation Bar (Nascosta durante la chat su mobile per esperienza full screen, riappare premendo la freccetta indietro) */}
+          {currentTab !== 'chat' && (
+            <BottomNav
+              currentTab={currentTab}
+              onSelectTab={setCurrentTab}
+              currentUser={currentUser}
+              onOpenCreateMenu={handlePlusButtonClick}
+              pendingInvitesCount={pendingInvitesCount}
+              pendingOfficialEventsCount={pendingOfficialEventsCount}
+              isClientAdmin={isClientAdmin}
+              pendingClientRequestsCount={pendingClientRequestsCount}
+              isInsideGroup={isInsideGroup}
+              onToggleSubgroupsMenu={() => setIsSubgroupsDrawerOpen(true)}
+            />
+          )}
 
           {/* Modale Membri del Gruppo Attivo */}
           {isGroupMembersModalOpen && activeGroup && (

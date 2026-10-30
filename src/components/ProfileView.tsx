@@ -633,18 +633,18 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
       </div>
 
       {/* Sincronizzazione Google Calendar (Sempre Collegato) */}
-      <div className="bg-white dark:bg-neutral-900 rounded-3xl p-5 border border-neutral-200/90 dark:border-neutral-800 shadow-xs space-y-3.5 transition-colors">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-red-50 dark:bg-red-950/50 text-[#f23e2e] flex items-center justify-center shadow-xs">
-              <Calendar className="w-4 h-4" />
+      <div className="bg-white dark:bg-neutral-900 rounded-3xl p-4 sm:p-5 border border-neutral-200/90 dark:border-neutral-800 shadow-xs space-y-3.5 transition-colors">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-red-50 dark:bg-red-950/50 text-[#f23e2e] flex items-center justify-center shadow-xs shrink-0">
+              <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-xs font-bold text-neutral-900 dark:text-white">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <h3 className="text-xs sm:text-sm font-bold text-neutral-900 dark:text-white leading-tight">
                   Google Calendar Sincronizzato
                 </h3>
-                <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                <span className={`text-[8.5px] sm:text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 ${
                   calendarConnected
                     ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400'
                     : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400'
@@ -652,7 +652,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                   {calendarConnected ? 'Sempre Collegato' : 'Disattivato'}
                 </span>
               </div>
-              <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5 font-mono">
+              <p className="text-[10px] sm:text-[11px] text-neutral-500 dark:text-neutral-400 mt-0.5 font-mono truncate">
                 {currentUser.email}
               </p>
             </div>
@@ -660,6 +660,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
           <button
             type="button"
+            role="switch"
+            aria-checked={calendarConnected}
             onClick={() => {
               const nextState = !calendarConnected;
               setCalendarConnected(nextState);
@@ -671,7 +673,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
               );
               setTimeout(() => setFeedbackMsg(null), 3000);
             }}
-            className={`w-11 h-6 rounded-full transition-colors relative p-0.5 cursor-pointer ${
+            className={`w-11 h-6 rounded-full transition-colors relative p-0.5 cursor-pointer shrink-0 focus:outline-none focus:ring-2 focus:ring-red-500/40 select-none ${
               calendarConnected ? 'bg-[#f23e2e]' : 'bg-neutral-300 dark:bg-neutral-700'
             }`}
             title="Attiva/disattiva sincronizzazione automatica Google Calendar"
@@ -684,10 +686,10 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           </button>
         </div>
 
-        <div className="p-3.5 bg-neutral-50 dark:bg-neutral-800/60 rounded-2xl border border-neutral-100 dark:border-neutral-800 text-xs text-neutral-600 dark:text-neutral-300 flex items-center gap-2.5">
+        <div className="p-3 sm:p-3.5 bg-neutral-50 dark:bg-neutral-800/60 rounded-2xl border border-neutral-100 dark:border-neutral-800 text-xs text-neutral-600 dark:text-neutral-300 flex items-center gap-2.5">
           <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-          <p className="text-xs font-medium text-neutral-700 dark:text-neutral-200 leading-relaxed">
-            Ogni evento viene inserito automaticamente nel Google Calendar di {currentUser.email}.
+          <p className="text-[11px] sm:text-xs font-medium text-neutral-700 dark:text-neutral-200 leading-relaxed">
+            Ogni evento viene inserito automaticamente nel Google Calendar di <span className="font-mono text-neutral-900 dark:text-white font-bold break-all">{currentUser.email}</span>.
           </p>
         </div>
       </div>

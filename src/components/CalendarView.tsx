@@ -52,9 +52,22 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
   const [pollToEditConfirmed, setPollToEditConfirmed] = useState<MeetingEvent | null>(null);
 
+  // Helper formattazione ISO YYYY-MM-DD
+  const formatIsoDate = (d: Date): string => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const todayStr = formatIsoDate(new Date());
+
   // Mese/Anno o Data corrente selezionata
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [selectedCalendarEvent, setSelectedCalendarEvent] = useState<MeetingEvent | null>(null);
+
+  // Giorno attualmente selezionato (di default oggi)
+  const [selectedDateStr, setSelectedDateStr] = useState<string>(todayStr);
 
   // Mappa richieste B2B confermate del gruppo come eventi del calendario associato
   const b2bEvents: MeetingEvent[] = clientRequests
@@ -131,13 +144,25 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   };
 
   const handleToday = () => {
-    setCurrentDate(new Date());
+    const now = new Date();
+    setCurrentDate(now);
+    setSelectedDateStr(formatIsoDate(now));
   };
 
   const monthNames = [
     'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
     'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
   ];
+
+  const formatItalianDate = (isoStr: string): string => {
+    if (!isoStr) return '';
+    const parts = isoStr.split('-');
+    if (parts.length !== 3) return isoStr;
+    const day = parseInt(parts[2], 10);
+    const mIdx = parseInt(parts[1], 10) - 1;
+    const year = parts[0];
+    return `${day} ${monthNames[mIdx] || ''} ${year}`;
+  };
 
   const daysOfWeek = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
 
@@ -195,14 +220,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
   const currentWeekDates = getWeekDates(currentDate);
 
-  const formatIsoDate = (d: Date): string => {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  };
-
-  const todayStr = formatIsoDate(new Date());
+  const activeDayEvents = eventsByDate.get(selectedDateStr) || [];
+  const isSelectedDateToday = selectedDateStr === todayStr;
 
   return (
     <div className="flex flex-col gap-5 pb-8 max-w-md mx-auto sm:max-w-xl md:max-w-4xl lg:max-w-6xl xl:max-w-7xl px-4 sm:px-6 pt-2">
@@ -214,11 +233,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             <h1 className="text-2xl font-black tracking-tight text-neutral-900 dark:text-white flex items-center gap-2">
               <span>Calendario JESic</span>
               <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-950/60 text-[#f23e2e]">
-                {visibleEvents.length} Impegni
+                {activeDayEvents.length} {activeDayEvents.length === 1 ? 'Impegno' : 'Impegni'}
               </span>
             </h1>
             <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
-              Solo meeting confermati ed eventi ufficiali a cui partecipi
+              {isSelectedDateToday
+                ? 'Impegni in programma per oggi'
+                : `Impegni per il giorno selezionato (${formatItalianDate(selectedDateStr)})`}
             </p>
           </div>
 
@@ -309,14 +330,18 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(dayNumber).padStart(2, '0')}`;
               const dayEvents = eventsByDate.get(dateStr) || [];
               const isToday = dateStr === todayStr;
+              const isSelected = dateStr === selectedDateStr;
 
               return (
                 <div
                   key={dateStr}
-                  className={`h-16 sm:h-20 md:h-28 lg:h-32 p-1 sm:p-1.5 rounded-xl border flex flex-col justify-between transition-all ${
-                    isToday
+                  onClick={() => setSelectedDateStr(dateStr)}
+                  className={`h-16 sm:h-20 md:h-28 lg:h-32 p-1 sm:p-1.5 rounded-xl border flex flex-col justify-between transition-all cursor-pointer select-none ${
+                    isSelected
+                      ? 'border-[#f23e2e] ring-2 ring-[#f23e2e] bg-red-50/70 dark:bg-red-950/40 shadow-xs'
+                      : isToday
                       ? 'border-[#f23e2e] bg-red-50/40 dark:bg-red-950/20 ring-1 ring-red-500/30'
-                      : 'border-neutral-100 dark:border-neutral-800/80 bg-neutral-50/60 dark:bg-neutral-800/40'
+                      : 'border-neutral-100 dark:border-neutral-800/80 bg-neutral-50/60 dark:bg-neutral-800/40 hover:border-neutral-300 dark:hover:border-neutral-700'
                   }`}
                 >
                   <div className="flex items-center justify-between">
@@ -324,6 +349,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       className={`text-[11px] font-mono leading-none ${
                         isToday
                           ? 'w-5 h-5 rounded-full bg-[#f23e2e] text-white font-black flex items-center justify-center'
+                          : isSelected
+                          ? 'w-5 h-5 rounded-full bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 font-black flex items-center justify-center text-[10px]'
                           : 'font-bold text-neutral-700 dark:text-neutral-300 pl-0.5'
                       }`}
                     >
@@ -340,7 +367,15 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       <button
                         key={ev.id}
                         type="button"
-                        onClick={() => onOpenEventDetail ? onOpenEventDetail(ev) : setSelectedCalendarEvent(ev)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedDateStr(dateStr);
+                          if (onOpenEventDetail) {
+                            onOpenEventDetail(ev);
+                          } else {
+                            setSelectedCalendarEvent(ev);
+                          }
+                        }}
                         className={`w-full text-left px-1.5 py-0.5 rounded text-[9px] font-black truncate block cursor-pointer transition-transform hover:scale-102 ${
                           ev.eventType === 'official'
                             ? 'bg-[#f23e2e] text-white'
@@ -372,15 +407,19 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               const dateStr = formatIsoDate(dateObj);
               const dayEvents = eventsByDate.get(dateStr) || [];
               const isToday = dateStr === todayStr;
+              const isSelected = dateStr === selectedDateStr;
               const dayName = daysOfWeek[(dateObj.getDay() + 6) % 7];
 
               return (
                 <div
                   key={dateStr}
-                  className={`p-3 rounded-2xl border transition-all ${
-                    isToday
+                  onClick={() => setSelectedDateStr(dateStr)}
+                  className={`p-3 rounded-2xl border transition-all cursor-pointer ${
+                    isSelected
+                      ? 'border-[#f23e2e] ring-2 ring-[#f23e2e] bg-red-50/70 dark:bg-red-950/40 shadow-xs'
+                      : isToday
                       ? 'border-[#f23e2e] bg-red-50/40 dark:bg-red-950/20'
-                      : 'border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-800/40'
+                      : 'border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-800/40 hover:border-neutral-300 dark:hover:border-neutral-700'
                   }`}
                 >
                   <div className="flex items-center justify-between pb-1.5 border-b border-neutral-200/60 dark:border-neutral-700/60">
@@ -390,18 +429,25 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                       </span>
                       <span
                         className={`text-xs font-mono font-black ${
-                          isToday ? 'text-[#f23e2e]' : 'text-neutral-900 dark:text-white'
+                          isToday ? 'text-[#f23e2e]' : isSelected ? 'text-[#f23e2e]' : 'text-neutral-900 dark:text-white'
                         }`}
                       >
                         {dateObj.getDate()} {monthNames[dateObj.getMonth()]}
                       </span>
                     </div>
 
-                    {isToday && (
-                      <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-[#f23e2e] text-white">
-                        Oggi
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1.5">
+                      {isToday && (
+                        <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-[#f23e2e] text-white">
+                          Oggi
+                        </span>
+                      )}
+                      {isSelected && !isToday && (
+                        <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-neutral-900 dark:bg-white text-white dark:text-neutral-900">
+                          Selezionato
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Lista eventi in questo giorno */}
@@ -457,20 +503,46 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         </div>
       )}
 
-      {/* FEED LISTA IMPEGNI SOTTOSTANTE */}
+      {/* FEED LISTA IMPEGNI SOTTOSTANTE - SOLO DEL GIORNO SELEZIONATO O CORRENTE */}
       <div className="bg-white dark:bg-neutral-900 rounded-3xl p-5 border border-neutral-200/90 dark:border-neutral-800 shadow-xs space-y-3">
-        <h3 className="text-sm font-black text-neutral-900 dark:text-white flex items-center gap-2">
-          <CalendarDays className="w-4 h-4 text-[#f23e2e]" />
-          <span>Tutti gli impegni JESic ({visibleEvents.length})</span>
-        </h3>
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-sm font-black text-neutral-900 dark:text-white flex items-center gap-2">
+            <CalendarDays className="w-4 h-4 text-[#f23e2e] shrink-0" />
+            <span>
+              {isSelectedDateToday
+                ? `Impegni di Oggi (${activeDayEvents.length})`
+                : `Impegni del ${formatItalianDate(selectedDateStr)} (${activeDayEvents.length})`}
+            </span>
+          </h3>
 
-        {visibleEvents.length === 0 ? (
-          <p className="text-xs text-neutral-400 text-center py-4">
-            Nessun evento confermato o accettato al momento.
-          </p>
+          {!isSelectedDateToday && (
+            <button
+              type="button"
+              onClick={() => {
+                const now = new Date();
+                setCurrentDate(now);
+                setSelectedDateStr(formatIsoDate(now));
+              }}
+              className="text-xs font-bold text-[#f23e2e] hover:underline cursor-pointer flex items-center gap-1 shrink-0"
+            >
+              Torna a oggi &rarr;
+            </button>
+          )}
+        </div>
+
+        {activeDayEvents.length === 0 ? (
+          <div className="text-center py-7 px-4 bg-neutral-50 dark:bg-neutral-800/40 rounded-2xl border border-dashed border-neutral-200 dark:border-neutral-700/80">
+            <CalendarIcon className="w-8 h-8 text-neutral-300 dark:text-neutral-600 mx-auto mb-2" />
+            <p className="text-xs font-bold text-neutral-700 dark:text-neutral-200">
+              Nessun impegno in programma per {isSelectedDateToday ? 'oggi' : formatItalianDate(selectedDateStr)}.
+            </p>
+            <p className="text-[11px] text-neutral-400 mt-1">
+              Tocca un giorno sul calendario per visualizzarne gli impegni associativi e meeting confermati.
+            </p>
+          </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-3">
-            {visibleEvents.map((ev) => {
+            {activeDayEvents.map((ev) => {
               const eventDate = ev.finalizedSlot?.date || ev.dates[0];
               const startTime = ev.finalizedSlot?.startTime || `${String(ev.startHour).padStart(2, '0')}:00`;
               const endTime = ev.finalizedSlot?.endTime || `${String(ev.endHour).padStart(2, '0')}:00`;
@@ -478,17 +550,17 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
               return (
                 <div
                   key={ev.id}
-                  onClick={() => setSelectedCalendarEvent(ev)}
-                  className="p-3 rounded-2xl bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200/80 dark:border-neutral-700/60 flex items-center justify-between gap-3 cursor-pointer hover:border-[#f23e2e] transition-all"
+                  onClick={() => (onOpenEventDetail ? onOpenEventDetail(ev) : setSelectedCalendarEvent(ev))}
+                  className="p-3.5 rounded-2xl bg-neutral-50 dark:bg-neutral-800/60 border border-neutral-200/80 dark:border-neutral-700/60 flex items-center justify-between gap-3 cursor-pointer hover:border-[#f23e2e] transition-all group"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
                       <span
-                        className={`w-2 h-2 rounded-full ${
+                        className={`w-2 h-2 rounded-full shrink-0 ${
                           ev.eventType === 'official' ? 'bg-[#f23e2e]' : 'bg-neutral-900 dark:bg-white'
                         }`}
                       />
-                      <h4 className="text-xs font-black text-neutral-900 dark:text-white truncate">
+                      <h4 className="text-xs font-black text-neutral-900 dark:text-white truncate group-hover:text-[#f23e2e] transition-colors">
                         {ev.title}
                       </h4>
                     </div>
@@ -497,7 +569,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     </p>
                   </div>
 
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 shrink-0">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 shrink-0 shadow-2xs">
                     Confermato
                   </span>
                 </div>

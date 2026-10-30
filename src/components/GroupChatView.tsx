@@ -34,6 +34,7 @@ import {
   Maximize2,
   Edit2,
   Check,
+  ArrowLeft,
 } from 'lucide-react';
 
 export interface GroupChatViewProps {
@@ -41,6 +42,7 @@ export interface GroupChatViewProps {
   activeSubgroup: Subgroup | null;
   currentUser: User;
   allUsers?: User[];
+  onBackToDashboard?: () => void;
 }
 
 export const GroupChatView: React.FC<GroupChatViewProps> = ({
@@ -48,6 +50,7 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
   activeSubgroup,
   currentUser,
   allUsers = [],
+  onBackToDashboard,
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
@@ -504,7 +507,7 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-210px)] max-h-[780px] min-h-[490px] max-w-md sm:max-w-xl md:max-w-4xl lg:max-w-6xl xl:max-w-7xl mx-auto bg-[#efeae2] dark:bg-neutral-950 rounded-3xl border border-neutral-200/90 dark:border-neutral-800 shadow-sm overflow-hidden animate-in fade-in relative">
+    <div className="fixed inset-x-0 top-[56px] bottom-0 z-30 flex flex-col bg-[#efeae2] dark:bg-neutral-950 md:static md:inset-auto md:z-auto md:h-[calc(100vh-210px)] md:max-h-[780px] md:min-h-[490px] md:max-w-4xl lg:max-w-6xl xl:max-w-7xl md:mx-auto md:rounded-3xl md:border md:border-neutral-200/90 md:dark:border-neutral-800 md:shadow-sm overflow-hidden animate-in fade-in">
       
       {/* Hidden File Inputs per Immagini e Documenti */}
       <input
@@ -522,19 +525,30 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
       />
 
       {/* Header Chat */}
-      <div className="px-4 py-3 bg-white dark:bg-neutral-900 border-b border-neutral-200/80 dark:border-neutral-800 flex items-center justify-between shadow-2xs z-10">
-        <div className="flex items-center gap-2.5 min-w-0">
+      <div className="px-3 sm:px-4 py-2.5 sm:py-3 bg-white dark:bg-neutral-900 border-b border-neutral-200/80 dark:border-neutral-800 flex items-center justify-between shadow-2xs z-10 shrink-0">
+        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+          {onBackToDashboard && (
+            <button
+              type="button"
+              onClick={onBackToDashboard}
+              className="p-1.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-[#f23e2e] md:hidden cursor-pointer shrink-0 transition-colors"
+              title="Torna alla Dashboard"
+              aria-label="Torna indietro"
+            >
+              <ArrowLeft className="w-4 h-4 stroke-[2.5px]" />
+            </button>
+          )}
           <div
-            className={`w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 shadow-2xs ${
+            className={`w-8 h-8 sm:w-9 sm:h-9 rounded-2xl flex items-center justify-center shrink-0 shadow-2xs ${
               activeSubgroup
                 ? 'bg-purple-600 text-white'
                 : 'bg-[#f23e2e] text-white'
             }`}
           >
             {activeSubgroup ? (
-              <FolderOpen className="w-5 h-5 stroke-[2.2px]" />
+              <FolderOpen className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.2px]" />
             ) : (
-              <MessageSquare className="w-5 h-5 stroke-[2.2px]" />
+              <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.2px]" />
             )}
           </div>
           <div className="min-w-0">
@@ -932,7 +946,7 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
       )}
 
       {/* BARRA INSERIMENTO MESSAGGIO & REGISTRAZIONE VOCALE */}
-      <div className="p-2 sm:p-3 bg-white dark:bg-neutral-900 border-t border-neutral-200/80 dark:border-neutral-800">
+      <div className="p-2 sm:p-3 bg-white dark:bg-neutral-900 border-t border-neutral-200/80 dark:border-neutral-800 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] sm:pb-3 shrink-0">
         {isRecording ? (
           /* Interfaccia Registratore Vocale in Corso */
           <div className="flex items-center justify-between gap-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 px-4 py-2.5 rounded-2xl animate-pulse">
