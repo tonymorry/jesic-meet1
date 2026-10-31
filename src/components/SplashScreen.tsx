@@ -14,6 +14,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { CartoonMascot, MascotPhase } from './CartoonMascot';
+import { isInstalledPwa } from '../utils/pwaHelper';
 
 interface SplashScreenProps {
   onFinish?: () => void;
@@ -21,6 +22,17 @@ interface SplashScreenProps {
 }
 
 export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
+  // Se l'app è installata (PWA su smartphone/desktop), non eseguire l'animazione
+  const isPwa = isInstalledPwa();
+  useEffect(() => {
+    if (isPwa) {
+      onFinish?.();
+    }
+  }, [isPwa, onFinish]);
+
+  if (isPwa) {
+    return null;
+  }
   // Visibilità logo centrale e testi brand
   const [logoVisible, setLogoVisible] = useState(false);
 

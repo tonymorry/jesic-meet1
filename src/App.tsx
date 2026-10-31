@@ -38,6 +38,7 @@ import { OfficialEventDetailModal } from './components/OfficialEventDetailModal'
 import { PublicBookingForm } from './components/PublicBookingForm';
 import { ClientRequestsDashboard } from './components/ClientRequestsDashboard';
 import { SplashScreen } from './components/SplashScreen';
+import { isInstalledPwa } from './utils/pwaHelper';
 import { PrivacyPolicyView } from './components/PrivacyPolicyView';
 import { TermsOfServiceView } from './components/TermsOfServiceView';
 import { PushBanner } from './components/PushBanner';
@@ -462,9 +463,11 @@ export default function App() {
 
 
   // Stato Splash Screen iniziale:
-  // - showSplash: controlla la visibilità dello splash screen
-  // - isAuthDetermined: true non appena sappiamo se mostrare AuthScreen o Dashboard
-  const [showSplash, setShowSplash] = useState(true);
+  // - showSplash: visibile SOLO se l'utente naviga dal sito web standard;
+  //   quando la web app viene installata (PWA su smartphone o PC), l'animazione viene saltata all'avvio.
+  const [showSplash, setShowSplash] = useState(() => {
+    return !isInstalledPwa();
+  });
   const [isAuthDetermined, setIsAuthDetermined] = useState(() => {
     return !!localStorage.getItem(STORAGE_CURRENT_USER_KEY);
   });

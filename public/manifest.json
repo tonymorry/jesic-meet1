@@ -3,7 +3,7 @@
   "name": "JESic Meet",
   "short_name": "JESic Meet",
   "description": "Piattaforma di pianificazione meeting e chat intelligente per Junior Enterprise Sicilia con notifiche push e Google Calendar.",
-  "start_url": "/",
+  "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
