@@ -150,7 +150,12 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
   const isCreator = activeGroup.creatorId === currentUser.id;
   const isResponsabile = isCreator || userMembership?.role === 'responsabile';
 
-  const subgroups = activeGroup.subgroups || [];
+  const rawSubgroups = activeGroup.subgroups || [];
+  const subgroups: Subgroup[] = rawSubgroups.map((s: any) => ({
+    ...s,
+    id: s.id ? String(s.id) : (s._id ? String(s._id) : ''),
+    parentId: s.parentId && String(s.parentId) !== 'null' && String(s.parentId) !== 'undefined' ? String(s.parentId) : null,
+  }));
 
   // Struttura gerarchica ad albero dei sottogruppi
   interface HierarchicalSubgroupItem {
@@ -215,6 +220,15 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
 
     setIsSubmitting(true);
     setErrorMsg(null);
+    const cleanParentId =
+      newSubgroupParentId &&
+      typeof newSubgroupParentId === 'string' &&
+      newSubgroupParentId.trim() !== '' &&
+      newSubgroupParentId.trim() !== 'null' &&
+      newSubgroupParentId.trim() !== 'undefined'
+        ? newSubgroupParentId.trim()
+        : null;
+
     try {
       await onCreateSubgroup(
         newSubgroupName.trim(),
@@ -222,7 +236,7 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
         newSubgroupAvatar,
         newSubgroupIsPublic,
         newSubgroupCustomCode.trim() ? newSubgroupCustomCode.trim().toUpperCase() : undefined,
-        newSubgroupParentId
+        cleanParentId
       );
       setNewSubgroupName('');
       setNewSubgroupDesc('');

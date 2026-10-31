@@ -1357,6 +1357,15 @@ export default function App() {
     parentId?: string | null
   ) => {
     if (!activeGroup || !currentUser) return;
+
+    const cleanParent =
+      parentId &&
+      parentId !== 'null' &&
+      parentId !== 'undefined' &&
+      String(parentId).trim() !== ''
+        ? String(parentId).trim()
+        : null;
+
     try {
       const res = await fetch(`/api/groups/${activeGroup.id}/subgroups`, {
         method: 'POST',
@@ -1367,7 +1376,7 @@ export default function App() {
           avatar: avatar || '📁',
           isPublic: Boolean(isPublic),
           code: code ? code.trim().toUpperCase() : undefined,
-          parentId: parentId ? String(parentId) : null,
+          parentId: cleanParent,
           requesterId: currentUser.id,
           creatorId: currentUser.id,
         }),

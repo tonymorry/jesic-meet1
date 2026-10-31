@@ -459,14 +459,26 @@ app.get('/api/groups', async (req: Request, res: Response) => {
     }
     const groups = await GroupModel.find(filter).sort({ createdAt: -1 }).lean();
     const mapped = groups.map((g: any) => ({
-      id: g._id || g.id,
+      id: g._id ? String(g._id) : String(g.id),
       name: g.name,
       description: g.description,
       code: g.code,
       inviteLink: g.inviteLink,
       creatorId: g.creatorId,
       members: g.members,
-      subgroups: g.subgroups || [],
+      subgroups: (g.subgroups || []).map((s: any) => ({
+        id: s.id ? String(s.id) : (s._id ? String(s._id) : ''),
+        _id: s._id ? String(s._id) : (s.id ? String(s.id) : ''),
+        name: s.name,
+        description: s.description || '',
+        avatar: s.avatar || '📁',
+        isPublic: Boolean(s.isPublic),
+        code: s.code,
+        parentId: s.parentId ? String(s.parentId) : null,
+        members: s.members || [],
+        createdBy: s.createdBy,
+        createdAt: s.createdAt,
+      })),
       avatar: g.avatar,
       isPublic: g.isPublic ?? false,
       createdAt: g.createdAt,
@@ -1037,11 +1049,38 @@ app.post('/api/groups/:id/subgroups', async (req: Request, res: Response) => {
     }
 
     // Se è specificato un sottogruppo genitore, verifica che esista nel gruppo
+    const cleanParentId =
+      parentId &&
+      typeof parentId === 'string' &&
+      parentId.trim() !== '' &&
+      parentId.trim() !== 'null' &&
+      parentId.trim() !== 'undefined'
+        ? parentId.trim()
+        : null;
+
     let parentSubgroup: any = null;
-    if (parentId) {
-      parentSubgroup = group.subgroups?.find((s: any) => s._id === parentId || s.id === parentId);
-      if (!parentSubgroup) {
-        return res.status(404).json({ error: 'Sottogruppo genitore non trovato nel database' });
+    let actualParentId: string | null = null;
+    if (cleanParentId) {
+      parentSubgroup = group.subgroups?.find((s: any) => {
+        const sid = (s.id || s._id ? String(s.id || s._id) : '').trim();
+        const soid = s._id ? String(s._id).trim() : '';
+        const scode = (s.code || '').trim().toUpperCase();
+        const sname = (s.name || '').trim().toLowerCase();
+        const target = cleanParentId.trim();
+        return (
+          sid === target ||
+          soid === target ||
+          scode === target.toUpperCase() ||
+          sname === target.toLowerCase()
+        );
+      });
+      if (parentSubgroup) {
+        actualParentId = String(parentSubgroup.id || parentSubgroup._id);
+      } else {
+        console.warn(`[Subgroup] Sottogruppo genitore "${cleanParentId}" non trovato nel gruppo "${group.name}".`);
+        return res.status(404).json({
+          error: `Sottogruppo genitore non trovato. Verifica di aver selezionato una cartella valida.`,
+        });
       }
     }
 
@@ -1075,7 +1114,7 @@ app.post('/api/groups/:id/subgroups', async (req: Request, res: Response) => {
       avatar: avatar || '📁',
       isPublic: isPub,
       code: subCode,
-      parentId: parentId ? String(parentId) : null,
+      parentId: actualParentId,
       members: isPub ? group.members.map((m: any) => m.userId) : [requesterId],
       createdBy: requesterId,
       createdAt: new Date().toISOString(),
@@ -1086,17 +1125,31 @@ app.post('/api/groups/:id/subgroups', async (req: Request, res: Response) => {
     group.markModified('subgroups');
     await group.save();
 
-    console.log(`[MongoDB] Sottogruppo "${newSubgroup.name}" creato in Gruppo "${group.name}". ID: ${subgroupId}, Codice: ${subCode}`);
+    console.log(`[MongoDB] Sottogruppo "${newSubgroup.name}" creato in Gruppo "${group.name}". ID: ${subgroupId}, Codice: ${subCode}, ParentID: ${actualParentId}`);
+
+    const mappedSubgroups = (group.subgroups || []).map((s: any) => ({
+      id: s.id ? String(s.id) : (s._id ? String(s._id) : ''),
+      _id: s._id ? String(s._id) : (s.id ? String(s.id) : ''),
+      name: s.name,
+      description: s.description || '',
+      avatar: s.avatar || '📁',
+      isPublic: Boolean(s.isPublic),
+      code: s.code,
+      parentId: s.parentId ? String(s.parentId) : null,
+      members: s.members || [],
+      createdBy: s.createdBy,
+      createdAt: s.createdAt,
+    }));
 
     const mappedGroup = {
-      id: group._id || group.id,
+      id: group._id ? String(group._id) : String(group.id),
       name: group.name,
       description: group.description,
       code: group.code,
       inviteLink: group.inviteLink,
       creatorId: group.creatorId,
       members: group.members,
-      subgroups: group.subgroups,
+      subgroups: mappedSubgroups,
       avatar: group.avatar,
       isPublic: group.isPublic ?? false,
       createdAt: group.createdAt,
