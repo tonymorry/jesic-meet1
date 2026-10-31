@@ -35,6 +35,7 @@ import {
   Edit2,
   Check,
   ArrowLeft,
+  Copy,
 } from 'lucide-react';
 
 export interface GroupChatViewProps {
@@ -65,6 +66,18 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
 
   // Risposta / Richiamo a un messaggio (WhatsApp Quote)
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+
+  // Selezione Messaggio per Pressione Prolungata (Long Press stile WhatsApp su smartphone)
+  const [selectedMessage, setSelectedMessage] = useState<ChatMessage | null>(null);
+  const [copiedToast, setCopiedToast] = useState(false);
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
+  const isLongPressActiveRef = useRef(false);
+
+  // Ruolo per moderazione
+  const isGroupAdmin =
+    activeGroup.creatorId === currentUser.id ||
+    activeGroup.members?.some((m) => m.userId === currentUser.id && m.role === 'admin');
 
   // Allegato in preparazione
   const [pendingAttachment, setPendingAttachment] = useState<ChatAttachment | null>(null);
@@ -310,14 +323,19 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
   const sendMessagePayload = async (content: string, attachment?: ChatAttachment) => {
     setIsSending(true);
 
-    const replyPayload: ChatReplyTo | undefined = replyingTo
-      ? {
-          messageId: replyingTo.id,
-          authorName: `${replyingTo.authorName} ${replyingTo.authorSurname}`.trim(),
-          content: replyingTo.content || (replyingTo.attachment ? `[${replyingTo.attachment.type}]` : ''),
-          attachmentType: replyingTo.attachment?.type,
-        }
-      : undefined;
+    const hasQuotedContent =
+      Boolean(replyingTo?.content?.trim()) ||
+      Boolean(replyingTo?.attachment?.type);
+
+    const replyPayload: ChatReplyTo | undefined =
+      replyingTo && hasQuotedContent
+        ? {
+            messageId: replyingTo.id,
+            authorName: `${replyingTo.authorName} ${replyingTo.authorSurname || ''}`.trim() || 'Membro',
+            content: replyingTo.content || (replyingTo.attachment ? `[${replyingTo.attachment.type}]` : ''),
+            attachmentType: replyingTo.attachment?.type,
+          }
+        : undefined;
 
     setReplyingTo(null);
 
@@ -434,6 +452,68 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
     }
   };
 
+  // Gestione Pressione Prolungata (Long Press) per Smartphone (Stile WhatsApp)
+  const handleTouchStart = (msg: ChatMessage, e: React.TouchEvent) => {
+    isLongPressActiveRef.current = false;
+    const touch = e.touches[0];
+    touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
+
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+    }
+
+    longPressTimerRef.current = setTimeout(() => {
+      isLongPressActiveRef.current = true;
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        try {
+          navigator.vibrate(40);
+        } catch {
+          // ignora
+        }
+      }
+      setSelectedMessage(msg);
+    }, 420);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!touchStartPosRef.current) return;
+    const touch = e.touches[0];
+    const dx = Math.abs(touch.clientX - touchStartPosRef.current.x);
+    const dy = Math.abs(touch.clientY - touchStartPosRef.current.y);
+    if (dx > 10 || dy > 10) {
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    touchStartPosRef.current = null;
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, msg: ChatMessage) => {
+    e.preventDefault();
+    setSelectedMessage(msg);
+  };
+
+  const handleCopyMessage = async (text?: string) => {
+    if (!text) return;
+    try {
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(text);
+        setCopiedToast(true);
+        setTimeout(() => setCopiedToast(false), 2000);
+      }
+    } catch {
+      // ignora
+    }
+  };
+
   // Scroll al messaggio citato quando si clicca sul quote
   const scrollToMessage = (messageId: string) => {
     const el = document.getElementById(`chat-msg-${messageId}`);
@@ -524,64 +604,175 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
         className="hidden"
       />
 
-      {/* Header Chat */}
-      <div className="px-3 sm:px-4 py-2.5 sm:py-3 bg-white dark:bg-neutral-900 border-b border-neutral-200/80 dark:border-neutral-800 flex items-center justify-between shadow-2xs z-10 shrink-0">
-        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
-          {onBackToDashboard && (
+      {/* Header Chat / Barra Azioni Selezione Messaggio WhatsApp */}
+      {selectedMessage ? (
+        <div className="px-3 sm:px-4 py-2.5 sm:py-3 bg-neutral-900 text-white border-b border-neutral-800 flex items-center justify-between shadow-md z-30 shrink-0 animate-in fade-in">
+          <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={onBackToDashboard}
-              className="p-1.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-[#f23e2e] md:hidden cursor-pointer shrink-0 transition-colors"
-              title="Torna alla Dashboard"
-              aria-label="Torna indietro"
+              onClick={() => setSelectedMessage(null)}
+              className="p-1.5 rounded-xl hover:bg-neutral-800 active:bg-neutral-700 text-neutral-300 hover:text-white transition-colors cursor-pointer"
+              title="Annulla selezione"
             >
-              <ArrowLeft className="w-4 h-4 stroke-[2.5px]" />
+              <X className="w-5 h-5 stroke-[2.2px]" />
             </button>
-          )}
-          <div
-            className={`w-8 h-8 sm:w-9 sm:h-9 rounded-2xl flex items-center justify-center shrink-0 shadow-2xs ${
-              activeSubgroup
-                ? 'bg-purple-600 text-white'
-                : 'bg-[#f23e2e] text-white'
-            }`}
-          >
-            {activeSubgroup ? (
-              <FolderOpen className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.2px]" />
-            ) : (
-              <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.2px]" />
+            <span className="text-xs sm:text-sm font-black tracking-wide">
+              1 selezionato
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1 sm:gap-2">
+            {/* Tasto Rispondi */}
+            <button
+              type="button"
+              onClick={() => {
+                setReplyingTo(selectedMessage);
+                setSelectedMessage(null);
+              }}
+              title="Rispondi al messaggio"
+              className="p-2 rounded-xl hover:bg-neutral-800 active:bg-neutral-700 text-neutral-300 hover:text-white transition-colors cursor-pointer"
+            >
+              <CornerUpLeft className="w-4 h-4" />
+            </button>
+
+            {/* Tasto Copia (se testo presente) */}
+            {selectedMessage.content && (
+              <button
+                type="button"
+                onClick={() => {
+                  handleCopyMessage(selectedMessage.content);
+                  setSelectedMessage(null);
+                }}
+                title="Copia testo"
+                className="p-2 rounded-xl hover:bg-neutral-800 active:bg-neutral-700 text-neutral-300 hover:text-white transition-colors cursor-pointer"
+              >
+                <Copy className="w-4 h-4" />
+              </button>
+            )}
+
+            {/* Se è un messaggio inviato dall'utente attuale: Modifica ed Elimina */}
+            {selectedMessage.authorId === currentUser.id && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleStartEdit(selectedMessage);
+                    setSelectedMessage(null);
+                  }}
+                  title="Modifica messaggio"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-neutral-800 hover:bg-[#00a884] active:bg-[#008f6f] text-white text-xs font-bold transition-all cursor-pointer shadow-xs"
+                >
+                  <Edit2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="hidden sm:inline">Modifica</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const idToDelete = selectedMessage.id;
+                    setSelectedMessage(null);
+                    handleDeleteMessage(idToDelete);
+                  }}
+                  title="Elimina per tutti"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-red-950/80 hover:bg-red-900 active:bg-red-800 text-red-400 text-xs font-bold transition-all cursor-pointer shadow-xs"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Elimina</span>
+                </button>
+              </>
+            )}
+
+            {/* Se non è mio ma sono admin del gruppo: Elimina */}
+            {selectedMessage.authorId !== currentUser.id && isGroupAdmin && (
+              <button
+                type="button"
+                onClick={() => {
+                  const idToDelete = selectedMessage.id;
+                  setSelectedMessage(null);
+                  handleDeleteMessage(idToDelete);
+                }}
+                title="Elimina messaggio come Admin"
+                className="p-2 rounded-xl hover:bg-red-950 text-red-400 transition-colors cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
             )}
           </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <h2 className="text-xs sm:text-sm font-black text-neutral-900 dark:text-white truncate">
-                {activeSubgroup ? activeSubgroup.name : 'Chat Generale'}
-              </h2>
-              <span
-                className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.2 rounded-full ${
-                  activeSubgroup
-                    ? 'bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300'
-                    : 'bg-red-100 dark:bg-red-950 text-[#f23e2e]'
-                }`}
+        </div>
+      ) : (
+        <div className="px-3 sm:px-4 py-2.5 sm:py-3 bg-white dark:bg-neutral-900 border-b border-neutral-200/80 dark:border-neutral-800 flex items-center justify-between shadow-2xs z-10 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+            {onBackToDashboard && (
+              <button
+                type="button"
+                onClick={onBackToDashboard}
+                className="p-1.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-[#f23e2e] md:hidden cursor-pointer shrink-0 transition-colors"
+                title="Torna alla Dashboard"
+                aria-label="Torna indietro"
               >
-                {activeSubgroup ? 'Sottogruppo' : 'Generale'}
-              </span>
+                <ArrowLeft className="w-4 h-4 stroke-[2.5px]" />
+              </button>
+            )}
+            <div
+              className={`w-8 h-8 sm:w-9 sm:h-9 rounded-2xl flex items-center justify-center shrink-0 shadow-2xs ${
+                activeSubgroup
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-[#f23e2e] text-white'
+              }`}
+            >
+              {activeSubgroup ? (
+                <FolderOpen className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.2px]" />
+              ) : (
+                <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.2px]" />
+              )}
             </div>
-            <p className="text-[10px] text-neutral-500 dark:text-neutral-400 truncate">
-              {activeSubgroup
-                ? `Chat dedicata per ${activeSubgroup.name}`
-                : `Chat del gruppo ${activeGroup.name}`}
-            </p>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <h2 className="text-xs sm:text-sm font-black text-neutral-900 dark:text-white truncate">
+                  {activeSubgroup ? activeSubgroup.name : 'Chat Generale'}
+                </h2>
+                <span
+                  className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.2 rounded-full ${
+                    activeSubgroup
+                      ? 'bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300'
+                      : 'bg-red-100 dark:bg-red-950 text-[#f23e2e]'
+                  }`}
+                >
+                  {activeSubgroup ? 'Sottogruppo' : 'Generale'}
+                </span>
+              </div>
+              <p className="text-[10px] text-neutral-500 dark:text-neutral-400 truncate">
+                {activeSubgroup
+                  ? `Chat dedicata per ${activeSubgroup.name}`
+                  : `Chat del gruppo ${activeGroup.name}`}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {activeSubgroup?.code && (
+              <span className="text-[10px] font-mono font-bold bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded-lg border border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300">
+                🔑 {activeSubgroup.code}
+              </span>
+            )}
           </div>
         </div>
+      )}
 
-        <div className="flex items-center gap-2">
-          {activeSubgroup?.code && (
-            <span className="text-[10px] font-mono font-bold bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded-lg border border-neutral-200 dark:border-neutral-700 text-neutral-600 dark:text-neutral-300">
-              🔑 {activeSubgroup.code}
-            </span>
-          )}
+      {/* Toast Notifica di Copia negli Appunti */}
+      {copiedToast && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 px-3.5 py-1.5 rounded-full bg-neutral-900/95 text-white text-xs font-bold shadow-xl border border-neutral-700/80 animate-in fade-in zoom-in-95 pointer-events-none">
+          Messaggio copiato negli appunti
         </div>
-      </div>
+      )}
+
+      {/* Sfondo trasparente per chiudere il menu contestuale toccando altrove */}
+      {selectedMessage && (
+        <div
+          className="fixed inset-0 z-20 cursor-default"
+          onClick={() => setSelectedMessage(null)}
+        />
+      )}
 
       {/* Area Messaggi in stile WhatsApp (Sfondo chat con bolle) */}
       <div
@@ -647,35 +838,135 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
 
                   {/* Riga con Bolla Messaggio e Pulsanti Azione Affiancati */}
                   <div className={`flex items-end gap-1.5 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-                    {/* Bolla Messaggio */}
+                    {/* Bolla Messaggio con supporto Pressione Prolungata (Long Press stile WhatsApp) */}
                     <div
-                      className={`relative rounded-2xl p-2.5 sm:p-3 text-xs shadow-xs transition-shadow break-words ${
+                      onTouchStart={(e) => handleTouchStart(msg, e)}
+                      onTouchMove={handleTouchMove}
+                      onTouchEnd={handleTouchEnd}
+                      onContextMenu={(e) => handleContextMenu(e, msg)}
+                      className={`relative rounded-2xl p-2.5 sm:p-3 text-xs shadow-xs transition-all break-words select-none sm:select-text cursor-pointer sm:cursor-default ${
                         isMe
                           ? 'bg-[#d9fdd3] dark:bg-[#005c4b] text-neutral-900 dark:text-neutral-100 rounded-br-xs'
                           : 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 rounded-bl-xs border border-neutral-200/80 dark:border-neutral-800'
+                      } ${
+                        selectedMessage?.id === msg.id
+                          ? 'ring-2 ring-[#00a884] dark:ring-[#25d366] ring-offset-2 ring-offset-[#efeae2] dark:ring-offset-neutral-950 shadow-md scale-[1.01]'
+                          : ''
                       }`}
                     >
-                      {/* BOX CITAZIONE / RICHIAMO MESSAGGIO (WhatsApp Style Quote) */}
-                      {msg.replyTo && (
-                      <div
-                        onClick={() => scrollToMessage(msg.replyTo!.messageId)}
-                        className={`mb-2 p-2 rounded-xl text-[11px] border-l-4 cursor-pointer transition-all hover:opacity-90 ${
-                          isMe
-                            ? 'bg-black/5 dark:bg-black/25 border-[#00a884] dark:border-[#00a884]'
-                            : 'bg-neutral-100 dark:bg-neutral-800 border-[#f23e2e]'
-                        }`}
-                      >
-                        <p className="font-bold text-[10px] text-[#00a884] dark:text-[#25d366]">
-                          ↩️ {msg.replyTo.authorName}
-                        </p>
-                        <p className="truncate text-neutral-600 dark:text-neutral-300">
-                          {msg.replyTo.attachmentType === 'image' && '📷 Foto'}
-                          {msg.replyTo.attachmentType === 'audio' && '🎙️ Nota vocale'}
-                          {msg.replyTo.attachmentType === 'file' && '📄 Documento'}
-                          {msg.replyTo.content && ` ${msg.replyTo.content}`}
-                        </p>
-                      </div>
-                    )}
+                      {/* POPUP AZIONI WHATSAPP RAPIDE: compare sopra la bolla tenuta premuta con i bottoncini Modifica / Elimina */}
+                      {selectedMessage?.id === msg.id && (
+                        <div
+                          className={`absolute z-30 -top-12 ${
+                            isMe ? 'right-0' : 'left-0'
+                          } flex items-center gap-1 p-1 bg-neutral-900/95 dark:bg-neutral-800/95 text-white rounded-2xl shadow-2xl border border-neutral-700/80 backdrop-blur-md animate-in fade-in zoom-in-95`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {isMe ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleStartEdit(msg);
+                                  setSelectedMessage(null);
+                                }}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-xl hover:bg-neutral-800 active:bg-neutral-700 text-emerald-400 text-xs font-bold transition-colors cursor-pointer"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                                <span>Modifica</span>
+                              </button>
+
+                              <span className="w-px h-3.5 bg-neutral-700" />
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedMessage(null);
+                                  handleDeleteMessage(msg.id);
+                                }}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-xl hover:bg-red-950 active:bg-red-900 text-red-400 text-xs font-bold transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>Elimina</span>
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setReplyingTo(msg);
+                                  setSelectedMessage(null);
+                                }}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-xl hover:bg-neutral-800 text-sky-400 text-xs font-bold transition-colors cursor-pointer"
+                              >
+                                <CornerUpLeft className="w-3.5 h-3.5" />
+                                <span>Rispondi</span>
+                              </button>
+
+                              {isGroupAdmin && (
+                                <>
+                                  <span className="w-px h-3.5 bg-neutral-700" />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedMessage(null);
+                                      handleDeleteMessage(msg.id);
+                                    }}
+                                    className="flex items-center gap-1 px-2.5 py-1 rounded-xl hover:bg-red-950 text-red-400 text-xs font-bold transition-colors cursor-pointer"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <span>Elimina</span>
+                                  </button>
+                                </>
+                              )}
+                            </>
+                          )}
+
+                          {msg.content && (
+                            <>
+                              <span className="w-px h-3.5 bg-neutral-700" />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleCopyMessage(msg.content);
+                                  setSelectedMessage(null);
+                                }}
+                                className="p-1 rounded-xl hover:bg-neutral-800 text-neutral-300 transition-colors cursor-pointer"
+                                title="Copia testo"
+                              >
+                                <Copy className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
+
+                      {/* BOX CITAZIONE / RICHIAMO MESSAGGIO (WhatsApp Style Quote pulito) */}
+                      {msg.replyTo && (msg.replyTo.content || msg.replyTo.attachmentType) && (
+                        <div
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            scrollToMessage(msg.replyTo!.messageId);
+                          }}
+                          className={`mb-2 p-2 rounded-xl text-[11px] border-l-4 cursor-pointer transition-all hover:opacity-90 ${
+                            isMe
+                              ? 'bg-black/10 dark:bg-black/25 border-[#00a884] dark:border-[#25d366]'
+                              : 'bg-neutral-100 dark:bg-neutral-800 border-[#f23e2e]'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1 font-bold text-[10px] text-[#00a884] dark:text-[#25d366]">
+                            <CornerUpLeft className="w-3 h-3 stroke-[2.5px]" />
+                            <span>{msg.replyTo.authorName || 'Membro'}</span>
+                          </div>
+                          <p className="truncate text-neutral-600 dark:text-neutral-300 text-[10.5px] mt-0.5">
+                            {msg.replyTo.attachmentType === 'image' && '📷 Foto'}
+                            {msg.replyTo.attachmentType === 'audio' && '🎙️ Nota vocale'}
+                            {msg.replyTo.attachmentType === 'file' && '📄 Documento'}
+                            {msg.replyTo.content && ` ${msg.replyTo.content}`}
+                          </p>
+                        </div>
+                      )}
 
                     {/* 1. ALLEGATO IMMAGINE */}
                     {msg.attachment?.type === 'image' && (
@@ -842,8 +1133,8 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
                     </div>
                   </div>
 
-                  {/* Pulsanti Azione Messaggio: posizionati ALL'ESTERNO della bolla, MAI sopra al testo dei messaggi! */}
-                  <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 p-1 rounded-xl bg-white/95 dark:bg-neutral-800/95 border border-neutral-200/70 dark:border-neutral-700/70 shadow-xs transition-opacity shrink-0 mb-1">
+                  {/* Pulsanti Azione Messaggio per Desktop su mouse hover (Nascosti su mobile) */}
+                  <div className="hidden md:flex opacity-0 group-hover:opacity-100 items-center gap-0.5 p-1 rounded-xl bg-white/95 dark:bg-neutral-800/95 border border-neutral-200/70 dark:border-neutral-700/70 shadow-xs transition-opacity shrink-0 mb-1">
                     <button
                       type="button"
                       onClick={() => setReplyingTo(msg)}
