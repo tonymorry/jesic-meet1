@@ -454,6 +454,8 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
 
   // Gestione Pressione Prolungata (Long Press) per Smartphone (Stile WhatsApp)
   const handleTouchStart = (msg: ChatMessage, e: React.TouchEvent) => {
+    // Se questo messaggio è già selezionato, non riavviare il timer
+    if (selectedMessage?.id === msg.id) return;
     isLongPressActiveRef.current = false;
     const touch = e.touches[0];
     touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
@@ -766,11 +768,12 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
         </div>
       )}
 
-      {/* Sfondo trasparente per chiudere il menu contestuale toccando altrove */}
+      {/* Sfondo semitrasparente per chiudere il menu contestuale toccando altrove */}
       {selectedMessage && (
         <div
-          className="fixed inset-0 z-20 cursor-default"
+          className="fixed inset-0 z-30 bg-black/20 backdrop-blur-[0.5px] cursor-default transition-opacity"
           onClick={() => setSelectedMessage(null)}
+          onTouchEnd={() => setSelectedMessage(null)}
         />
       )}
 
@@ -804,10 +807,12 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
             </p>
           </div>
         ) : (
-          messages.map((msg) => {
+          messages.map((msg, idx) => {
             const isMe = msg.authorId === currentUser.id;
             const authorUser = allUsers.find((u) => u.id === msg.authorId);
             const isPlayingThisAudio = playingAudioId === msg.id;
+            const isSelected = selectedMessage?.id === msg.id;
+            const isFirstMessage = idx === 0;
 
             return (
               <div
@@ -815,7 +820,7 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
                 id={`chat-msg-${msg.id}`}
                 className={`group flex items-end gap-1.5 transition-all ${
                   isMe ? 'justify-end' : 'justify-start'
-                }`}
+                } ${isSelected ? 'relative z-40' : 'relative z-0'}`}
               >
                 {!isMe && (
                   <div className="shrink-0 mb-1">
@@ -849,74 +854,118 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
                           ? 'bg-[#d9fdd3] dark:bg-[#005c4b] text-neutral-900 dark:text-neutral-100 rounded-br-xs'
                           : 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 rounded-bl-xs border border-neutral-200/80 dark:border-neutral-800'
                       } ${
-                        selectedMessage?.id === msg.id
-                          ? 'ring-2 ring-[#00a884] dark:ring-[#25d366] ring-offset-2 ring-offset-[#efeae2] dark:ring-offset-neutral-950 shadow-md scale-[1.01]'
+                        isSelected
+                          ? 'ring-2 ring-[#00a884] dark:ring-[#25d366] ring-offset-2 ring-offset-[#efeae2] dark:ring-offset-neutral-950 shadow-md scale-[1.01] z-40'
                           : ''
                       }`}
                     >
                       {/* POPUP AZIONI WHATSAPP RAPIDE: compare sopra la bolla tenuta premuta con i bottoncini Modifica / Elimina */}
-                      {selectedMessage?.id === msg.id && (
+                      {isSelected && (
                         <div
-                          className={`absolute z-30 -top-12 ${
+                          className={`absolute z-50 ${isFirstMessage ? 'top-full mt-2' : '-top-12 mb-2'} ${
                             isMe ? 'right-0' : 'left-0'
-                          } flex items-center gap-1 p-1 bg-neutral-900/95 dark:bg-neutral-800/95 text-white rounded-2xl shadow-2xl border border-neutral-700/80 backdrop-blur-md animate-in fade-in zoom-in-95`}
+                          } flex items-center gap-1 p-1 bg-neutral-900/95 dark:bg-neutral-800/95 text-white rounded-2xl shadow-2xl border border-neutral-700/80 backdrop-blur-md animate-in fade-in zoom-in-95 select-none touch-manipulation`}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onTouchStart={(e) => e.stopPropagation()}
+                          onTouchMove={(e) => e.stopPropagation()}
+                          onTouchEnd={(e) => e.stopPropagation()}
                           onClick={(e) => e.stopPropagation()}
                         >
                           {isMe ? (
                             <>
                               <button
                                 type="button"
-                                onClick={() => {
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onTouchStart={(e) => e.stopPropagation()}
+                                onTouchEnd={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
                                   handleStartEdit(msg);
                                   setSelectedMessage(null);
                                 }}
-                                className="flex items-center gap-1 px-2.5 py-1 rounded-xl hover:bg-neutral-800 active:bg-neutral-700 text-emerald-400 text-xs font-bold transition-colors cursor-pointer"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleStartEdit(msg);
+                                  setSelectedMessage(null);
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl hover:bg-neutral-800 active:bg-neutral-700 text-emerald-400 text-xs font-bold transition-colors cursor-pointer select-none touch-manipulation"
                               >
-                                <Edit2 className="w-3.5 h-3.5" />
-                                <span>Modifica</span>
+                                <Edit2 className="w-3.5 h-3.5 pointer-events-none" />
+                                <span className="pointer-events-none">Modifica</span>
                               </button>
 
-                              <span className="w-px h-3.5 bg-neutral-700" />
+                              <span className="w-px h-3.5 bg-neutral-700 pointer-events-none" />
 
                               <button
                                 type="button"
-                                onClick={() => {
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onTouchStart={(e) => e.stopPropagation()}
+                                onTouchEnd={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
                                   setSelectedMessage(null);
                                   handleDeleteMessage(msg.id);
                                 }}
-                                className="flex items-center gap-1 px-2.5 py-1 rounded-xl hover:bg-red-950 active:bg-red-900 text-red-400 text-xs font-bold transition-colors cursor-pointer"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setSelectedMessage(null);
+                                  handleDeleteMessage(msg.id);
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl hover:bg-red-950 active:bg-red-900 text-red-400 text-xs font-bold transition-colors cursor-pointer select-none touch-manipulation"
                               >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                <span>Elimina</span>
+                                <Trash2 className="w-3.5 h-3.5 pointer-events-none" />
+                                <span className="pointer-events-none">Elimina</span>
                               </button>
                             </>
                           ) : (
                             <>
                               <button
                                 type="button"
-                                onClick={() => {
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onTouchStart={(e) => e.stopPropagation()}
+                                onTouchEnd={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
                                   setReplyingTo(msg);
                                   setSelectedMessage(null);
                                 }}
-                                className="flex items-center gap-1 px-2.5 py-1 rounded-xl hover:bg-neutral-800 text-sky-400 text-xs font-bold transition-colors cursor-pointer"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setReplyingTo(msg);
+                                  setSelectedMessage(null);
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl hover:bg-neutral-800 active:bg-neutral-700 text-sky-400 text-xs font-bold transition-colors cursor-pointer select-none touch-manipulation"
                               >
-                                <CornerUpLeft className="w-3.5 h-3.5" />
-                                <span>Rispondi</span>
+                                <CornerUpLeft className="w-3.5 h-3.5 pointer-events-none" />
+                                <span className="pointer-events-none">Rispondi</span>
                               </button>
 
                               {isGroupAdmin && (
                                 <>
-                                  <span className="w-px h-3.5 bg-neutral-700" />
+                                  <span className="w-px h-3.5 bg-neutral-700 pointer-events-none" />
                                   <button
                                     type="button"
-                                    onClick={() => {
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    onTouchStart={(e) => e.stopPropagation()}
+                                    onTouchEnd={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
                                       setSelectedMessage(null);
                                       handleDeleteMessage(msg.id);
                                     }}
-                                    className="flex items-center gap-1 px-2.5 py-1 rounded-xl hover:bg-red-950 text-red-400 text-xs font-bold transition-colors cursor-pointer"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      setSelectedMessage(null);
+                                      handleDeleteMessage(msg.id);
+                                    }}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl hover:bg-red-950 active:bg-red-900 text-red-400 text-xs font-bold transition-colors cursor-pointer select-none touch-manipulation"
                                   >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                    <span>Elimina</span>
+                                    <Trash2 className="w-3.5 h-3.5 pointer-events-none" />
+                                    <span className="pointer-events-none">Elimina</span>
                                   </button>
                                 </>
                               )}
@@ -925,17 +974,27 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
 
                           {msg.content && (
                             <>
-                              <span className="w-px h-3.5 bg-neutral-700" />
+                              <span className="w-px h-3.5 bg-neutral-700 pointer-events-none" />
                               <button
                                 type="button"
-                                onClick={() => {
+                                onPointerDown={(e) => e.stopPropagation()}
+                                onTouchStart={(e) => e.stopPropagation()}
+                                onTouchEnd={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
                                   handleCopyMessage(msg.content);
                                   setSelectedMessage(null);
                                 }}
-                                className="p-1 rounded-xl hover:bg-neutral-800 text-neutral-300 transition-colors cursor-pointer"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleCopyMessage(msg.content);
+                                  setSelectedMessage(null);
+                                }}
+                                className="p-1.5 rounded-xl hover:bg-neutral-800 active:bg-neutral-700 text-neutral-300 transition-colors cursor-pointer select-none touch-manipulation"
                                 title="Copia testo"
                               >
-                                <Copy className="w-3.5 h-3.5" />
+                                <Copy className="w-3.5 h-3.5 pointer-events-none" />
                               </button>
                             </>
                           )}
