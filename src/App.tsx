@@ -463,14 +463,29 @@ export default function App() {
 
 
   // Stato Splash Screen iniziale:
-  // - showSplash: visibile SOLO se l'utente naviga dal sito web standard;
-  //   quando la web app viene installata (PWA su smartphone o PC), l'animazione viene saltata all'avvio.
+  // - showSplash: visibile SOLO se l'utente naviga dalla home del sito web standard;
+  //   viene saltata se l'app è installata (PWA) o se si entra direttamente nella pagina del form per il cliente (/prenota-call).
   const [showSplash, setShowSplash] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const isClientForm =
+        window.location.pathname.includes('/prenota-call') ||
+        window.location.hash.includes('prenota-call');
+      if (isClientForm) {
+        return false;
+      }
+    }
     return !isInstalledPwa();
   });
   const [isAuthDetermined, setIsAuthDetermined] = useState(() => {
     return !!localStorage.getItem(STORAGE_CURRENT_USER_KEY);
   });
+
+  // Se l'utente si trova o naviga verso il form per il cliente, disattiva immediatamente l'animazione
+  useEffect(() => {
+    if (currentRoute === '/prenota-call') {
+      setShowSplash(false);
+    }
+  }, [currentRoute]);
 
   // Stato UI Navigazione:
   // - Fuori dal gruppo: 'groups' | 'polls' | 'profile'
@@ -1947,8 +1962,8 @@ export default function App() {
 
   return (
     <>
-      {/* 1. ANIMAZIONE SPLASH SCREEN (Primissima cosa renderizzata sopra il sito in background) */}
-      {showSplash && (
+      {/* 1. ANIMAZIONE SPLASH SCREEN (Primissima cosa renderizzata sopra il sito in background, mai sul form cliente) */}
+      {showSplash && currentRoute !== '/prenota-call' && (
         <SplashScreen
           isReady={isAuthDetermined}
           onFinish={() => setShowSplash(false)}
