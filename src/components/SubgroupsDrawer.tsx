@@ -42,7 +42,8 @@ export interface SubgroupsDrawerProps {
     description?: string,
     avatar?: string,
     isPublic?: boolean,
-    code?: string
+    code?: string,
+    parentId?: string | null
   ) => Promise<boolean | void>;
   onUpdateSubgroup?: (
     subgroupId: string,
@@ -75,6 +76,7 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
   const [newSubgroupAvatar, setNewSubgroupAvatar] = useState('📁');
   const [newSubgroupIsPublic, setNewSubgroupIsPublic] = useState(false);
   const [newSubgroupCustomCode, setNewSubgroupCustomCode] = useState('');
+  const [newSubgroupParentId, setNewSubgroupParentId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const createSubImageRef = useRef<HTMLInputElement>(null);
@@ -150,6 +152,60 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
 
   const subgroups = activeGroup.subgroups || [];
 
+  // Struttura gerarchica ad albero dei sottogruppi
+  interface HierarchicalSubgroupItem {
+    subgroup: Subgroup;
+    depth: number;
+    parentName?: string;
+    childCount: number;
+  }
+
+  const buildHierarchicalList = (allSubs: Subgroup[]): HierarchicalSubgroupItem[] => {
+    const byParent: { [key: string]: Subgroup[] } = {};
+    const subMap = new Map<string, Subgroup>();
+
+    allSubs.forEach((s) => {
+      subMap.set(s.id, s);
+      const p = s.parentId || '__root__';
+      if (!byParent[p]) byParent[p] = [];
+      byParent[p].push(s);
+    });
+
+    const result: HierarchicalSubgroupItem[] = [];
+
+    const walk = (parentId: string, depth: number) => {
+      const list = byParent[parentId] || [];
+      list.forEach((sub) => {
+        const directChildren = byParent[sub.id] || [];
+        const parentSub = sub.parentId ? subMap.get(sub.parentId) : undefined;
+        result.push({
+          subgroup: sub,
+          depth,
+          parentName: parentSub?.name,
+          childCount: directChildren.length,
+        });
+        walk(sub.id, depth + 1);
+      });
+    };
+
+    walk('__root__', 0);
+
+    // Gestione di eventuali orfani con parentId non più esistente
+    allSubs.forEach((s) => {
+      if (s.parentId && !subMap.has(s.parentId) && !result.some((r) => r.subgroup.id === s.id)) {
+        result.push({
+          subgroup: s,
+          depth: 0,
+          childCount: (byParent[s.id] || []).length,
+        });
+      }
+    });
+
+    return result;
+  };
+
+  const hierarchicalSubgroups = buildHierarchicalList(subgroups);
+
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSubgroupName.trim()) {
@@ -165,13 +221,15 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
         newSubgroupDesc.trim(),
         newSubgroupAvatar,
         newSubgroupIsPublic,
-        newSubgroupCustomCode.trim() ? newSubgroupCustomCode.trim().toUpperCase() : undefined
+        newSubgroupCustomCode.trim() ? newSubgroupCustomCode.trim().toUpperCase() : undefined,
+        newSubgroupParentId
       );
       setNewSubgroupName('');
       setNewSubgroupDesc('');
       setNewSubgroupAvatar('📁');
       setNewSubgroupIsPublic(false);
       setNewSubgroupCustomCode('');
+      setNewSubgroupParentId(null);
       setIsCreating(false);
       onClose();
     } catch (err: any) {
@@ -239,7 +297,7 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
     e.stopPropagation();
     if (!onDeleteSubgroup) return;
     const confirmDelete = window.confirm(
-      `Sei sicuro di voler eliminare il sottogruppo "${subgroup.name}"? I sondaggi e i messaggi del sottogruppo verranno rimossi.`
+      `Sei sicuro di voler eliminare il sottogruppo "${subgroup.name}"? Tutti gli eventuali sotto-sottogruppi al suo interno, i sondaggi e i messaggi verranno eliminati definitivamente.`
     );
     if (!confirmDelete) return;
 
@@ -490,15 +548,56 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black text-purple-900 dark:text-purple-200 flex items-center gap-1.5">
                       <FolderPlus className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                      <span>Crea & Personalizza Sottogruppo</span>
+                      <span>{newSubgroupParentId ? 'Crea Sotto-sottogruppo' : 'Crea Sottogruppo'}</span>
                     </span>
                     <button
                       type="button"
-                      onClick={() => setIsCreating(false)}
+                      onClick={() => {
+                        setIsCreating(false);
+                        setNewSubgroupParentId(null);
+                      }}
                       className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
                     >
                       <X className="w-4 h-4" />
                     </button>
+                  </div>
+
+                  {/* Posizione Gerarchica: Dentro il Gruppo Generale o Dentro un altro Sottogruppo */}
+                  <div className="p-2.5 rounded-xl bg-white/80 dark:bg-neutral-800/80 border border-purple-200 dark:border-purple-800/60">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-600 dark:text-neutral-400">
+                        Cartella Superiore (Genitore)
+                      </label>
+                      {newSubgroupParentId && (
+                        <button
+                          type="button"
+                          onClick={() => setNewSubgroupParentId(null)}
+                          className="text-[10px] font-bold text-[#f23e2e] hover:underline cursor-pointer"
+                        >
+                          Sposta a livello principale
+                        </button>
+                      )}
+                    </div>
+                    <select
+                      value={newSubgroupParentId || ''}
+                      onChange={(e) => setNewSubgroupParentId(e.target.value ? e.target.value : null)}
+                      className="w-full px-2.5 py-1.5 text-xs font-semibold bg-neutral-50 dark:bg-neutral-900 border border-neutral-300 dark:border-neutral-700 rounded-lg text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500/30 cursor-pointer"
+                    >
+                      <option value="">📁 Gruppo Principale ({activeGroup.name})</option>
+                      {subgroups.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.parentId ? '↳ ↳ ' : '↳ '} Sotto a: {s.name}
+                        </option>
+                      ))}
+                    </select>
+                    {newSubgroupParentId && (
+                      <p className="text-[10px] text-purple-700 dark:text-purple-300 font-medium mt-1 flex items-center gap-1">
+                        <span>↳ Verrà creato all'interno di:</span>
+                        <strong className="underline">
+                          {subgroups.find((s) => s.id === newSubgroupParentId)?.name}
+                        </strong>
+                      </p>
+                    )}
                   </div>
 
                   {/* Scelta Icona o Immagine Sottogruppo */}
@@ -843,8 +942,8 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
                   )}
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {subgroups.map((subgroup) => {
+                <div className="space-y-2.5">
+                  {hierarchicalSubgroups.map(({ subgroup, depth, parentName, childCount }) => {
                     const isSelected = activeSubgroupId === subgroup.id;
                     const canManageSubgroup = (isResponsabile || isCreator) && onUpdateSubgroup;
                     const canDelete = isResponsabile && onDeleteSubgroup;
@@ -860,176 +959,228 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
                       (Array.isArray(subgroup.members) && subgroup.members.includes(currentUser.id));
                     const isUnlockingThis = unlockingSubgroupId === subgroup.id;
 
+                    const indentClass =
+                      depth === 0
+                        ? ''
+                        : depth === 1
+                        ? 'ml-3 sm:ml-5 pl-2.5 sm:pl-3 border-l-2 border-purple-300 dark:border-purple-700'
+                        : 'ml-6 sm:ml-9 pl-2.5 sm:pl-3 border-l-2 border-purple-400 dark:border-purple-600';
+
                     return (
                       <div
                         key={subgroup.id}
-                        className={`rounded-2xl border transition-all overflow-hidden ${
-                          isSelected
-                            ? 'bg-purple-50/90 dark:bg-purple-950/40 border-purple-500 dark:border-purple-600 shadow-xs'
-                            : 'bg-white dark:bg-neutral-800/70 border-neutral-200 dark:border-neutral-700'
-                        }`}
+                        className={`transition-all ${indentClass}`}
                       >
                         <div
-                          onClick={() => {
-                            if (hasAccess) {
-                              onSelectSubgroup(subgroup.id);
-                              onClose();
-                            } else {
-                              setUnlockingSubgroupId(isUnlockingThis ? null : subgroup.id);
-                              setEnteredCode('');
-                              setUnlockError(null);
-                            }
-                          }}
-                          className="w-full p-3 flex items-center justify-between gap-2.5 cursor-pointer hover:bg-neutral-50/50 dark:hover:bg-neutral-800/50 transition-colors"
+                          className={`rounded-2xl border transition-all overflow-hidden ${
+                            isSelected
+                              ? 'bg-purple-50/90 dark:bg-purple-950/40 border-purple-500 dark:border-purple-600 shadow-xs'
+                              : 'bg-white dark:bg-neutral-800/70 border-neutral-200 dark:border-neutral-700'
+                          }`}
                         >
-                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                            <GroupAvatar
-                              avatar={subgroup.avatar}
-                              name={subgroup.name}
-                              size="sm"
-                              fallbackEmoji="📁"
-                            />
-
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <p className="text-xs font-bold text-neutral-900 dark:text-white truncate">
-                                  {subgroup.name}
-                                </p>
-                                <span
-                                  className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-full border ${
-                                    subgroup.isPublic
-                                      ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-                                      : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
-                                  }`}
-                                >
-                                  {subgroup.isPublic ? '🌐 Pubblico' : '🔒 Privato'}
+                          <div
+                            onClick={() => {
+                              if (hasAccess) {
+                                onSelectSubgroup(subgroup.id);
+                                onClose();
+                              } else {
+                                setUnlockingSubgroupId(isUnlockingThis ? null : subgroup.id);
+                                setEnteredCode('');
+                                setUnlockError(null);
+                              }
+                            }}
+                            className="w-full p-3 flex items-center justify-between gap-2.5 cursor-pointer hover:bg-neutral-50/50 dark:hover:bg-neutral-800/50 transition-colors"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                              {/* Ramo albero indicatore se è un sotto-sottogruppo */}
+                              {depth > 0 && (
+                                <span className="text-purple-500 dark:text-purple-400 font-mono font-bold text-xs shrink-0 select-none">
+                                  ↳
                                 </span>
-                                {!hasAccess && (
-                                  <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                                    🔒 Codice richiesto
+                              )}
+
+                              <GroupAvatar
+                                avatar={subgroup.avatar}
+                                name={subgroup.name}
+                                size="sm"
+                                fallbackEmoji="📁"
+                              />
+
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <p className="text-xs font-bold text-neutral-900 dark:text-white truncate">
+                                    {subgroup.name}
+                                  </p>
+                                  <span
+                                    className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-full border ${
+                                      subgroup.isPublic
+                                        ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                                        : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
+                                    }`}
+                                  >
+                                    {subgroup.isPublic ? '🌐 Pubblico' : '🔒 Privato'}
                                   </span>
+
+                                  {depth > 0 && (
+                                    <span className="text-[8px] font-bold px-1.5 py-0.2 rounded-full bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                      Livello {depth + 1}
+                                    </span>
+                                  )}
+
+                                  {childCount > 0 && (
+                                    <span className="text-[8px] font-bold px-1.5 py-0.2 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border border-neutral-200 dark:border-neutral-700">
+                                      📁 {childCount} {childCount === 1 ? 'sotto-gruppo' : 'sotto-gruppi'}
+                                    </span>
+                                  )}
+
+                                  {!hasAccess && (
+                                    <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                                      🔒 Codice richiesto
+                                    </span>
+                                  )}
+                                </div>
+                                {subgroup.description ? (
+                                  <p className="text-[10px] text-neutral-500 dark:text-neutral-400 truncate">
+                                    {parentName ? `in ${parentName} • ` : ''}{subgroup.description}
+                                  </p>
+                                ) : parentName ? (
+                                  <p className="text-[10px] text-neutral-500 dark:text-neutral-400 truncate">
+                                    ↳ Sotto a {parentName}
+                                  </p>
+                                ) : (
+                                  <p className="text-[10px] text-neutral-400">
+                                    {hasAccess ? 'Sottogruppo attivo' : 'Clicca per inserire il codice'}
+                                  </p>
                                 )}
                               </div>
-                              {subgroup.description ? (
-                                <p className="text-[10px] text-neutral-500 dark:text-neutral-400 truncate">
-                                  {subgroup.description}
-                                </p>
-                              ) : (
-                                <p className="text-[10px] text-neutral-400">
-                                  {hasAccess ? 'Sottogruppo attivo' : 'Clicca per inserire il codice'}
-                                </p>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {isSelected && (
+                                <span className="w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center">
+                                  <Check className="w-3.5 h-3.5 stroke-[3px]" />
+                                </span>
+                              )}
+
+                              {/* Mostra / Copia codice se l'utente ha accesso */}
+                              {hasAccess && subgroup.code && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleCopyCode(subgroup, e)}
+                                  title="Copia codice di accesso sottogruppo"
+                                  className="px-2 py-1 rounded-lg text-[10px] font-mono font-bold bg-neutral-100 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 hover:text-[#f23e2e] flex items-center gap-1 transition-colors"
+                                >
+                                  {copiedCodeSubgroupId === subgroup.id ? (
+                                    <>
+                                      <Check className="w-3 h-3 text-emerald-600" />
+                                      <span className="text-emerald-600">Copiato!</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Copy className="w-3 h-3" />
+                                      <span>{subgroup.code}</span>
+                                    </>
+                                  )}
+                                </button>
+                              )}
+
+                              {!hasAccess && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setUnlockingSubgroupId(isUnlockingThis ? null : subgroup.id);
+                                    setEnteredCode('');
+                                    setUnlockError(null);
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-amber-500 hover:bg-amber-600 text-white flex items-center gap-1 shadow-2xs"
+                                >
+                                  <KeyRound className="w-3 h-3" />
+                                  <span>Entra</span>
+                                </button>
+                              )}
+
+                              {/* Tasto "+ Sotto-gruppo" per Responsabili e Creatore */}
+                              {isResponsabile && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setNewSubgroupParentId(subgroup.id);
+                                    setIsCreating(true);
+                                  }}
+                                  title={`Crea un sotto-gruppo all'interno di "${subgroup.name}"`}
+                                  className="px-2 py-1 rounded-lg text-[10px] font-bold text-purple-700 dark:text-purple-300 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/70 dark:hover:bg-purple-900 border border-purple-200 dark:border-purple-800 flex items-center gap-1 transition-colors cursor-pointer"
+                                >
+                                  <Plus className="w-3 h-3 stroke-[3px]" />
+                                  <span className="hidden sm:inline">Sotto-gruppo</span>
+                                </button>
+                              )}
+
+                              {/* Tasto Modifica / Personalizza */}
+                              {canManageSubgroup && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleStartEdit(subgroup, e)}
+                                  title="Personalizza sottogruppo"
+                                  className="p-1.5 rounded-lg text-neutral-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/50 transition-colors"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+
+                              {/* Tasto Elimina */}
+                              {canDelete && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleDeleteClick(subgroup, e)}
+                                  disabled={deletingId === subgroup.id}
+                                  title="Elimina sottogruppo"
+                                  className="p-1.5 rounded-lg text-neutral-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
                               )}
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            {isSelected && (
-                              <span className="w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center">
-                                <Check className="w-3.5 h-3.5 stroke-[3px]" />
-                              </span>
-                            )}
+                          {/* Modulo Inline di inserimento Codice Sottogruppo se bloccato */}
+                          {!hasAccess && isUnlockingThis && (
+                            <form
+                              onSubmit={(e) => handleUnlockSubmit(subgroup, e)}
+                              className="p-3 bg-amber-50/60 dark:bg-amber-950/20 border-t border-amber-200/80 dark:border-amber-800/60 space-y-2 animate-in fade-in"
+                            >
+                              <div className="flex items-center justify-between text-[11px] font-bold text-amber-900 dark:text-amber-200">
+                                <span>Inserisci il codice di accesso per {subgroup.name}:</span>
+                              </div>
 
-                            {/* Mostra / Copia codice se l'utente ha accesso */}
-                            {hasAccess && subgroup.code && (
-                              <button
-                                type="button"
-                                onClick={(e) => handleCopyCode(subgroup, e)}
-                                title="Copia codice di accesso sottogruppo"
-                                className="px-2 py-1 rounded-lg text-[10px] font-mono font-bold bg-neutral-100 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 hover:text-[#f23e2e] flex items-center gap-1 transition-colors"
-                              >
-                                {copiedCodeSubgroupId === subgroup.id ? (
-                                  <>
-                                    <Check className="w-3 h-3 text-emerald-600" />
-                                    <span className="text-emerald-600">Copiato!</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Copy className="w-3 h-3" />
-                                    <span>{subgroup.code}</span>
-                                  </>
-                                )}
-                              </button>
-                            )}
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  required
+                                  autoFocus
+                                  placeholder="es. SUB-A1B2"
+                                  value={enteredCode}
+                                  onChange={(e) => setEnteredCode(e.target.value.toUpperCase())}
+                                  className="flex-1 px-3 py-1.5 text-xs font-mono font-bold bg-white dark:bg-neutral-800 border border-amber-300 dark:border-amber-700 rounded-xl text-neutral-900 dark:text-white uppercase focus:outline-none"
+                                />
+                                <button
+                                  type="submit"
+                                  disabled={isUnlocking || !enteredCode.trim()}
+                                  className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold cursor-pointer disabled:opacity-50"
+                                >
+                                  {isUnlocking ? 'Verifica...' : 'Sblocca'}
+                                </button>
+                              </div>
 
-                            {!hasAccess && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setUnlockingSubgroupId(isUnlockingThis ? null : subgroup.id);
-                                  setEnteredCode('');
-                                  setUnlockError(null);
-                                }}
-                                className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-amber-500 hover:bg-amber-600 text-white flex items-center gap-1 shadow-2xs"
-                              >
-                                <KeyRound className="w-3 h-3" />
-                                <span>Entra</span>
-                              </button>
-                            )}
-
-                            {/* Tasto Modifica / Personalizza */}
-                            {canManageSubgroup && (
-                              <button
-                                type="button"
-                                onClick={(e) => handleStartEdit(subgroup, e)}
-                                title="Personalizza sottogruppo"
-                                className="p-1.5 rounded-lg text-neutral-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/50 transition-colors"
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-
-                            {/* Tasto Elimina */}
-                            {canDelete && (
-                              <button
-                                type="button"
-                                onClick={(e) => handleDeleteClick(subgroup, e)}
-                                disabled={deletingId === subgroup.id}
-                                title="Elimina sottogruppo"
-                                className="p-1.5 rounded-lg text-neutral-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
+                              {unlockError && (
+                                <p className="text-[10px] font-bold text-red-600 dark:text-red-400">
+                                  {unlockError}
+                                </p>
+                              )}
+                            </form>
+                          )}
                         </div>
-
-                        {/* Modulo Inline di inserimento Codice Sottogruppo se bloccato */}
-                        {!hasAccess && isUnlockingThis && (
-                          <form
-                            onSubmit={(e) => handleUnlockSubmit(subgroup, e)}
-                            className="p-3 bg-amber-50/60 dark:bg-amber-950/20 border-t border-amber-200/80 dark:border-amber-800/60 space-y-2 animate-in fade-in"
-                          >
-                            <div className="flex items-center justify-between text-[11px] font-bold text-amber-900 dark:text-amber-200">
-                              <span>Inserisci il codice di accesso per {subgroup.name}:</span>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="text"
-                                required
-                                autoFocus
-                                placeholder="es. SUB-A1B2"
-                                value={enteredCode}
-                                onChange={(e) => setEnteredCode(e.target.value.toUpperCase())}
-                                className="flex-1 px-3 py-1.5 text-xs font-mono font-bold bg-white dark:bg-neutral-800 border border-amber-300 dark:border-amber-700 rounded-xl text-neutral-900 dark:text-white uppercase focus:outline-none"
-                              />
-                              <button
-                                type="submit"
-                                disabled={isUnlocking || !enteredCode.trim()}
-                                className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold cursor-pointer disabled:opacity-50"
-                              >
-                                {isUnlocking ? 'Verifica...' : 'Sblocca'}
-                              </button>
-                            </div>
-
-                            {unlockError && (
-                              <p className="text-[10px] font-bold text-red-600 dark:text-red-400">
-                                {unlockError}
-                              </p>
-                            )}
-                          </form>
-                        )}
                       </div>
                     );
                   })}

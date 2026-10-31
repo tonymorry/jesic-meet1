@@ -174,6 +174,7 @@ export interface ISubgroup {
   members?: string[];
   createdBy: string;
   createdAt?: string;
+  parentId?: string | null;
 }
 
 export interface IGroup {
@@ -241,6 +242,10 @@ const SubgroupSubSchema = new Schema<ISubgroup>(
     createdAt: {
       type: String,
       default: () => new Date().toISOString(),
+    },
+    parentId: {
+      type: String,
+      default: null,
     },
   },
   {

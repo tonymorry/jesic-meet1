@@ -46,6 +46,7 @@ export interface Subgroup {
   members?: string[]; // IDs degli utenti che hanno inserito il codice e possono accedere
   createdBy: string;
   createdAt: string;
+  parentId?: string | null; // ID del sottogruppo genitore (se annidato / sotto-sottogruppo)
 }
 
 export interface Group {

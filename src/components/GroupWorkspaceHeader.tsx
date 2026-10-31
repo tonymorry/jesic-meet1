@@ -37,6 +37,7 @@ export interface GroupWorkspaceHeaderProps {
   allUsers: User[];
   onBackToGroups: () => void;
   onBackToMainGroup?: () => void;
+  onSelectSubgroup?: (subgroupId: string | null) => void;
   onOpenMembersModal: () => void;
   onToggleSubgroupsMenu?: () => void;
   onUpdateGroupName?: (groupId: string, newName: string) => Promise<boolean | void>;
@@ -57,6 +58,7 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
   allUsers,
   onBackToGroups,
   onBackToMainGroup,
+  onSelectSubgroup,
   onOpenMembersModal,
   onToggleSubgroupsMenu,
   onUpdateGroupName,
@@ -272,20 +274,38 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
     }
   };
 
+  // Calcolo percorso gerarchico (Breadcrumbs: Gruppo Generale ➔ Sottogruppo ➔ Sotto-sottogruppo...)
+  const breadcrumbs: { id: string | null; name: string }[] = [{ id: null, name: activeGroup.name }];
+  if (activeSubgroup) {
+    const chain: Subgroup[] = [];
+    let curr: Subgroup | undefined = activeSubgroup;
+    const visited = new Set<string>();
+    while (curr && !visited.has(curr.id)) {
+      visited.add(curr.id);
+      chain.unshift(curr);
+      if (curr.parentId) {
+        curr = activeGroup.subgroups?.find((s) => s.id === curr!.parentId);
+      } else {
+        curr = undefined;
+      }
+    }
+    chain.forEach((s) => breadcrumbs.push({ id: s.id, name: s.name }));
+  }
+
   return (
     <>
       <div className="bg-white dark:bg-neutral-900 border-b border-neutral-200/90 dark:border-neutral-800 shadow-2xs transition-colors mb-3 sm:mb-4 rounded-2xl sm:rounded-3xl p-2.5 sm:p-5">
         <div className="flex items-center justify-between gap-2">
           {/* Tasto Torna Indietro + Avatar + (Nome Gruppo + Ruolo sotto) */}
           <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-            {/* Tasto Freccetta: se dentro un sottogruppo torna al gruppo principale, se nel gruppo principale torna a I Tuoi Gruppi (senza testo, solo freccia) */}
+            {/* Tasto Freccetta: se dentro un sottogruppo torna al livello superiore, altrimenti a I Tuoi Gruppi */}
             <button
               type="button"
               onClick={activeSubgroup ? (onBackToMainGroup || onBackToGroups) : onBackToGroups}
               className="p-1.5 sm:p-2 rounded-xl sm:rounded-2xl bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-[#f23e2e] transition-all flex items-center justify-center cursor-pointer active:scale-95 shrink-0"
               title={
                 activeSubgroup
-                  ? `Torna al gruppo principale "${activeGroup.name}"`
+                  ? (activeSubgroup.parentId ? 'Torna al sottogruppo superiore' : `Torna al gruppo principale "${activeGroup.name}"`)
                   : 'Torna alla lista dei tuoi gruppi'
               }
               aria-label="Torna indietro"
@@ -387,18 +407,38 @@ export const GroupWorkspaceHeader: React.FC<GroupWorkspaceHeaderProps> = ({
                   </div>
                 )}
 
-                {/* SOTTO IL NOME: Solo il badge ruolo e, se in sottogruppo, il link al gruppo principale (senza etichette di testo) */}
-                <div className="flex items-center gap-1 sm:gap-2 mt-0.5 min-w-0 truncate">
-                  {activeSubgroup && (
-                    <div className="flex items-center gap-1 text-[10px] sm:text-[11px] font-semibold text-neutral-500 dark:text-neutral-400 shrink-0">
-                      <button
-                        type="button"
-                        onClick={onBackToMainGroup}
-                        className="font-bold text-[#f23e2e] hover:underline cursor-pointer truncate max-w-[80px] sm:max-w-none"
-                        title={`Vai a ${activeGroup.name}`}
-                      >
-                        {activeGroup.name}
-                      </button>
+                {/* SOTTO IL NOME: Breadcrumb gerarchico cliccabile e badge ruolo */}
+                <div className="flex items-center gap-1 sm:gap-2 mt-0.5 min-w-0 flex-wrap">
+                  {breadcrumbs.length > 1 && (
+                    <div className="flex items-center gap-1 text-[10px] sm:text-[11px] font-semibold text-neutral-500 dark:text-neutral-400 overflow-x-auto no-scrollbar max-w-full">
+                      {breadcrumbs.map((crumb, idx) => {
+                        const isLast = idx === breadcrumbs.length - 1;
+                        return (
+                          <React.Fragment key={crumb.id || 'root'}>
+                            {idx > 0 && <span className="text-neutral-400 dark:text-neutral-600 text-[9px]">➔</span>}
+                            {isLast ? (
+                              <span className="font-bold text-neutral-800 dark:text-neutral-200 truncate max-w-[110px] sm:max-w-none">
+                                {crumb.name}
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (onSelectSubgroup) {
+                                    onSelectSubgroup(crumb.id);
+                                  } else if (crumb.id === null && onBackToMainGroup) {
+                                    onBackToMainGroup();
+                                  }
+                                }}
+                                className="font-bold text-[#f23e2e] hover:underline cursor-pointer truncate max-w-[90px] sm:max-w-none"
+                                title={`Vai a ${crumb.name}`}
+                              >
+                                {crumb.name}
+                              </button>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
                       <span className="text-neutral-300 dark:text-neutral-600">&bull;</span>
                     </div>
                   )}

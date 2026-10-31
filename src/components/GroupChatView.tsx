@@ -105,6 +105,24 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
   const subgroupId = activeSubgroup ? activeSubgroup.id : null;
   const contextName = activeSubgroup ? activeSubgroup.name : `${activeGroup.name} (Generale)`;
 
+  // Calcolo percorso gerarchico per la chat (Gruppo ➔ Sottogruppo ➔ Sotto-sottogruppo...)
+  const chatBreadcrumbs: string[] = [activeGroup.name];
+  if (activeSubgroup) {
+    const chain: string[] = [];
+    let curr: any = activeSubgroup;
+    const visited = new Set<string>();
+    while (curr && !visited.has(curr.id)) {
+      visited.add(curr.id);
+      chain.unshift(curr.name);
+      if (curr.parentId) {
+        curr = activeGroup.subgroups?.find((s) => s.id === curr!.parentId);
+      } else {
+        curr = undefined;
+      }
+    }
+    chain.forEach((name) => chatBreadcrumbs.push(name));
+  }
+
   // Caricamento messaggi da MongoDB
   const fetchMessages = async () => {
     try {
@@ -740,12 +758,14 @@ export const GroupChatView: React.FC<GroupChatViewProps> = ({
                       : 'bg-red-100 dark:bg-red-950 text-[#f23e2e]'
                   }`}
                 >
-                  {activeSubgroup ? 'Sottogruppo' : 'Generale'}
+                  {activeSubgroup ? (activeSubgroup.parentId ? 'Sotto-sottogruppo' : 'Sottogruppo') : 'Generale'}
                 </span>
               </div>
               <p className="text-[10px] text-neutral-500 dark:text-neutral-400 truncate">
                 {activeSubgroup
-                  ? `Chat dedicata per ${activeSubgroup.name}`
+                  ? (chatBreadcrumbs.length > 2
+                      ? chatBreadcrumbs.join(' ➔ ')
+                      : `Chat del sottogruppo ${activeSubgroup.name}`)
                   : `Chat del gruppo ${activeGroup.name}`}
               </p>
             </div>

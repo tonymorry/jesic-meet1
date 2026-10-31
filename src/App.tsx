@@ -1353,7 +1353,8 @@ export default function App() {
     description?: string,
     avatar?: string,
     isPublic?: boolean,
-    code?: string
+    code?: string,
+    parentId?: string | null
   ) => {
     if (!activeGroup || !currentUser) return;
     try {
@@ -1366,6 +1367,7 @@ export default function App() {
           avatar: avatar || '📁',
           isPublic: Boolean(isPublic),
           code: code ? code.trim().toUpperCase() : undefined,
+          parentId: parentId ? String(parentId) : null,
           requesterId: currentUser.id,
           creatorId: currentUser.id,
         }),
@@ -2132,7 +2134,14 @@ export default function App() {
                     currentUser={currentUser}
                     allUsers={users}
                     onBackToGroups={handleBackToGroups}
-                    onBackToMainGroup={() => setActiveSubgroupId(null)}
+                    onBackToMainGroup={() => {
+                      if (activeSubgroup?.parentId) {
+                        setActiveSubgroupId(activeSubgroup.parentId);
+                      } else {
+                        setActiveSubgroupId(null);
+                      }
+                    }}
+                    onSelectSubgroup={(subgroupId) => setActiveSubgroupId(subgroupId)}
                     onOpenMembersModal={() => setIsGroupMembersModalOpen(true)}
                     onUpdateGroupName={handleUpdateGroupName}
                     onDeleteGroup={handleDeleteGroup}

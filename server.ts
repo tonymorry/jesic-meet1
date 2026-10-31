@@ -1020,7 +1020,7 @@ app.post('/api/groups/:id/members/:memberId/role', handleUpdateGroupMemberRole);
 // POST /api/groups/:id/subgroups - Creazione Sottogruppo (Solo Responsabile o Creatore del gruppo)
 app.post('/api/groups/:id/subgroups', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, description, avatar, isPublic } = req.body;
+  const { name, description, avatar, isPublic, parentId } = req.body;
   const requesterId = req.body?.requesterId || req.body?.creatorId || req.body?.userId;
 
   if (!name || !name.trim()) {
@@ -1036,14 +1036,24 @@ app.post('/api/groups/:id/subgroups', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Gruppo principale non trovato nel database' });
     }
 
-    // Regola richiesta: Il "Responsabile" è l'UNICO ruolo autorizzato a creare nuovi sottogruppi
+    // Se è specificato un sottogruppo genitore, verifica che esista nel gruppo
+    let parentSubgroup: any = null;
+    if (parentId) {
+      parentSubgroup = group.subgroups?.find((s: any) => s._id === parentId || s.id === parentId);
+      if (!parentSubgroup) {
+        return res.status(404).json({ error: 'Sottogruppo genitore non trovato nel database' });
+      }
+    }
+
+    // Regola richiesta: Il "Responsabile", il creatore del gruppo o il creatore del sottogruppo genitore possono creare sottogruppi
     const member = group.members.find((m: any) => m.userId === requesterId);
     const isResponsabile = member && member.role === 'responsabile';
     const isCreator = group.creatorId === requesterId;
+    const isParentCreator = parentSubgroup && parentSubgroup.createdBy === requesterId;
 
-    if (!isResponsabile && !isCreator) {
+    if (!isResponsabile && !isCreator && !isParentCreator) {
       return res.status(403).json({
-        error: 'Accesso negato: solo chi possiede il ruolo "Responsabile" in questo gruppo può creare nuovi sottogruppi',
+        error: 'Accesso negato: solo chi possiede il ruolo "Responsabile" in questo gruppo può creare nuovi sottogruppi o sotto-sottogruppi',
       });
     }
 
@@ -1065,6 +1075,7 @@ app.post('/api/groups/:id/subgroups', async (req: Request, res: Response) => {
       avatar: avatar || '📁',
       isPublic: isPub,
       code: subCode,
+      parentId: parentId ? String(parentId) : null,
       members: isPub ? group.members.map((m: any) => m.userId) : [requesterId],
       createdBy: requesterId,
       createdAt: new Date().toISOString(),
@@ -1279,8 +1290,23 @@ app.delete('/api/groups/:id/subgroups/:subgroupId', async (req: Request, res: Re
       }
     }
 
+    // Eliminazione a cascata: il sottogruppo selezionato e tutti i suoi eventuali sotto-sottogruppi
+    const idsToDelete = new Set<string>([subgroupId]);
+    let added = true;
+    while (added) {
+      added = false;
+      for (const s of group.subgroups || []) {
+        const sId = (s._id?.toString() || s.id?.toString());
+        const pId = s.parentId ? s.parentId.toString() : null;
+        if (sId && pId && idsToDelete.has(pId) && !idsToDelete.has(sId)) {
+          idsToDelete.add(sId);
+          added = true;
+        }
+      }
+    }
+
     group.subgroups = (group.subgroups || []).filter(
-      (s: any) => s._id !== subgroupId && s.id !== subgroupId
+      (s: any) => !idsToDelete.has(s._id?.toString() || s.id?.toString())
     );
     group.markModified('subgroups');
     await group.save();
