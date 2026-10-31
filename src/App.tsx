@@ -513,6 +513,17 @@ export default function App() {
 
     localStorage.setItem('jesic_meet_theme', theme);
     localStorage.setItem('jesic_meet_dark_mode', theme === 'dark' ? 'true' : 'false');
+
+    // Sincronizza colore barra di sistema (in alto e tasti indietro in basso su smartphone)
+    const systemBarColor = theme === 'dark' ? '#171717' : '#ffffff';
+    let metaThemeColor = document.getElementById('theme-color-meta') || document.querySelector('meta[name="theme-color"]');
+    if (!metaThemeColor) {
+      metaThemeColor = document.createElement('meta');
+      metaThemeColor.setAttribute('name', 'theme-color');
+      metaThemeColor.setAttribute('id', 'theme-color-meta');
+      document.head.appendChild(metaThemeColor);
+    }
+    metaThemeColor.setAttribute('content', systemBarColor);
   }, [theme]);
 
   const cycleTheme = () => {
