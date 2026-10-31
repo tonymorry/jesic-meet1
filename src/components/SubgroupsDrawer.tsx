@@ -28,6 +28,8 @@ import {
   Settings,
   Image as ImageIcon,
   Upload,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 
 export interface SubgroupsDrawerProps {
@@ -143,6 +145,22 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [copiedCodeSubgroupId, setCopiedCodeSubgroupId] = useState<string | null>(null);
 
+  // Stato per apertura/chiusura (accordion) dei sottogruppi nidificati
+  const [expandedSubgroupIds, setExpandedSubgroupIds] = useState<Set<string>>(() => new Set());
+
+  const toggleExpand = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setExpandedSubgroupIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
   if (!isOpen) return null;
 
   // Verifica ruolo "Responsabile" o creatore in questo gruppo specifico
@@ -163,6 +181,8 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
     depth: number;
     parentName?: string;
     childCount: number;
+    isExpanded: boolean;
+    isVisible: boolean;
   }
 
   const buildHierarchicalList = (allSubs: Subgroup[]): HierarchicalSubgroupItem[] => {
@@ -178,22 +198,28 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
 
     const result: HierarchicalSubgroupItem[] = [];
 
-    const walk = (parentId: string, depth: number) => {
+    const walk = (parentId: string, depth: number, parentIsVisible: boolean, parentIsExpanded: boolean) => {
       const list = byParent[parentId] || [];
       list.forEach((sub) => {
         const directChildren = byParent[sub.id] || [];
         const parentSub = sub.parentId ? subMap.get(sub.parentId) : undefined;
+        const isExpanded = expandedSubgroupIds.has(sub.id);
+        const isVisible = depth === 0 ? true : (parentIsVisible && parentIsExpanded);
+
         result.push({
           subgroup: sub,
           depth,
           parentName: parentSub?.name,
           childCount: directChildren.length,
+          isExpanded,
+          isVisible,
         });
-        walk(sub.id, depth + 1);
+
+        walk(sub.id, depth + 1, isVisible, isExpanded);
       });
     };
 
-    walk('__root__', 0);
+    walk('__root__', 0, true, true);
 
     // Gestione di eventuali orfani con parentId non più esistente
     allSubs.forEach((s) => {
@@ -202,6 +228,8 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
           subgroup: s,
           depth: 0,
           childCount: (byParent[s.id] || []).length,
+          isExpanded: expandedSubgroupIds.has(s.id),
+          isVisible: true,
         });
       }
     });
@@ -956,207 +984,228 @@ export const SubgroupsDrawer: React.FC<SubgroupsDrawerProps> = ({
                   )}
                 </div>
               ) : (
-                <div className="space-y-2.5">
-                  {hierarchicalSubgroups.map(({ subgroup, depth, parentName, childCount }) => {
-                    const isSelected = activeSubgroupId === subgroup.id;
-                    const canManageSubgroup = (isResponsabile || isCreator) && onUpdateSubgroup;
-                    const canDelete = isResponsabile && onDeleteSubgroup;
-                    
-                    // L'accesso è garantito se:
-                    // 1. È pubblico (isPublic)
-                    // 2. È creatore del gruppo o del sottogruppo
-                    // 3. Ha inserito il codice ed è in subgroup.members
-                    const hasAccess =
-                      isCreator ||
-                      Boolean(subgroup.isPublic) ||
-                      subgroup.createdBy === currentUser.id ||
-                      (Array.isArray(subgroup.members) && subgroup.members.includes(currentUser.id));
-                    const isUnlockingThis = unlockingSubgroupId === subgroup.id;
+                <div className="space-y-1.5">
+                  {hierarchicalSubgroups
+                    .filter((item) => item.isVisible)
+                    .map(({ subgroup, depth, parentName, childCount, isExpanded }) => {
+                      const isSelected = activeSubgroupId === subgroup.id;
+                      const canManageSubgroup = (isResponsabile || isCreator) && onUpdateSubgroup;
+                      const canDelete = isResponsabile && onDeleteSubgroup;
+                      
+                      // L'accesso è garantito se:
+                      // 1. È pubblico (isPublic)
+                      // 2. È creatore del gruppo o del sottogruppo
+                      // 3. Ha inserito il codice ed è in subgroup.members
+                      const hasAccess =
+                        isCreator ||
+                        Boolean(subgroup.isPublic) ||
+                        subgroup.createdBy === currentUser.id ||
+                        (Array.isArray(subgroup.members) && subgroup.members.includes(currentUser.id));
+                      const isUnlockingThis = unlockingSubgroupId === subgroup.id;
 
-                    const indentClass =
-                      depth === 0
-                        ? ''
-                        : depth === 1
-                        ? 'ml-3 sm:ml-5 pl-2.5 sm:pl-3 border-l-2 border-purple-300 dark:border-purple-700'
-                        : 'ml-6 sm:ml-9 pl-2.5 sm:pl-3 border-l-2 border-purple-400 dark:border-purple-600';
+                      const indentClass =
+                        depth === 0
+                          ? ''
+                          : depth === 1
+                          ? 'ml-3 sm:ml-4 pl-2 border-l-2 border-purple-300/80 dark:border-purple-700/80'
+                          : 'ml-5 sm:ml-7 pl-2 border-l-2 border-purple-400/80 dark:border-purple-600/80';
 
-                    return (
-                      <div
-                        key={subgroup.id}
-                        className={`transition-all ${indentClass}`}
-                      >
+                      return (
                         <div
-                          className={`rounded-2xl border transition-all overflow-hidden ${
-                            isSelected
-                              ? 'bg-purple-50/90 dark:bg-purple-950/40 border-purple-500 dark:border-purple-600 shadow-xs'
-                              : 'bg-white dark:bg-neutral-800/70 border-neutral-200 dark:border-neutral-700'
-                          }`}
+                          key={subgroup.id}
+                          className={`transition-all ${indentClass}`}
                         >
                           <div
-                            onClick={() => {
-                              if (hasAccess) {
-                                onSelectSubgroup(subgroup.id);
-                                onClose();
-                              } else {
-                                setUnlockingSubgroupId(isUnlockingThis ? null : subgroup.id);
-                                setEnteredCode('');
-                                setUnlockError(null);
-                              }
-                            }}
-                            className="w-full p-3 flex items-center justify-between gap-2.5 cursor-pointer hover:bg-neutral-50/50 dark:hover:bg-neutral-800/50 transition-colors"
+                            className={`rounded-xl border transition-all overflow-hidden ${
+                              isSelected
+                                ? 'bg-purple-50/90 dark:bg-purple-950/40 border-purple-500 dark:border-purple-600 shadow-2xs'
+                                : 'bg-white dark:bg-neutral-800/70 border-neutral-200 dark:border-neutral-700/80 hover:border-neutral-300 dark:hover:border-neutral-600'
+                            }`}
                           >
-                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                              {/* Ramo albero indicatore se è un sotto-sottogruppo */}
-                              {depth > 0 && (
-                                <span className="text-purple-500 dark:text-purple-400 font-mono font-bold text-xs shrink-0 select-none">
-                                  ↳
-                                </span>
-                              )}
-
-                              <GroupAvatar
-                                avatar={subgroup.avatar}
-                                name={subgroup.name}
-                                size="sm"
-                                fallbackEmoji="📁"
-                              />
-
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <p className="text-xs font-bold text-neutral-900 dark:text-white truncate">
-                                    {subgroup.name}
-                                  </p>
-                                  <span
-                                    className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-full border ${
-                                      subgroup.isPublic
-                                        ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-                                        : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
-                                    }`}
+                            <div
+                              onClick={() => {
+                                if (hasAccess) {
+                                  onSelectSubgroup(subgroup.id);
+                                  onClose();
+                                } else {
+                                  setUnlockingSubgroupId(isUnlockingThis ? null : subgroup.id);
+                                  setEnteredCode('');
+                                  setUnlockError(null);
+                                }
+                              }}
+                              className="w-full px-2.5 py-1.5 flex items-center justify-between gap-2 cursor-pointer hover:bg-neutral-50/60 dark:hover:bg-neutral-800/50 transition-colors"
+                            >
+                              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                {/* Freccetta verso il basso/destra per mostrare/nascondere i sotto-sottogruppi */}
+                                {childCount > 0 ? (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => toggleExpand(subgroup.id, e)}
+                                    title={isExpanded ? 'Nascondi sotto-gruppi' : `Mostra ${childCount} sotto-gruppi collegati`}
+                                    className="w-5 h-5 -ml-0.5 rounded flex items-center justify-center text-neutral-500 dark:text-neutral-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-purple-100/60 dark:hover:bg-purple-950/60 transition-colors cursor-pointer shrink-0"
                                   >
-                                    {subgroup.isPublic ? '🌐 Pubblico' : '🔒 Privato'}
+                                    {isExpanded ? (
+                                      <ChevronDown className="w-3.5 h-3.5 stroke-[2.5px] text-purple-600 dark:text-purple-400" />
+                                    ) : (
+                                      <ChevronRight className="w-3.5 h-3.5 stroke-[2.5px]" />
+                                    )}
+                                  </button>
+                                ) : depth > 0 ? (
+                                  <span className="w-4 text-purple-400 dark:text-purple-500 font-mono font-bold text-xs shrink-0 select-none text-center">
+                                    ↳
                                   </span>
+                                ) : null}
 
-                                  {depth > 0 && (
-                                    <span className="text-[8px] font-bold px-1.5 py-0.2 rounded-full bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                                      Livello {depth + 1}
+                                <GroupAvatar
+                                  avatar={subgroup.avatar}
+                                  name={subgroup.name}
+                                  size="sm"
+                                  fallbackEmoji="📁"
+                                />
+
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <p className="text-xs font-bold text-neutral-900 dark:text-white truncate">
+                                      {subgroup.name}
+                                    </p>
+
+                                    <span
+                                      className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-full border ${
+                                        subgroup.isPublic
+                                          ? 'bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                                          : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
+                                      }`}
+                                    >
+                                      {subgroup.isPublic ? '🌐' : '🔒'}
+                                    </span>
+
+                                    {childCount > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => toggleExpand(subgroup.id, e)}
+                                        title={isExpanded ? 'Clicca per comprimere' : 'Clicca per mostrare'}
+                                        className="text-[8px] font-bold px-1.5 py-0.2 rounded-full bg-purple-50 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 hover:bg-purple-100 transition-colors flex items-center gap-0.5 cursor-pointer"
+                                      >
+                                        <span>📁 {childCount}</span>
+                                        {isExpanded ? (
+                                          <ChevronDown className="w-2.5 h-2.5" />
+                                        ) : (
+                                          <ChevronRight className="w-2.5 h-2.5" />
+                                        )}
+                                      </button>
+                                    )}
+
+                                    {!hasAccess && (
+                                      <span className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                                        🔒 Codice
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {subgroup.description ? (
+                                    <p className="text-[10px] text-neutral-500 dark:text-neutral-400 truncate">
+                                      {parentName ? `in ${parentName} • ` : ''}{subgroup.description}
+                                    </p>
+                                  ) : parentName ? (
+                                    <p className="text-[10px] text-neutral-500 dark:text-neutral-400 truncate">
+                                      ↳ Sotto a {parentName}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              </div>
+
+                              {/* Azioni del rettangolo: pulite e compatte */}
+                              <div className="flex flex-col items-end justify-between self-stretch shrink-0 py-0.5 gap-1">
+                                {/* Riga superiore: stato attivo, copia codice, entra, matita e cestino */}
+                                <div className="flex items-center gap-1">
+                                  {isSelected && (
+                                    <span className="w-4 h-4 rounded-full bg-purple-600 text-white flex items-center justify-center shrink-0">
+                                      <Check className="w-2.5 h-2.5 stroke-[3px]" />
                                     </span>
                                   )}
 
-                                  {childCount > 0 && (
-                                    <span className="text-[8px] font-bold px-1.5 py-0.2 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border border-neutral-200 dark:border-neutral-700">
-                                      📁 {childCount} {childCount === 1 ? 'sotto-gruppo' : 'sotto-gruppi'}
-                                    </span>
+                                  {/* Mostra / Copia codice se l'utente ha accesso */}
+                                  {hasAccess && subgroup.code && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => handleCopyCode(subgroup, e)}
+                                      title="Copia codice di accesso sottogruppo"
+                                      className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 hover:text-[#f23e2e] flex items-center gap-1 transition-colors cursor-pointer"
+                                    >
+                                      {copiedCodeSubgroupId === subgroup.id ? (
+                                        <>
+                                          <Check className="w-2.5 h-2.5 text-emerald-600" />
+                                          <span className="text-emerald-600">OK</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Copy className="w-2.5 h-2.5" />
+                                          <span>{subgroup.code}</span>
+                                        </>
+                                      )}
+                                    </button>
                                   )}
 
                                   {!hasAccess && (
-                                    <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                                      🔒 Codice richiesto
-                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setUnlockingSubgroupId(isUnlockingThis ? null : subgroup.id);
+                                        setEnteredCode('');
+                                        setUnlockError(null);
+                                      }}
+                                      className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500 hover:bg-amber-600 text-white flex items-center gap-1 shadow-2xs cursor-pointer"
+                                    >
+                                      <KeyRound className="w-2.5 h-2.5" />
+                                      <span>Entra</span>
+                                    </button>
+                                  )}
+
+                                  {/* Tasto Modifica / Personalizza */}
+                                  {canManageSubgroup && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => handleStartEdit(subgroup, e)}
+                                      title="Personalizza sottogruppo"
+                                      className="p-1 rounded text-neutral-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/50 transition-colors cursor-pointer"
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+
+                                  {/* Tasto Elimina (Cestino) */}
+                                  {canDelete && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => handleDeleteClick(subgroup, e)}
+                                      disabled={deletingId === subgroup.id}
+                                      title="Elimina sottogruppo"
+                                      className="p-1 rounded text-neutral-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors cursor-pointer"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
                                   )}
                                 </div>
-                                {subgroup.description ? (
-                                  <p className="text-[10px] text-neutral-500 dark:text-neutral-400 truncate">
-                                    {parentName ? `in ${parentName} • ` : ''}{subgroup.description}
-                                  </p>
-                                ) : parentName ? (
-                                  <p className="text-[10px] text-neutral-500 dark:text-neutral-400 truncate">
-                                    ↳ Sotto a {parentName}
-                                  </p>
-                                ) : (
-                                  <p className="text-[10px] text-neutral-400">
-                                    {hasAccess ? 'Sottogruppo attivo' : 'Clicca per inserire il codice'}
-                                  </p>
+
+                                {/* Riga inferiore: pulsante solo '+' in basso a destra sotto il cestino per Responsabili */}
+                                {isResponsabile && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setNewSubgroupParentId(subgroup.id);
+                                      setExpandedSubgroupIds((prev) => new Set(prev).add(subgroup.id));
+                                      setIsCreating(true);
+                                    }}
+                                    title={`Aggiungi sotto-cartella in "${subgroup.name}"`}
+                                    className="w-5 h-5 rounded-md flex items-center justify-center text-purple-600 dark:text-purple-300 hover:text-purple-700 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/60 dark:hover:bg-purple-900 border border-purple-200 dark:border-purple-800 transition-all cursor-pointer shadow-2xs"
+                                  >
+                                    <Plus className="w-3.5 h-3.5 stroke-[2.5px]" />
+                                  </button>
                                 )}
                               </div>
                             </div>
-
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              {isSelected && (
-                                <span className="w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center">
-                                  <Check className="w-3.5 h-3.5 stroke-[3px]" />
-                                </span>
-                              )}
-
-                              {/* Mostra / Copia codice se l'utente ha accesso */}
-                              {hasAccess && subgroup.code && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => handleCopyCode(subgroup, e)}
-                                  title="Copia codice di accesso sottogruppo"
-                                  className="px-2 py-1 rounded-lg text-[10px] font-mono font-bold bg-neutral-100 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-300 hover:text-[#f23e2e] flex items-center gap-1 transition-colors"
-                                >
-                                  {copiedCodeSubgroupId === subgroup.id ? (
-                                    <>
-                                      <Check className="w-3 h-3 text-emerald-600" />
-                                      <span className="text-emerald-600">Copiato!</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Copy className="w-3 h-3" />
-                                      <span>{subgroup.code}</span>
-                                    </>
-                                  )}
-                                </button>
-                              )}
-
-                              {!hasAccess && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setUnlockingSubgroupId(isUnlockingThis ? null : subgroup.id);
-                                    setEnteredCode('');
-                                    setUnlockError(null);
-                                  }}
-                                  className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-amber-500 hover:bg-amber-600 text-white flex items-center gap-1 shadow-2xs"
-                                >
-                                  <KeyRound className="w-3 h-3" />
-                                  <span>Entra</span>
-                                </button>
-                              )}
-
-                              {/* Tasto "+ Sotto-gruppo" per Responsabili e Creatore */}
-                              {isResponsabile && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setNewSubgroupParentId(subgroup.id);
-                                    setIsCreating(true);
-                                  }}
-                                  title={`Crea un sotto-gruppo all'interno di "${subgroup.name}"`}
-                                  className="px-2 py-1 rounded-lg text-[10px] font-bold text-purple-700 dark:text-purple-300 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/70 dark:hover:bg-purple-900 border border-purple-200 dark:border-purple-800 flex items-center gap-1 transition-colors cursor-pointer"
-                                >
-                                  <Plus className="w-3 h-3 stroke-[3px]" />
-                                  <span className="hidden sm:inline">Sotto-gruppo</span>
-                                </button>
-                              )}
-
-                              {/* Tasto Modifica / Personalizza */}
-                              {canManageSubgroup && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => handleStartEdit(subgroup, e)}
-                                  title="Personalizza sottogruppo"
-                                  className="p-1.5 rounded-lg text-neutral-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/50 transition-colors"
-                                >
-                                  <Edit2 className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-
-                              {/* Tasto Elimina */}
-                              {canDelete && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => handleDeleteClick(subgroup, e)}
-                                  disabled={deletingId === subgroup.id}
-                                  title="Elimina sottogruppo"
-                                  className="p-1.5 rounded-lg text-neutral-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                            </div>
-                          </div>
 
                           {/* Modulo Inline di inserimento Codice Sottogruppo se bloccato */}
                           {!hasAccess && isUnlockingThis && (
